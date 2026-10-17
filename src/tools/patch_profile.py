@@ -18,6 +18,14 @@ import shutil
 import sys
 from pathlib import Path
 
+# Windows 控制台默认 cp1252，直接 print("✓") 会 UnicodeEncodeError。
+# 统一切到 UTF-8（写文件已显式 encoding="utf-8"，这里只管 stdout/stderr）。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
 DEFAULT_SPEC = "file:../../plugins/dsh-purge"
 DEFAULT_NAME = "dsh-purge"
 
