@@ -2,14 +2,14 @@
 # 海鸥 · DeepSeek Harness 全破 harness —— 通用一键安装
 #
 #   本地:   bash install.sh [--profile desktop|web] [--dry-run]
-#   远程:   curl -fsSL https://raw.githubusercontent.com/Yunique-hub/-/main/install.sh | bash
+#   远程:   curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash
 #   卸载:   bash install.sh --uninstall
 #
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
 VERSION="1.0.0"
-REPO="${SEAGULL_REPO:-Yunique-hub/-}"
+REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
 PLUGIN_ID="dsh-purge"          # 沿用上游包名（插件内部段名前缀依赖它）

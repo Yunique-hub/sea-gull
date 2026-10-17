@@ -1,7 +1,7 @@
-# 海鸥 · DeepSeek Harness 全破 harness —— 通用一键安装（Windows PowerShell）
+﻿# 海鸥 · DeepSeek Harness 全破 harness —— 通用一键安装（Windows PowerShell）
 #
 #   本地:   powershell -ExecutionPolicy Bypass -File install.ps1
-#   远程:   irm https://raw.githubusercontent.com/Yunique-hub/-/main/install.ps1 | iex
+#   远程:   irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 | iex
 #   卸载:   powershell -File install.ps1 -Uninstall
 param(
   [ValidateSet("desktop", "web", "")]
@@ -30,7 +30,7 @@ Say "海鸥 harness v$VERSION  ($Here)"
 
 # ── 远程模式：没有本地文件就拉 tarball ───────────────────────────
 if (-not (Test-Path (Join-Path $Here "VERSION"))) {
-  $repo = if ($env:SEAGULL_REPO) { $env:SEAGULL_REPO } else { "Yunique-hub/-" }
+  $repo = if ($env:SEAGULL_REPO) { $env:SEAGULL_REPO } else { "Yunique-hub/sea-gull" }
   $branch = if ($env:SEAGULL_BRANCH) { $env:SEAGULL_BRANCH } else { "main" }
   $url = "https://github.com/$repo/archive/refs/heads/$branch.zip"
   Say "未检测到本地仓库，拉取 $repo@$branch ..."

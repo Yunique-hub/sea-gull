@@ -3,7 +3,7 @@
 ## 报告漏洞
 
 **不要**开公开 issue。用 GitHub 的
-[Private vulnerability reporting](https://github.com/Yunique-hub/-/security/advisories/new)，
+[Private vulnerability reporting](https://github.com/Yunique-hub/sea-gull/security/advisories/new)，
 或在 issue 里只写"需要私下联系"。
 
 请包含：影响版本、复现步骤、预期与实际、影响面判断。

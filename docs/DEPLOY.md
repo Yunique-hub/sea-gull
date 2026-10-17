@@ -6,12 +6,12 @@
 
 ```powershell
 # Windows PowerShell
-irm https://raw.githubusercontent.com/Yunique-hub/-/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 | iex
 ```
 
 ```bash
 # Linux / macOS / WSL / Git Bash
-curl -fsSL https://raw.githubusercontent.com/Yunique-hub/-/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash
 ```
 
 管道模式下脚本检测不到本地仓库，会自己拉 tarball 到临时目录再执行，结束自动清理。
@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/Yunique-hub/-/main/install.sh | bas
 ### 1.2 本地 checkout
 
 ```bash
-git clone https://github.com/Yunique-hub/-.git seagull && cd seagull
+git clone https://github.com/Yunique-hub/sea-gull.git seagull && cd seagull
 bash install.sh                      # 或 powershell -File install.ps1
 ```
 

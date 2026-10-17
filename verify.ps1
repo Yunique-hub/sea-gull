@@ -1,4 +1,4 @@
-# 海鸥 harness —— Windows 校验（不依赖 bash）
+﻿# 海鸥 harness —— Windows 校验（不依赖 bash）
 #   powershell -ExecutionPolicy Bypass -File verify.ps1
 $ErrorActionPreference = "Continue"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8

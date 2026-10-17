@@ -4,7 +4,7 @@
 
 One-line install · idempotent · uninstallable · backed by evidence
 
-[![CI](https://github.com/Yunique-hub/-/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/-/actions/workflows/ci.yml)
+[![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
 
 [中文](README.md) · [English](README.md) · [Architecture](docs/ARCHITECTURE.md) · [Deploy](docs/DEPLOY.md) · [Verification](docs/VERIFICATION.md)
@@ -34,12 +34,12 @@ was rewritten. Upstream's `seagull-armor-break` Hermes plugin is a stub (its hoo
 
 ```powershell
 # Windows
-irm https://raw.githubusercontent.com/Yunique-hub/-/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 | iex
 ```
 
 ```bash
 # Linux / macOS / WSL / Git Bash
-curl -fsSL https://raw.githubusercontent.com/Yunique-hub/-/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash
 ```
 
 Then **Apply** (required for the sealed desktop host):

@@ -6,7 +6,7 @@
 
 一行装 · 幂等 · 可卸载 · 有证据
 
-[![CI](https://github.com/Yunique-hub/-/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/-/actions/workflows/ci.yml)
+[![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
@@ -43,19 +43,19 @@
 **Windows**
 
 ```powershell
-irm https://raw.githubusercontent.com/Yunique-hub/-/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 | iex
 ```
 
 **Linux / macOS / WSL / Git Bash**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Yunique-hub/-/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash
 ```
 
 **从本地 checkout**
 
 ```bash
-git clone https://github.com/Yunique-hub/-.git seagull && cd seagull
+git clone https://github.com/Yunique-hub/sea-gull.git seagull && cd seagull
 bash install.sh            # 或 powershell -File install.ps1
 ```
 
