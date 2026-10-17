@@ -21,6 +21,9 @@ else
   C_R=""; C_G=""; C_Y=""; C_B=""; C_D=""; C_0=""
 fi
 QUIET=0
+# 交给原生程序（mingw64 curl / node / python）的路径必须是 Windows 形态：
+# MSYS 的 /tmp、/c/... 它们认不出来（实测 curl -o /tmp/x 会 http=200 size=0）
+winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 say()  { [ "$QUIET" = 1 ] || printf '%s\n' "$*"; }
 step() { [ "$QUIET" = 1 ] || printf '%s▸%s %s\n' "$C_B" "$C_0" "$*"; }
 ok()   { [ "$QUIET" = 1 ] || printf '%s✓%s %s\n' "$C_G" "$C_0" "$*"; }
@@ -77,9 +80,21 @@ fi
 if [ -z "$ROOT" ] || [ ! -f "$ROOT/VERSION" ]; then
   say "${C_D}未检测到本地仓库，拉取 $REPO@$BRANCH ...${C_0}"
   command -v curl >/dev/null 2>&1 || die "需要 curl 才能远程安装"
-  STAGE="$(mktemp -d "${TMPDIR:-/tmp}/seagull.XXXXXX")"
-  curl -fsSL "$TARBALL" -o "$STAGE/repo.tar.gz" || die "下载失败: $TARBALL"
-  tar xzf "$STAGE/repo.tar.gz" -C "$STAGE" || die "解包失败"
+  # 临时目录：直接交给 mktemp 处理 TMPDIR；失败则退回 cwd 下的隐藏目录
+  # （不做 ${var//\\//} 这类替换——在 MSYS 下会把前导 / 一起吃掉）
+  STAGE="$(mktemp -d 2>/dev/null || true)"
+  if [ -z "$STAGE" ] || [ ! -d "$STAGE" ]; then
+    STAGE="$PWD/.seagull-stage.$$"
+    mkdir -p "$STAGE" || die "无法创建临时目录"
+  fi
+  if ! curl -fsSL "$TARBALL" -o "$(winpath "$STAGE/repo.tar.gz")"; then
+    die "下载失败: $TARBALL
+  网络受限时先设代理再跑，例如：
+    export https_proxy=http://127.0.0.1:7890   # 或 socks5h://127.0.0.1:1080
+  或直接本地 clone 后跑 bash install.sh"
+  fi
+  # tar 会把 "C:\..." 当远程主机（host:path 语法）→ 进目录用相对名解包
+  ( cd "$STAGE" && tar xzf ./repo.tar.gz ) || die "解包失败"
   ROOT="$(find "$STAGE" -maxdepth 1 -mindepth 1 -type d | head -1)"
   [ -f "$ROOT/VERSION" ] || die "下载内容结构异常，缺 VERSION"
 fi
@@ -131,6 +146,9 @@ if [ -n "$APP_ROOT" ]; then
     [ -f "$p" ] && { PNPM_EMB="$p"; break; }
   done
   [ -f "$APP_ROOT/resources/app.asar" ] && SEALED=1
+  # 已经 Apply 过的机器：app.asar 被挪成 .sealed.bak，也算密封桌面宿主
+  [ -f "$APP_ROOT/resources/app.asar.sealed.bak" ] && SEALED=1
+  [ -f "$APP_ROOT/DeepSeek Harness.exe" ] && SEALED=1
   [ -n "$NODE_EMB" ] || NODE_EMB="$(command -v node || true)"
   say "${C_D}node=${NODE_EMB:-none} pnpm=${PNPM_EMB:-none} sealed=$SEALED${C_0}"
 fi
@@ -153,8 +171,6 @@ if [ "$DRY" = 1 ]; then say ""; say "${C_Y}--dry-run：到此为止，未改动�
 
 PY="$(command -v python || command -v python3 || true)"
 [ -n "$PY" ] || die "需要 python3（改 JSON 用）"
-# 交给原生 python/node 的路径必须是 Windows 形态：MSYS 的 /e/... 会被转坏
-winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 
 # ── 卸载分支 ───────────────────────────────────────────────────────
 if [ "$UNINSTALL" = 1 ]; then

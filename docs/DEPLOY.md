@@ -135,6 +135,8 @@ mv "$APP_ROOT/resources/app.asar.sealed.bak" "$APP_ROOT/resources/app.asar"
 | `找不到 DSH 主目录` | 没启动过 DSH / 自定义路径 | `--dsh-home` 指定 |
 | `没有任何 profile` | 首次安装还没生成 | 先启动一次 DSH 再装 |
 | `pnpm install 失败` | registry 不通 / `file:` 路径错 | 配镜像，或 `--no-pnpm` 后手动 |
+| 远程安装 `下载失败` | GitHub 不可达 | `export https_proxy=http://127.0.0.1:7890` 后再跑；或本地 clone |
+| 远程安装 `tar ... Cannot connect to C:` | 已修（改为 `cd` + 相对路径解包） | 升级到 ≥1.0.0 |
 | Apply 后没变化 | `app.asar` 还在，Electron 仍读 asar | 退出宿主 → 挪 asar → 重开 |
 | `ERR_MODULE_NOT_FOUND app.asar\...` | asar 被挪走后 CLI shim 还指着 asar | 把 `resources/runtime/cli/bin/dsh.cmd` 里的 `app.asar\dsh\` 改成 `app\dsh\` |
 | 补丁数明显偏低 | dsh 版本升级，上游锚点对不上 | 看 `--status` 的 pending/skipped；换匹配的上游版本 |
