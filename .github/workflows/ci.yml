@@ -1,0 +1,79 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 静态检查
+        shell: bash
+        run: |
+          set -e
+          for f in install.sh verify.sh verify-e2e.sh tests/smoke.sh; do bash -n "$f"; echo "OK $f"; done
+          python -m py_compile src/tools/patch_profile.py && echo "OK patch_profile.py"
+
+      - name: shellcheck
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck -S error install.sh verify.sh verify-e2e.sh tests/smoke.sh
+
+      - name: 冒烟测试（假 DSH_HOME，装/验/幂等/卸 全闭环）
+        shell: bash
+        run: bash tests/smoke.sh
+
+      - name: 产物完整性（一键装必须能定位全部资产）
+        shell: bash
+        run: |
+          set -e
+          for p in VERSION LICENSE NOTICE README.md install.sh install.ps1 verify.sh verify.ps1 \
+                   src/prompt/prompt-inject.md src/rules/seagull-fullbreak.md src/rules/seagull-fullbreak.json \
+                   src/tools/patch_profile.py src/skills/redteam vendor/dsh-purge/lib/index.js; do
+            [ -e "$p" ] || { echo "缺: $p"; exit 1; }
+          done
+          echo "产物完整"
+
+  plugin-syntax:
+    name: vendor 插件语法
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: node --check
+        run: |
+          set -e
+          for f in vendor/dsh-purge/bin/dsh-purge.js \
+                   vendor/dsh-purge/lib/index.js \
+                   vendor/dsh-purge/lib/core.js \
+                   vendor/dsh-purge/lib/reapply.js \
+                   vendor/dsh-purge/lib/net-scope.js; do
+            node --check "$f" && echo "OK $f"
+          done
+      - name: JSON 合法
+        run: |
+          set -e
+          for f in vendor/dsh-purge/package.json src/rules/seagull-fullbreak.json; do
+            node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" && echo "OK $f"
+          done

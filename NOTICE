@@ -1,0 +1,57 @@
+# NOTICE — 第三方组件与署名
+
+本仓库包含或派生自以下第三方作品，其许可与署名在此一并声明。
+去除或隐藏下列署名违反上游许可。
+
+---
+
+## 1. dsh-purge — 宿主层引擎（`vendor/dsh-purge/`）
+
+- 来源：https://github.com/YuJunZhiXue/dsh-purge
+- 作者：小杨（YuJunZhiXue）
+- 版本快照：1.1.71（master @ 2026-10-12）
+- 许可：MIT（Copyright (c) 2026 小杨），全文见 `vendor/dsh-purge/LICENSE`
+
+本仓库对上游的**改动**（明确列出，便于上游复核）：
+
+| 文件 | 改动 |
+|---|---|
+| `vendor/dsh-purge/lib/index.js` | `DEFAULTS` 新增 `regionGate: true` 开关 |
+| `vendor/dsh-purge/lib/index.js` | `applyHostHooks()` 中 `installRegionGate(ctx)` 改为受 `cfg.regionGate !== false` 控制 |
+| `vendor/dsh-purge/cordis.patch.yml` | `regionGate: false`、`autoApplyOnStart: true` |
+
+其余文件与上游 1.1.71 逐字节一致，未做任何其他修改。
+
+上游 README 声明「非营利 / 禁商用 / 需署名」。**MIT 许可本身允许商用**；
+本仓库尊重上游意愿，按非营利项目分发，并保留全部署名。若你计划商业使用
+`vendor/dsh-purge/` 部分，请先联系上游作者取得明确同意。
+
+---
+
+## 2. hermes-seagull — 人格与领域技能（`src/prompt/`、`src/skills/seagull-*`）
+
+- 来源：https://github.com/Yunique-hub/hermes-seagull
+- 许可：MIT
+- 复用范围：`SOUL.md` 的破甲规则体系（00a–00r）、5 个领域技能手册
+- 改写说明：原文为 Hermes 的 system prompt；本仓库将其改写为 DeepSeek Harness
+  兼容形态（插值白名单、ChatML 信封安全、能力选用协议），并补充执行纪律章节。
+
+---
+
+## 3. 运行时依赖
+
+本仓库的安装脚本调用用户机器上**已安装的**以下组件，不打包、不分发：
+
+| 组件 | 用途 | 许可 |
+|---|---|---|
+| DeepSeek Harness（`@deepseek-ai/*`） | 宿主 | 见其自身许可 |
+| Node.js | 运行时 | MIT 类 |
+| pnpm | 包管理 | MIT |
+
+---
+
+## 4. 与 DeepSeek 的关系
+
+本项目为独立开源工程，与 DeepSeek 及其关联公司**无雇佣、商业、授权或背书关系**。
+「官方宿主」仅指用户本机已安装的 DeepSeek Harness 软件包，不表示 DeepSeek
+开发、认可或担保本项目。

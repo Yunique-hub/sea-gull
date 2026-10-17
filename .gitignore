@@ -1,0 +1,31 @@
+# ── 本地证据 / 源快照（绝不入库）────────────────────────────
+_src/
+_verify/
+*.zip
+*.tar.gz
+*.dshpurge.bak
+*.bak-seagull
+*.copytmp
+
+# ── 构建 / 运行时 ───────────────────────────────────────────
+node_modules/
+.pnpm-store/
+dist/
+build/
+*.log
+
+# ── 编辑器 / 系统 ───────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Python ─────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ── 本机快照（含绝对路径，禁止公开）────────────────────────
+docs/reference/applied-profile-package.json
