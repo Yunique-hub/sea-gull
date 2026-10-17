@@ -27,14 +27,14 @@ JSON
 
 echo "── 1. dry-run 不应改动任何文件 ──"
 before="$(sha256sum "$TMP/dsh/profiles/desktop/package.json" | cut -d' ' -f1)"
-bash "$ROOT/install.sh" --dsh-home "$TMP/dsh" --profile desktop --dry-run -q
+bash "$ROOT/install.sh" --dsh-home "$TMP/dsh" --app-root "$TMP/not-installed" --profile desktop --dry-run -q
 after="$(sha256sum "$TMP/dsh/profiles/desktop/package.json" | cut -d' ' -f1)"
 [ "$before" = "$after" ] || fail "dry-run 改了文件"
 [ ! -d "$TMP/dsh/plugins" ] || fail "dry-run 创建了 plugins 目录"
 pass "dry-run 无副作用"
 
 echo "── 2. files-only 安装（跳过 pnpm）──"
-bash "$ROOT/install.sh" --dsh-home "$TMP/dsh" --profile desktop --no-pnpm -q
+bash "$ROOT/install.sh" --dsh-home "$TMP/dsh" --app-root "$TMP/not-installed" --profile desktop --no-pnpm -q
 [ -f "$TMP/dsh/plugins/dsh-purge/package.json" ] || fail "插件未就位"
 [ -f "$TMP/dsh/prompt-inject.md" ]               || fail "prompt-inject.md 未落地"
 [ -f "$TMP/dsh/rules/seagull-fullbreak.md" ]     || fail "规则集未落地"
@@ -54,7 +54,7 @@ PY
 pass "依赖 + bundle 正确，原有 bundle 未丢"
 
 echo "── 4. 幂等：再装一次不出错、不重复 ──"
-bash "$ROOT/install.sh" --dsh-home "$TMP/dsh" --profile desktop --no-pnpm -q
+bash "$ROOT/install.sh" --dsh-home "$TMP/dsh" --app-root "$TMP/not-installed" --profile desktop --no-pnpm -q
 "$PY" - "$TW/dsh/profiles/desktop/package.json" <<'PY' || fail "幂等性破坏"
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -71,7 +71,7 @@ grep -q "cfg\.regionGate !== false" "$TMP/dsh/plugins/dsh-purge/lib/index.js" ||
 pass "regionGate=false / hooksDenyBypass=true / 代码开关在位"
 
 echo "── 6. 卸载闭环 ──"
-bash "$ROOT/install.sh" --dsh-home "$TMP/dsh" --profile desktop --uninstall -q
+bash "$ROOT/install.sh" --dsh-home "$TMP/dsh" --app-root "$TMP/not-installed" --profile desktop --uninstall -q
 [ ! -d "$TMP/dsh/plugins/dsh-purge" ] || fail "插件未删除"
 [ ! -f "$TMP/dsh/prompt-inject.md" ]  || fail "注入文件未删除"
 "$PY" - "$TW/dsh/profiles/desktop/package.json" <<'PY' || fail "profile 未还原"

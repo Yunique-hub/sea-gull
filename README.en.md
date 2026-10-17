@@ -4,6 +4,10 @@
 
 One-line install · idempotent · uninstallable · backed by evidence
 
+**v1.0.1 targets DeepSeek Harness 0.2.1-rc.2**, retaining all 82 dsh-purge 1.1.71 patch definitions, plugin assets, and the 0.2.0-rc.2 compatibility paths. Both official Windows packages were compared for patch coverage, generated JavaScript syntax, and repeat application. See the [verification scope and limits](docs/VERIFICATION.md#e-021-rc2-兼容验证2026-10-17).
+
+Existing users can rerun the installer to update Seagull. Finish the official Harness update before reapplying the plugin; copying the old extracted `resources/app` into the new installation would load the old host again. A failed silent Windows update now offers the visible installer and reports its exit code after restoring the old extracted app.
+
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
 

@@ -16,7 +16,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$VERSION = "1.0.0"
+$VERSION = "1.0.1"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -76,9 +76,11 @@ $Node = ""; $Pnpm = ""; $Sealed = $false
 if ($AppRoot) {
   $n = Join-Path $AppRoot "resources\runtime\primary-runtime\dependencies\node\bin\node.exe"
   if (Test-Path $n) { $Node = $n } else { $Node = (Get-Command node -ErrorAction SilentlyContinue).Source }
-  $p = Join-Path $AppRoot "resources\runtime\pnpm\bin\pnpm.cjs"
-  if (Test-Path $p) { $Pnpm = $p }
-  $Sealed = Test-Path (Join-Path $AppRoot "resources\app.asar")
+  foreach ($relative in @("resources\runtime\primary-runtime\dependencies\pnpm\bin\pnpm.mjs", "resources\runtime\pnpm\bin\pnpm.mjs", "resources\runtime\pnpm\bin\pnpm.cjs")) {
+    $p = Join-Path $AppRoot $relative
+    if (Test-Path $p) { $Pnpm = $p; break }
+  }
+  $Sealed = (Test-Path (Join-Path $AppRoot "resources\app.asar")) -or (Test-Path (Join-Path $AppRoot "resources\app.asar.sealed.bak")) -or (Test-Path (Join-Path $AppRoot "DeepSeek Harness.exe"))
 }
 
 $PlugDir = Join-Path $DH "plugins\$PluginId"
@@ -97,7 +99,12 @@ if ($DryRun) {
   exit 0
 }
 
-$Py = (Get-Command python -ErrorAction SilentlyContinue).Source
+$Py = ""
+if ($AppRoot) {
+  $embeddedPython = Join-Path $AppRoot "resources\runtime\primary-runtime\dependencies\python\python.exe"
+  if (Test-Path $embeddedPython) { $Py = $embeddedPython }
+}
+if (-not $Py) { $Py = (Get-Command python -ErrorAction SilentlyContinue).Source }
 if (-not $Py) { Die "需要 python" }
 
 # ── 卸载 ────────────────────────────────────────────────────────

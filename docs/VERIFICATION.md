@@ -218,3 +218,42 @@ $ python portscan.py 127.0.0.1 -p 135,139,445,3389,5040-5060 -t 0.4 -w 50 --bann
    所有 `*.bak`）后重跑即通过。0 字节 bak 若留着，`--revert` 会把宿主写废。
 3. `dsh.cmd --version` 正常，但传中文参数会被 cmd.exe 重解析 → 端到端验证绕开 cmd。
 4. 2 条 pending 补丁是上游 UI 改版导致，非破甲闸门。
+
+---
+
+## E. 0.2.1-rc.2 兼容验证（2026-10-17）
+
+环境：Windows 11 x64，Node.js 24.19.0，PowerShell 7 / Windows PowerShell 5.1、Git Bash。海鸥版本 **1.0.1**，保留上游 dsh-purge **1.1.71** 的全部 **82 条补丁定义**及原有插件、提示词、规则和技能文件；仅调整本节列出的兼容与更新代码。
+
+### 官方安装包对照
+
+新版输入为官方数字签名有效的 `deepseek-harness-0.2.1-rc.2-win-x64.exe`，SHA-512 与下载缓存 `update-info.json` 一致；旧版输入为本机保留的原始 `app.asar.sealed.bak`，包内版本为 `0.2.0-rc.2`。对两份原始 ASAR 按现有补丁顺序执行内存变换，不写入已安装宿主，不读取账号凭据，不调用模型 API。
+
+| 检查 | 0.2.0-rc.2 | 0.2.1-rc.2 |
+|---|---:|---:|
+| 参与对照的补丁定义 | 82 | 82 |
+| 发生变换的目标文件 | 51 | 52 |
+| 生成 JavaScript 的语法错误 | 0 | 0 |
+| 第二次应用仍产生改动 | 0 | 0 |
+| 相对旧版丢失已有标记的补丁 | — | 0 |
+
+适配前发现 4 项退化：#32 / #53 的 Web 提示迁移到 `dsh-harness-dev-context`；#40 的组装流程新增 required runtime contexts；#77 的 `append()` 改为条件清理。适配后以上退化为 0。旧会话迁移使用的 `LEGACY_WEB_SURFACE` 常量保持原样，新版要求的 runtime contexts 继续保留。
+
+### 回归用例
+
+```text
+node --test tests/*.test.mjs
+tests 12 / pass 12 / fail 0
+```
+
+覆盖新版目标文件定位、Web 旧会话匹配保持、URL 描述、complete 提示词自定义节与 required contexts、回退重建、Bash / PowerShell 两种安装器对新版 pnpm 的探测及旧布局回退、更新成功交接、退出码 2 的可见重试与恢复、失败伴随部分文件变化、安装器启动异常、残余进程阻止安装。非 Windows CI 运行 11 项，Windows 运行 12 项。
+
+原有 `bash tests/smoke.sh` 安装、dry-run、profile 合并、幂等、开关与卸载闭环继续通过。冒烟测试显式指定不存在的安装根，避免测试时自动发现并操作真机宿主。安装器优先使用内嵌 pnpm / Python；PowerShell 文件保留 UTF-8 BOM。
+
+### 更新失败的已知事实与验证边界
+
+本机原更新日志记录 `installer 2`、`installer-plain 2`、`changed exe=false asar=false`、`restored-app`、`started-old`。因此“安装并重启没反应”实际是安装失败后自动重开旧版；退出码 2 本身不足以确定安装器内部的具体失败分支。
+
+本次修正更新交接中可确认的问题：兼容 `.sealed.bak`；从临时目录启动安装器；使用 `/currentuser`；未退出的进程阻止移动文件；失败后采用可见安装界面；失败必须恢复旧目录并报告退出码。更新交接测试使用内存中的 Windows Script Host / 文件系统替身，验证控制流和恢复行为，**不代表已完成真实安装器覆盖升级**。
+
+本节的 82 项对照证明原有补丁定义未删除、已匹配的旧版行为没有因本次文件布局变化而丢失；它不等同于所有可选第三方插件、每个桌面 UI 操作或模型行为的完整运行验证。A–D 节原有 0.2.0-rc.2 真机记录不作为新版真机记录重复使用。

@@ -28,6 +28,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: 静态检查
         shell: bash
         run: |
@@ -45,6 +49,10 @@ jobs:
       - name: 冒烟测试（假 DSH_HOME，装/验/幂等/卸 全闭环）
         shell: bash
         run: bash tests/smoke.sh
+
+      - name: 0.2.1 兼容与更新回归
+        shell: bash
+        run: node --test tests/*.test.mjs
 
       - name: 产物完整性（一键装必须能定位全部资产）
         shell: bash

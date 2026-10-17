@@ -2483,6 +2483,11 @@ const COMPLETE_PROMPT_WATERFALL_INJECT =
   "\t\t\tcontexts: runtimeContextSuppressed ? [] : transformed.contexts\n" +
   "\t\t};";
 
+// 0.2.1 keeps required runtime facts even when ordinary contexts are suppressed.
+const COMPLETE_PROMPT_REQUIRED_CONTEXTS_INJECT = COMPLETE_PROMPT_WATERFALL_INJECT
+  .replace("\t\treturn {\n", "\t\tconst requiredContexts = new Set([...contextByName.values()].filter((entry) => entry.required === true).map((entry) => entry.name));\n\t\treturn {\n")
+  .replace("runtimeContextSuppressed ? [] : transformed.contexts", "runtimeContextSuppressed ? transformed.contexts.filter((entry) => requiredContexts.has(entry.name)) : transformed.contexts");
+
 function clearShellNetworkBan(pattern) {
   return pattern
     .replace(/\n[ \t]+\* You don't have access to the internet via this tool\./, "")
@@ -3467,7 +3472,7 @@ const NEW_TOOL_PATCHES = [
     // Web GUI 文案里的产品名会进「你是谁」回答。
     id: 32, name: "WEB_SURFACE_IDENTITY_NEUTRAL", layer: "提示词", layer_en: "Prompt",
     desc: "Web 面：去掉 DeepSeek Harness 自称 / neutralize web GUI identity branding",
-    file: ["web-app-lib"],
+    file: ["web-app-lib", "harness-dev-context"],
     optional: true,
     replacements: [
       {
@@ -3481,6 +3486,14 @@ const NEW_TOOL_PATCHES = [
           'description: "Canonical local URL of the DeepSeek Harness Web GUI serving this session."',
         replace:
           'description: "Canonical local URL of the web GUI serving this session." /* [dsh-purge] web surface identity neutralized */',
+      },
+      {
+        pattern: 'description: "Advertised URL of the DeepSeek Harness Web GUI serving this session."',
+        replace: 'description: "Advertised URL of the web GUI serving this session." /* [dsh-purge] web surface identity neutralized */',
+      },
+      {
+        pattern: 'const WEB_SURFACE_PROMPT = `You are interacting with the user through the DeepSeek Harness Web GUI whose URL the runtime context names.',
+        replace: 'const WEB_SURFACE_PROMPT = /* [dsh-purge] web surface identity neutralized */ `You are interacting with the user through the local web GUI whose URL the runtime context names.',
       },
     ],
     // #53 会把前一句再收成 Local web GUI，不能再要求两句标记同时在。
@@ -3819,6 +3832,18 @@ const NEW_TOOL_PATCHES = [
     desc: "complete 预设仍保留 dsh-purge 注入 / keep inject after complete prompt",
     file: ["system-prompt", "system-prompt-nested"],
     replacements: [
+      {
+        pattern:
+          '\t\tconst transformed = await this.ctx.waterfall(scopeTarget(this, scope), "system-prompt/assemble", assembly, context, () => Promise.resolve(assembly));\n' +
+          '\t\tif (completeSection === void 0 && !runtimeContextSuppressed) return transformed;\n' +
+          '\t\tconst requiredContexts = new Set([...contextByName.values()].filter((entry) => entry.required === true).map((entry) => entry.name));\n' +
+          '\t\treturn {\n' +
+          '\t\t\t...transformed,\n' +
+          '\t\t\tsections: completeSection === void 0 ? transformed.sections : [completeSection],\n' +
+          '\t\t\tcontexts: runtimeContextSuppressed ? transformed.contexts.filter((entry) => requiredContexts.has(entry.name)) : transformed.contexts\n' +
+          '\t\t};',
+        replace: COMPLETE_PROMPT_REQUIRED_CONTEXTS_INJECT,
+      },
       {
         // 缩进不固定。0.2 有的构建用 tab，有的用空格；只认 tab 时匹配为 0，重启校验会说没写进宿主。
         pattern: /[ \t]*const transformed = await this\.ctx\.waterfall\(scopeTarget\(this, scope\), "system-prompt\/assemble", assembly, context, \(\) => Promise\.resolve\(assembly\)\);\n[ \t]*if \(completeSection === void 0 && !runtimeContextSuppressed\) return transformed;\n[ \t]*return \{\n[ \t]*\.\.\.transformed,\n[ \t]*sections: completeSection === void 0 \? transformed\.sections : \[completeSection\],\n[ \t]*contexts: runtimeContextSuppressed \? \[\] : transformed\.contexts\n[ \t]*\};/,
@@ -4473,7 +4498,7 @@ const NEW_TOOL_PATCHES = [
     layer: "提示词",
     layer_en: "Prompt",
     desc: "网页端提示词去掉身份句和禁止另开服务器 / drop web identity and do-not-start",
-    file: ["web-app-lib"],
+    file: ["web-app-lib", "harness-dev-context"],
     optional: true,
     replacements: [
       {
@@ -4481,15 +4506,19 @@ const NEW_TOOL_PATCHES = [
         replace: "Local web GUI: ${webUrl}. // [dsh-purge] web surface identity neutralized",
       },
       {
-        pattern:
-          "Do not start a replacement server unless the user asks; if one is needed, use a managed background job and verify its exact URL.",
-        replace: "",
+        pattern: "You are interacting with the user through the local web GUI whose URL the runtime context names.",
+        replace: "Local web GUI: see the runtime context.",
+      },
+      {
+        // Legacy Session matcher literals must retain their original suffix.
+        pattern: /((?:return `|const WEB_SURFACE_PROMPT = )[^\n]*?)Do not start a replacement server unless the user asks; if one is needed, use a managed background job and verify its exact URL\./g,
+        replace: "$1",
       },
     ],
     markersAny: true,
     markers: [
-      "[dsh-purge] web surface identity neutralized",
       "Local web GUI: ${webUrl}.",
+      "Local web GUI: see the runtime context.",
     ],
   },
   {
@@ -5079,12 +5108,7 @@ const NEW_TOOL_PATCHES = [
     skipIfMarked: true,
     replacements: [
       {
-        pattern:
-          "\t\t\tappend(record) {\n" +
-          "\t\t\t\tconst event = record.event;\n" +
-          "\t\t\t\tif (this.inputs.has(event.seq)) return \"none\";\n" +
-          "\t\t\t\tthis.revised.clear();\n" +
-          "\t\t\t\tthis.inputs.set(event.seq, record);\n",
+        pattern: /\t\t\tappend\(record\) \{\n\t\t\t\tconst event = record.event;\n\t\t\t\tif \(this.inputs.has\(event.seq\)\) return "none";\n\t\t\t\t(?:if \(this.revised.size > 0\) )?this.revised.clear\(\);\n\t\t\t\tthis.inputs.set\(event.seq, record\);\n/,
         replace:
           "\t\t\tappend(record) {\n" +
           "\t\t\t\tconst event = record.event;\n" +
@@ -6245,6 +6269,10 @@ export function targetFiles(aiBase, dshHome = findDshHome()) {
       path.join(aiBase, "dsh-web-app", "lib", "index.js"),
       path.join(aiBase, "dsh", "node_modules", "@deepseek-ai", "dsh-web-app", "lib", "index.js"),
       ...(root ? [path.join(root, "packages", "bundle", "web-app", "lib", "index.js")] : []),
+    ]),
+    "harness-dev-context": firstExisting([
+      ...nestedPkg(aiBase, "dsh-harness-dev-context", "lib", "index.js"),
+      ...(root ? [path.join(root, "packages", "context", "harness-dev-context", "lib", "index.js")] : []),
     ]),
     "headless": firstExisting([
       path.join(aiBase, "dsh-headless", "cordis.patch.yml"),

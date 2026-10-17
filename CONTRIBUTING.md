@@ -4,7 +4,7 @@
 
 ```bash
 make lint     # bash -n + shellcheck(可选) + py_compile + node --check
-make test     # 冒烟：假 DSH_HOME，装/验/幂等/卸闭环
+make test     # 假 DSH_HOME 装/验/幂等/卸闭环 + Node 兼容与更新回归
 ```
 
 CI 会在 ubuntu + windows 上跑同一套。本地不过的不要在 PR 里赌。

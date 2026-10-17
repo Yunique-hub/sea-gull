@@ -19,8 +19,11 @@
 | `vendor/dsh-purge/lib/index.js` | `DEFAULTS` 新增 `regionGate: true` 开关 |
 | `vendor/dsh-purge/lib/index.js` | `applyHostHooks()` 中 `installRegionGate(ctx)` 改为受 `cfg.regionGate !== false` 控制 |
 | `vendor/dsh-purge/cordis.patch.yml` | `regionGate: false`、`autoApplyOnStart: true` |
+| `vendor/dsh-purge/lib/core.js` | 适配 Harness 0.2.1-rc.2 的 Web 上下文包、required runtime contexts 和会话回退，保留全部 82 条补丁与 0.2.0-rc.2 路径 |
+| `vendor/dsh-purge/lib/official-update.wscript` | 兼容 `.sealed.bak`，从临时目录启动当前用户安装；失败时显示安装界面、恢复旧目录并报告退出码，不把失败当成功 |
+| `vendor/dsh-purge/package.json` | `dshTarget` 更新为 `0.2.1-rc.2`；保留上游版本号 `1.1.71` |
 
-其余文件与上游 1.1.71 逐字节一致，未做任何其他修改。
+除表内所列文件外，其余 vendor 文件与上游 1.1.71 逐字节一致。
 
 上游 README 声明「非营利 / 禁商用 / 需署名」。**MIT 许可本身允许商用**；
 本仓库尊重上游意愿，按非营利项目分发，并保留全部署名。若你计划商业使用

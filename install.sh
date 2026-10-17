@@ -8,7 +8,7 @@
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.0.0"
+VERSION="1.0.1"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
@@ -142,7 +142,8 @@ if [ -n "$APP_ROOT" ]; then
            "$APP_ROOT/resources/runtime/node/bin/node.exe"; do
     [ -f "$n" ] && { NODE_EMB="$n"; break; }
   done
-  for p in "$APP_ROOT/resources/runtime/pnpm/bin/pnpm.cjs" "$APP_ROOT/resources/runtime/pnpm/bin/pnpm.mjs"; do
+  for p in "$APP_ROOT/resources/runtime/primary-runtime/dependencies/pnpm/bin/pnpm.mjs" \
+           "$APP_ROOT/resources/runtime/pnpm/bin/pnpm.mjs" "$APP_ROOT/resources/runtime/pnpm/bin/pnpm.cjs"; do
     [ -f "$p" ] && { PNPM_EMB="$p"; break; }
   done
   [ -f "$APP_ROOT/resources/app.asar" ] && SEALED=1
@@ -169,7 +170,14 @@ say "  4. 资产      prompt-inject.md / rules/ / skills/ → $DSH_HOME"
 [ "$APPLY" = 1 ] && say "  5. Apply     ${C_Y}desktop 会解 asar 且需要宿主退出${C_0}"
 if [ "$DRY" = 1 ]; then say ""; say "${C_Y}--dry-run：到此为止，未改动任何文件${C_0}"; exit 0; fi
 
-PY="$(command -v python || command -v python3 || true)"
+PY=""
+if [ -n "$APP_ROOT" ]; then
+  for p in "$APP_ROOT/resources/runtime/primary-runtime/dependencies/python/python.exe" \
+           "$APP_ROOT/resources/runtime/primary-runtime/dependencies/python/bin/python3"; do
+    [ -f "$p" ] && { PY="$p"; break; }
+  done
+fi
+[ -n "$PY" ] || PY="$(command -v python || command -v python3 || true)"
 [ -n "$PY" ] || die "需要 python3（改 JSON 用）"
 
 # ── 卸载分支 ───────────────────────────────────────────────────────

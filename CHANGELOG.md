@@ -3,6 +3,22 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.1] - 2026-10-17
+
+### Fixed
+
+- 适配 DeepSeek Harness **0.2.1-rc.2**，保留原有 **82 条补丁**、上游 1.1.71 插件功能和 0.2.0-rc.2 兼容路径。
+- 跟随 Web 上下文迁移到 `dsh-harness-dev-context`，保留用于旧会话迁移的匹配常量。
+- complete 提示词继续保留自定义注入，同时保留新版要求的 required runtime contexts。
+- 适配新版会话 `append()` 的条件清理，使回退标记继续重建当前会话窗口。
+- 安装器优先探测新版 `primary-runtime/dependencies/pnpm/bin/pnpm.mjs` 和内嵌 Python，并保留旧 pnpm 目录回退。
+- Windows 更新脚本兼容 `.sealed.bak`，明确使用当前用户安装，释放工作目录占用；静默安装失败后显示安装界面，失败恢复后显示退出码，不再静默重开旧版。
+
+### Tests
+
+- 增加新版布局、提示词组装、会话回退、双安装器运行时探测和更新交接回归测试；加入双平台 CI。
+- 对两版官方安装包逐项对照 82 条补丁，检查生成 JS 语法及重复应用，验证方法和范围见 `docs/VERIFICATION.md`。
+
 ## [1.0.0] - 2026-10-17
 
 首次开源发布。

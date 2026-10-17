@@ -34,6 +34,7 @@ e2e:
 
 test:
 	bash tests/smoke.sh
+	node --test tests/*.test.mjs
 
 lint:
 	@echo "── bash -n ──"

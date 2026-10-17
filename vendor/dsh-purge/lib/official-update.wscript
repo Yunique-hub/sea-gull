@@ -7,6 +7,7 @@ if (installDir.length > 3) installDir = installDir.replace(/[\\\/]+$/, '');
 var logPath = __LOG_JSON__;
 var fso = new ActiveXObject('Scripting.FileSystemObject');
 var sh = new ActiveXObject('WScript.Shell');
+sh.CurrentDirectory = fso.GetParentFolderName(logPath);
 var wmi = GetObject('winmgmts:\\\\.\\root\\cimv2');
 function z(n) { return (n < 10 ? '0' : '') + n; }
 function stamp() { var d = new Date(); return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + 'T' + z(d.getHours()) + ':' + z(d.getMinutes()) + ':' + z(d.getSeconds()); }
@@ -24,8 +25,13 @@ var deadline = new Date().getTime() + 20000;
 var left = list;
 while (new Date().getTime() < deadline) { left = pids(); if (left.length === 0) break; WScript.Sleep(200); }
 log('left ' + left.length);
+if (left.length > 0) {
+  sh.Popup('DeepSeek Harness is still running. The update was cancelled; your installation is unchanged.', 0, 'DeepSeek Harness', 48);
+  WScript.Quit(2);
+}
 var asar = resources + '\\app.asar';
-var bak = asar + '.bak';
+var bak = asar + '.sealed.bak';
+if (!fso.FileExists(bak)) bak = asar + '.bak';
 var appDir = resources + '\\app';
 var movedApp = false;
 var prev = '';
@@ -46,21 +52,22 @@ var exeBeforeSize = fileSize(exe);
 var exeBeforeStamp = fileStamp(exe);
 var asarBeforeSize = fileSize(asar);
 function runInstaller(updated) {
-  var args = updated ? ' --updated /S /D=' : ' /S /D=';
-  return sh.Run('"' + installer + '"' + args + installDir, 0, true);
+  var args = updated ? ' --updated /currentuser /S /D=' : ' /currentuser /D=';
+  try { return sh.Run('"' + installer + '"' + args + installDir, updated ? 0 : 1, true); }
+  catch (error) { log('installer-error ' + String(error && error.message || error)); return -1; }
 }
 var code = runInstaller(true);
 log('installer ' + code);
 var exeChanged = fileSize(exe) !== exeBeforeSize || fileStamp(exe) !== exeBeforeStamp;
 var asarChanged = fileSize(asar) !== asarBeforeSize;
-var ok = exeChanged || asarChanged;
+var ok = code === 0 && (exeChanged || asarChanged);
 log('changed exe=' + exeChanged + ' asar=' + asarChanged);
 if (!ok) {
   code = runInstaller(false);
   log('installer-plain ' + code);
   exeChanged = fileSize(exe) !== exeBeforeSize || fileStamp(exe) !== exeBeforeStamp;
   asarChanged = fileSize(asar) !== asarBeforeSize;
-  ok = exeChanged || asarChanged;
+  ok = code === 0 && (exeChanged || asarChanged);
   log('changed-plain exe=' + exeChanged + ' asar=' + asarChanged);
 }
 if (!ok) {
@@ -79,6 +86,7 @@ if (!ok) {
   try { sh.Environment('PROCESS').Remove('ELECTRON_RUN_AS_NODE'); } catch (ignore) {}
   sh.Run('"' + exe + '"', 1, false);
   log('started-old');
+  sh.Popup('DeepSeek Harness update failed (exit code ' + code + '). The previous version was restored. Log: ' + logPath, 0, 'DeepSeek Harness', 48);
 } else {
   if (!movedApp && fso.FolderExists(appDir)) log('move-app-failed');
   try {

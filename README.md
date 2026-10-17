@@ -8,12 +8,18 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
 
 </div>
+
+---
+
+当前 **v1.0.1** 适配 DeepSeek Harness **0.2.1-rc.2**，保留 dsh-purge **1.1.71 的全部 82 条补丁定义**、插件资产与旧版适配路径。0.2.0-rc.2 也经过官方安装包对照检查。新版适配的测试范围、运行验证限制见[验证报告](docs/VERIFICATION.md#e-021-rc2-兼容验证2026-10-17)。
+
+已安装用户可重新执行一键安装命令更新海鸥插件。先完成 Harness 官方版本更新，再重新应用插件；仅替换版本号或把旧 `resources/app` 整目录复制到新版会重新加载旧宿主。Windows 更新若静默失败，会改为显示安装界面；取消或失败时恢复旧解包目录并提示退出码。
 
 ---
 
