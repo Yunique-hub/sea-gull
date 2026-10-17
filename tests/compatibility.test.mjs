@@ -3,7 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
 import { ALL_PATCHES, applyReplacementsToText, targetFiles } from '../vendor/dsh-purge/lib/core.js';
+import { CWD_ONLY_SUFFIX, rewritePromptAssembly } from '../vendor/dsh-purge/lib/identity.js';
+import { patchOfficialCliCmdText, repairOfficialCliAfterUnpack } from '../vendor/dsh-purge/lib/desktop.js';
 
 const patch = (id, text, filename = 'index.js') =>
   applyReplacementsToText(text, ALL_PATCHES.find((entry) => entry.id === id), filename);
@@ -92,4 +95,50 @@ test('0.2.1 rewind rebuilds the visible conversation window', () => {
   assert.deepEqual(append.call(owner, record), { entries: [previous, record], hasMore: true });
   assert.equal(append.call(owner, { event: { seq: 3 } }), 'normal');
   assert.equal(append.call(owner, previous), 'none');
+});
+
+test('0.2.1 working directory context does not require the removed cwd variable', () => {
+  const context = { name: 'working-directory:current', text: 'Current working directory: "C:/workspace".' };
+  const assembly = { sections: [], contexts: [context], tools: [], variables: { provider: 'example', model: 'example' } };
+  const rewritten = rewritePromptAssembly(assembly, 'custom persona', { capabilityProtocol: false });
+  assert.ok(rewritten.sections.every((section) => !section.text.includes('{{cwd}}')));
+  assert.deepEqual(rewritten.contexts, [context]);
+  assert.deepEqual(assembly.sections, []);
+});
+
+test('0.2.0 working directory interpolation remains available', () => {
+  const rewritten = rewritePromptAssembly({ sections: [], contexts: [], tools: [], variables: { cwd: 'C:/workspace' } }, 'custom persona', { capabilityProtocol: false });
+  assert.ok(rewritten.sections.some((section) => section.text === CWD_ONLY_SUFFIX));
+});
+
+const officialCmd = fs.readFileSync(new URL('./fixtures/dsh-0.2.1.cmd', import.meta.url), 'utf8');
+
+test('Windows CLI repair recognizes ordinary backslashes and is idempotent', () => {
+  const result = patchOfficialCliCmdText(officialCmd);
+  assert.ok(result.changed);
+  assert.ok(result.text.includes(path.win32.join('app', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js')));
+  assert.match(result.text, /--expose-internals "%entry%" %\*/);
+  assert.equal(patchOfficialCliCmdText(result.text).changed, false);
+});
+
+test('Windows CLI repair completes its backup before replacing the launcher', { skip: process.platform !== 'win32' }, () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'seagull-cli-'));
+  try {
+    const app = path.join(temp, 'Harness Space');
+    const shim = path.join(app, 'resources/runtime/cli/bin/dsh.cmd');
+    const entry = path.join(app, 'resources/app/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js');
+    fs.mkdirSync(path.dirname(shim), { recursive: true });
+    fs.mkdirSync(path.dirname(entry), { recursive: true });
+    fs.copyFileSync(process.execPath, path.join(app, 'DeepSeek Harness.exe'));
+    fs.writeFileSync(entry, 'console.log("fixture-host-0.2.1", process.argv[2]);');
+    fs.writeFileSync(shim, officialCmd);
+    const report = repairOfficialCliAfterUnpack(path.join(app, 'DeepSeek Harness.exe'));
+    assert.equal(report.shims.find((entry) => entry.path === shim).status, 'patched');
+    assert.equal(fs.readFileSync(shim + '.dsh-purge.bak', 'utf8'), officialCmd);
+    const result = spawnSync('call "' + shim + '" --version', { shell: process.env.ComSpec, encoding: 'utf8', windowsHide: true });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /fixture-host-0\.2\.1 --version/);
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
 });

@@ -16,7 +16,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$VERSION = "1.0.1"
+$VERSION = "1.0.2"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 

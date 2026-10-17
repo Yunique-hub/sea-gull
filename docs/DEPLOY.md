@@ -97,6 +97,8 @@ bash verify-e2e.sh        # 真跑模型（需 API key）
 bash tests/smoke.sh       # 不碰真机
 ```
 
+0.2.1 的 headless 默认不读取 GUI 保存的密钥或账号登录。默认验证使用启动环境 / `.env` 中的 API key；若要沿用 GUI 凭据，显式运行 `bash verify-e2e.sh --stored-credentials`，可加 `--skip-ab` 省去对照调用。该选项只为本次验证生成覆盖文件，不改日常 profile 或凭据存储。验证失败会返回非零退出码，原始输出保存在 `_verify/`，请勿提交账号凭据或完整会话日志。
+
 `verify.sh` 检查：DSH_HOME / profile / 插件版本 / profile 挂载 / node_modules /
 asar 状态 / 被改宿主文件数 / 官方身份句是否剥掉 / 补丁计数 / 注入文件 / 规则集 /
 技能数 / 三个全破开关。

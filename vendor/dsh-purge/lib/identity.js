@@ -215,8 +215,9 @@ function looksLikeOfficialIdentity(text) {
 }
 
 /** 关掉官方身份，只留工作目录。红队操作稿在 prefix 里时不动。 */
-export function overlayOfficialIdentity(sections) {
+export function overlayOfficialIdentity(sections, { cwdVariableAvailable = true } = {}) {
   const list = Array.isArray(sections) ? sections : [];
+  const cwdSuffix = cwdVariableAvailable ? CWD_ONLY_SUFFIX : "";
   const out = [];
   let sawSuffix = false;
   for (const section of list) {
@@ -233,7 +234,7 @@ export function overlayOfficialIdentity(sections) {
       sawSuffix = true;
       const raw = String(section.text || "");
       if (!raw.trim() || looksLikeOfficialIdentity(raw) || isCwdOnlyText(raw)) {
-        out.push({ ...section, text: CWD_ONLY_SUFFIX });
+        out.push({ ...section, text: cwdSuffix });
       } else {
         out.push(section);
       }
@@ -244,7 +245,7 @@ export function overlayOfficialIdentity(sections) {
   if (!sawSuffix) {
     out.push({
       name: "deployment:persona-suffix",
-      text: CWD_ONLY_SUFFIX,
+      text: cwdSuffix,
       order: 10200,
     });
   }
@@ -960,6 +961,7 @@ export function rewritePromptAssembly(assembled, fallbackInject = "", options = 
   }
   let outSections = overlayOfficialIdentity(
     sanitizeAssemblySections(leadWithInject(sections, injectText, protocol)),
+    { cwdVariableAvailable: typeof assembled.variables?.cwd === "string" },
   );
   if (injectText) {
     const needle = injectText.slice(0, 80);

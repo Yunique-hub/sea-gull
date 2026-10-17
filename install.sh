@@ -8,7 +8,7 @@
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.0.1"
+VERSION="1.0.2"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"

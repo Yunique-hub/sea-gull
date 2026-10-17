@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { isWshAscii, wshLiteral } from "./official-update.js";
 import { asarArchiveIsFile, hostFs } from "./extract-asar.js";
 import { hostPromptKeepsInject } from "./host-clean.js";
-import { atomicCopyFile, atomicWriteSync } from "./core.js";
+import { atomicWriteSync } from "./core.js";
 
 function restartUniqSuffix() {
   return `${process.pid}-${randomBytes(4).toString("hex")}`;
@@ -1766,7 +1766,8 @@ export function repairOfficialCliAfterUnpack(exe = findDesktopAppExecutable()) {
       // 原子写之前先存一份 .dsh-purge.bak，断电/磁盘满也能回退到官方原文。
       const bak = `${fp}.dsh-purge.bak`;
       if (!isFile(bak)) {
-        try { atomicCopyFile(fp, bak); } catch { /* 写不了 bak 不致命 */ }
+        // 同步调用需先完成备份，再替换 Windows 启动器，避免备份任务延后到调用结束。
+        try { atomicWriteSync(bak, fs.readFileSync(fp)); } catch { /* 写不了 bak 不致命 */ }
       }
       atomicWriteSync(fp, patched.text, "utf8");
       report.shims.push({ path: fp, status: "patched" });

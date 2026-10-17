@@ -7,7 +7,7 @@ import { wshLiteral } from '../vendor/dsh-purge/lib/official-update.js';
 
 const template = fs.readFileSync(new URL('../vendor/dsh-purge/lib/official-update.wscript', import.meta.url), 'utf8');
 
-function simulate(outcomes, { blocked = false, legacyBackup = false } = {}) {
+function simulate(outcomes, { blocked = false, legacyBackup = false, guardFails = false } = {}) {
   const exe = 'C:\\测试\\DeepSeek Harness\\DeepSeek Harness.exe';
   const resources = 'C:\\测试\\DeepSeek Harness\\resources';
   const installer = 'C:\\Cache\\deepseek-harness-0.2.1-rc.2-win-x64.exe';
@@ -17,6 +17,7 @@ function simulate(outcomes, { blocked = false, legacyBackup = false } = {}) {
   const app = norm(resources + '\\app');
   const backup = asar + (legacyBackup ? '.bak' : '.sealed.bak');
   const files = new Map([[norm(exe), { Size: 10, DateLastModified: 'old' }], [backup, { Size: 20, DateLastModified: 'old' }]]);
+  files.set(norm('C:\\User\\.dsh\\profiles\\desktop\\node_modules\\dsh-purge\\lib\\official-update-runtime.ps1'), { Size: 1 });
   const folders = new Set([app]);
   const runs = [], logs = [], popups = [];
   let alive = true, clock = 0, installerCalls = 0, exitCode;
@@ -37,6 +38,7 @@ function simulate(outcomes, { blocked = false, legacyBackup = false } = {}) {
     Run(command, style, wait) {
       runs.push({ command, style, wait });
       if (command.startsWith('taskkill')) { if (!blocked) alive = false; return 0; }
+      if (command.includes('official-update-runtime.ps1')) return guardFails && command.includes('-Action Detach') ? 1 : 0;
       if (!command.includes(installer)) return 0;
       const outcome = outcomes[installerCalls++] || { code: 2 };
       if (outcome.throws) throw new Error('cannot launch installer');
@@ -45,6 +47,7 @@ function simulate(outcomes, { blocked = false, legacyBackup = false } = {}) {
       return outcome.code;
     },
     Popup: (...args) => popups.push(args),
+    ExpandEnvironmentStrings: (text) => ({ '%DSH_HOME%': 'C:\\User\\.dsh', '%SystemRoot%': 'C:\\Windows' })[text] || text,
     Environment: () => ({ Remove() {} }),
   };
   const stopped = new Error('WScript.Quit');
@@ -71,6 +74,7 @@ test('successful update restores the sealed archive, installs, and requests reap
   const install = result.runs.find((run) => run.command.includes('--updated'));
   assert.match(install.command, /\/currentuser \/S \/D=C:\\测试\\DeepSeek Harness$/);
   assert.equal(result.popups.length, 0);
+  assert.ok(result.runs.findIndex((run) => run.command.includes('-Action Detach')) < result.runs.findIndex((run) => run.command.includes('--updated')));
 });
 
 test('exit code 2 retries visibly, restores the prior app, and reports failure', () => {
@@ -84,6 +88,7 @@ test('exit code 2 retries visibly, restores the prior app, and reports failure',
   assert.equal(result.files.has(result.asar), false);
   assert.equal(result.files.has(result.marker), false);
   assert.match(result.popups[0][0], /exit code 2/);
+  assert.ok(result.runs.some((run) => run.command.includes('-Action Restore')));
 });
 
 test('partial writes with a failing exit code never report update success', () => {
@@ -107,4 +112,13 @@ test('a remaining app process cancels before moving any application files', () =
   assert.equal(result.installerCalls, 0);
   assert.ok(result.folders.has(result.app));
   assert.equal(result.files.has(result.marker), false);
+});
+
+test('a runtime guard failure cancels before moving files or launching the installer', () => {
+  const result = simulate([], { guardFails: true });
+  assert.equal(result.exitCode, 2);
+  assert.equal(result.installerCalls, 0);
+  assert.ok(result.folders.has(result.app));
+  assert.ok(result.runs.some((run) => run.command.includes('-Action Restore')));
+  assert.match(result.popups[0][0], /Runtime links/);
 });

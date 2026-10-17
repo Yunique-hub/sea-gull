@@ -3,6 +3,22 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.2] - 2026-10-17
+
+### Fixed
+
+- 新版工作目录通过 required runtime context 提供，身份后缀不再插入不存在的 `{{cwd}}`；旧版变量插值路径保留。
+- Windows 官方 CLI 修复改为同步完成备份，再原子替换 `dsh.cmd`，不再启动未等待的备份任务。
+- Windows 更新前检查并摘除 `app` / `app.dshpurge-prev*` 中指向共享 runtime 的联接，失败恢复；异常目标或联接应用目录会在安装前中止。
+- 端到端验证适配新版 pnpm / Python 和跨平台 CLI；调用失败、问候缺失、profile 安装失败均返回非零退出码。
+- `verify-e2e.sh --stored-credentials` 显式启用已保存认证，适配 0.2.1 headless 默认禁用凭据存储的变化。
+
+### Tests
+
+- Windows 真机安装官方 0.2.1-rc.2，并复验加上联接保护后的覆盖安装：退出码 0、6,150 个运行时文件与官方包哈希一致。
+- 海鸥固定问候、实际工具创建和读回 UTF-8 中文文件通过；桌面补丁界面无 pending。
+- Windows 24 项回归测试和安装、幂等、卸载冒烟测试通过；真机证据和可选条目范围见 `docs/VERIFICATION.md`。
+
 ## [1.0.1] - 2026-10-17
 
 ### Fixed

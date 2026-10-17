@@ -33,6 +33,25 @@ var asar = resources + '\\app.asar';
 var bak = asar + '.sealed.bak';
 if (!fso.FileExists(bak)) bak = asar + '.bak';
 var appDir = resources + '\\app';
+var home = sh.ExpandEnvironmentStrings('%DSH_HOME%');
+if (!home || home === '%DSH_HOME%') home = sh.ExpandEnvironmentStrings('%USERPROFILE%') + '\\.dsh';
+var guards = [home + '\\profiles\\desktop\\node_modules\\dsh-purge\\lib\\official-update-runtime.ps1', home + '\\profiles\\web\\node_modules\\dsh-purge\\lib\\official-update-runtime.ps1', home + '\\plugins\\dsh-purge\\lib\\official-update-runtime.ps1'];
+var guard = '';
+for (var g = 0; g < guards.length; g++) { if (fso.FileExists(guards[g])) { guard = guards[g]; break; } }
+function runtimeLinks(action) {
+  if (!guard) { log('runtime-guard missing'); return -1; }
+  var powershell = sh.ExpandEnvironmentStrings('%SystemRoot%') + '\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  try { return sh.Run('"' + powershell + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + guard + '" -Action ' + action + ' -Resources "' + resources + '" -Manifest "' + logPath + '.runtime-links.json"', 0, true); }
+  catch (guardError) { log('runtime-guard ' + guardError); return -1; }
+}
+var detached = runtimeLinks('Detach');
+log('runtime-detach ' + detached);
+if (detached !== 0) {
+  runtimeLinks('Restore');
+  sh.Run('"' + exe + '"', 1, false);
+  sh.Popup('Runtime links could not be prepared. The update was cancelled. Log: ' + logPath, 0, 'DeepSeek Harness', 48);
+  WScript.Quit(2);
+}
 var movedApp = false;
 var prev = '';
 if (fso.FolderExists(appDir)) {
@@ -83,6 +102,7 @@ if (!ok) {
       try { fso.MoveFolder(prev, appDir); log('restored-app'); } catch (backErr) { log('restored-app ' + backErr); }
     }
   }
+  log('runtime-restore ' + runtimeLinks('Restore'));
   try { sh.Environment('PROCESS').Remove('ELECTRON_RUN_AS_NODE'); } catch (ignore) {}
   sh.Run('"' + exe + '"', 1, false);
   log('started-old');
