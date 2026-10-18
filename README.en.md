@@ -4,9 +4,13 @@
 
 One-line install · idempotent · uninstallable · backed by evidence
 
-**v1.0.3 targets DeepSeek Harness 0.2.1-rc.2** and fixes the broken red-team preset and steering that was forced into the next-turn queue. A real Windows UI test verifies busy Enter, processing the correction in the current turn, and a separately queued follow-up. All 82 dsh-purge 1.1.71 patch definitions, plugin assets, and existing compatibility paths remain. See the [preset and steering verification](docs/VERIFICATION.md#g-红队模式与运行中插话修复2026-10-18); earlier live installation evidence remains available.
+**v1.0.4 targets DeepSeek Harness 0.2.1-rc.2** and integrates installation reliability improvements identified in the fujiang-dsh review while retaining the Seagull persona. It validates inputs before writes, replaces profile JSON atomically, scopes Apply/revert to the selected installation, and reports command failures. All 60 local Windows regression tests pass; repeated installation with the actual bundled pnpm also passes. See the [source review and integration report](docs/FUJIANG-REVIEW.md).
+
+All 82 dsh-purge 1.1.71 patch definitions, plugin assets, the red-team preset repair, and immediate steering remain. The previous real Windows UI test verifies busy Enter, processing the correction in the current turn, and a separately queued follow-up: [preset and steering verification](docs/VERIFICATION.md#g-红队模式与运行中插话修复2026-10-18).
 
 Existing users can rerun the installer to update Seagull. Finish the official Harness update before reapplying the plugin; copying the old extracted `resources/app` into the new installation would load the old host again. A failed silent Windows update now offers the visible installer and reports its exit code after restoring the old extracted app.
+
+An invalid explicit DSH home now stops installation. Failed profile writes, pnpm installs, or reverts return a nonzero exit code. Skipping pnpm reports files-only deployment; dependency synchronization and loading still need verification. Apply requires a located app and Node runtime before files are changed.
 
 Windows update handoff detaches verified junctions to the shared runtime before the installer cleans up old extracted directories, and restores them on failure. Use `verify-e2e.sh --stored-credentials` to explicitly opt into GUI-saved credentials; the default retains headless launch-time authentication.
 

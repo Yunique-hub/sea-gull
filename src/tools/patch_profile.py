@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """把插件挂进 / 摘出一个 dsh profile 的 package.json。
 
-三种用法：
+用法：
   patch_profile.py <package.json> [dep_spec] [dep_name]      # 添加（默认）
   patch_profile.py --remove <package.json> <dep_name>        # 移除
   patch_profile.py --check  <package.json> <dep_name>        # 只检查
+  patch_profile.py --validate <package.json>                # 只校验结构
 
 添加时只改两处，其余键与顺序全保留（幂等，先备份 .bak-seagull）：
   1. dependencies[<name>] = <spec>
@@ -14,8 +15,10 @@ from __future__ import annotations
 
 import collections
 import json
+import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 # Windows 控制台默认 cp1252，直接 print("✓") 会 UnicodeEncodeError。
@@ -31,12 +34,35 @@ DEFAULT_NAME = "dsh-purge"
 
 
 def load(fp: Path):
-    return json.loads(fp.read_text(encoding="utf-8"),
+    data = json.loads(fp.read_text(encoding="utf-8-sig"),
                       object_pairs_hook=collections.OrderedDict)
+    if not isinstance(data, dict):
+        raise ValueError("package.json 必须是对象")
+    for key, parent in (("dependencies", data), ("dsh", data),
+                        ("profile", data.get("dsh", {}))):
+        if key in parent and not isinstance(parent[key], dict):
+            raise ValueError(f"{key} 必须是对象，已停止修改")
+    profile = data.get("dsh", {}).get("profile", {})
+    if "bundles" in profile and not isinstance(profile["bundles"], list):
+        raise ValueError("dsh.profile.bundles 必须是数组，已停止修改")
+    return data
 
 
 def dump(fp: Path, data) -> None:
-    fp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n",
+                                         dir=fp.parent, prefix=fp.name + ".", suffix=".tmp",
+                                         delete=False) as output:
+            temporary = Path(output.name)
+            output.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+            output.flush()
+            os.fsync(output.fileno())
+        shutil.copymode(fp, temporary)
+        os.replace(temporary, fp)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def backup(fp: Path) -> Path:
@@ -121,6 +147,11 @@ def main(argv: list[str]) -> int:
     if not argv:
         print(__doc__)
         return 2
+    if argv[0] == "--validate":
+        if len(argv) != 2:
+            return 2
+        load(Path(argv[1]))
+        return 0
     if argv[0] in ("--remove", "--check"):
         mode = argv[0][2:]
         argv = argv[1:]
@@ -137,4 +168,8 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except (OSError, ValueError) as error:
+        print(f"profile 处理失败: {error}", file=sys.stderr)
+        sys.exit(1)

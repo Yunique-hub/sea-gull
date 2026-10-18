@@ -16,7 +16,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$VERSION = "1.0.3"
+$VERSION = "1.0.4"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -44,12 +44,18 @@ if (-not (Test-Path (Join-Path $Here "VERSION"))) {
 }
 
 # ── DSH_HOME ────────────────────────────────────────────────────
-$cands = @($DshHome, $env:DSH_HOME, (Join-Path $env:USERPROFILE ".dsh"),
-           (Join-Path $env:USERPROFILE "dsh-home"),
-           (Join-Path $env:APPDATA "DeepSeek Harness\dsh-home"),
-           (Join-Path $env:LOCALAPPDATA "DeepSeek Harness\dsh-home")) | Where-Object { $_ }
-$DH = $cands | Where-Object { Test-Path (Join-Path $_ "profiles") } | Select-Object -First 1
+$DH = if ($DshHome) { $DshHome } else { $env:DSH_HOME }
+if ($DH) {
+  if (-not (Test-Path -LiteralPath (Join-Path $DH "profiles") -PathType Container)) { Die "指定的 DSH 主目录无效: $DH" }
+} else {
+  $cands = @((Join-Path $env:USERPROFILE ".dsh"),
+             (Join-Path $env:USERPROFILE "dsh-home"),
+             (Join-Path $env:APPDATA "DeepSeek Harness\dsh-home"),
+             (Join-Path $env:LOCALAPPDATA "DeepSeek Harness\dsh-home")) | Where-Object { $_ }
+  $DH = $cands | Where-Object { Test-Path (Join-Path $_ "profiles") } | Select-Object -First 1
+}
 if (-not $DH) { Die "找不到 DSH 主目录（含 profiles/ 的 .dsh）。用 -DshHome 指定。" }
+$DH = (Resolve-Path -LiteralPath $DH).Path
 Ok "DSH_HOME = $DH"
 
 if (-not $Profile) {
@@ -70,7 +76,7 @@ if (-not $AppRoot) {
 }
 if (-not $AppRoot -or -not (Test-Path $AppRoot)) {
   $AppRoot = ""; Warn "未定位到 DSH 安装根：跳过 pnpm/Apply（files-only 模式）"
-} else { Ok "安装根    = $AppRoot" }
+} else { $AppRoot = (Resolve-Path -LiteralPath $AppRoot).Path; Ok "安装根    = $AppRoot" }
 
 $Node = ""; $Pnpm = ""; $Sealed = $false
 if ($AppRoot) {
@@ -107,12 +113,41 @@ if ($AppRoot) {
 if (-not $Py) { $Py = (Get-Command python -ErrorAction SilentlyContinue).Source }
 if (-not $Py) { Die "需要 python" }
 
+& $Py (Join-Path $Here "src\tools\patch_profile.py") --validate (Join-Path $ProfDir "package.json")
+if ($LASTEXITCODE -ne 0) { Die "profile 校验失败，未修改安装文件" }
+if (-not $Uninstall) {
+  foreach ($required in @("vendor\dsh-purge\package.json", "vendor\dsh-purge\cordis.patch.yml",
+      "vendor\dsh-purge\lib\index.js", "vendor\dsh-purge\bin\dsh-purge.js", "vendor\dsh-purge\lib\reapply-cli.js",
+      "src\prompt\prompt-inject.md", "src\rules\seagull-fullbreak.md", "src\rules\seagull-fullbreak.json")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $Here $required) -PathType Leaf)) { Die "安装包缺少: $required" }
+  }
+  if (-not (Test-Path -LiteralPath (Join-Path $Here "src\skills") -PathType Container)) { Die "安装包缺少: src/skills" }
+  if ($Apply -and (-not $AppRoot -or -not $Node)) { Die "缺少安装根或 node，无法 Apply" }
+}
+
+function Invoke-DshCli([string]$Script, [string[]]$CliArgs = @()) {
+  $saved = @{}
+  foreach ($key in @("DSH_HOME", "DSH_PROFILE", "DSH_SURFACE", "DSH_DESKTOP_INSTALL", "DSH_BASE")) {
+    $saved[$key] = [Environment]::GetEnvironmentVariable($key, "Process")
+  }
+  try {
+    $env:DSH_HOME = $DH; $env:DSH_PROFILE = $Profile; $env:DSH_SURFACE = $Profile
+    if ($Profile -eq "desktop") { $env:DSH_DESKTOP_INSTALL = $AppRoot; $env:DSH_BASE = $null }
+    else { $env:DSH_DESKTOP_INSTALL = $null }
+    & $Node $Script @CliArgs
+    if ($LASTEXITCODE -ne 0) { throw "DSH 操作失败（退出码 $LASTEXITCODE），保留文件与备份以便重试" }
+  } finally {
+    foreach ($key in $saved.Keys) { [Environment]::SetEnvironmentVariable($key, $saved[$key], "Process") }
+  }
+}
+
 # ── 卸载 ────────────────────────────────────────────────────────
 if ($Uninstall) {
   Step "卸载"
   $cli = Join-Path $PlugDir "bin\dsh-purge.js"
-  if ((Test-Path $cli) -and $Node) { & $Node $cli --revert 2>$null | Out-Null; Ok "宿主补丁已还原" }
-  & $Py (Join-Path $Here "src\tools\patch_profile.py") --remove (Join-Path $ProfDir "package.json") $PluginId 2>$null
+  if ((Test-Path $cli) -and $Node) { Invoke-DshCli $cli @("--revert"); Ok "宿主补丁已还原" }
+  & $Py (Join-Path $Here "src\tools\patch_profile.py") --remove (Join-Path $ProfDir "package.json") $PluginId
+  if ($LASTEXITCODE -ne 0) { Die "profile 移除失败，保留插件文件" }
   Remove-Item -Recurse -Force $PlugDir -ErrorAction SilentlyContinue
   Remove-Item -Force (Join-Path $DH "prompt-inject.md") -ErrorAction SilentlyContinue
   Remove-Item -Force (Join-Path $DH "rules\seagull-fullbreak.md"), (Join-Path $DH "rules\seagull-fullbreak.json") -ErrorAction SilentlyContinue
@@ -139,14 +174,19 @@ Ok "插件就位: $PlugDir"
 # ── 2. profile ──────────────────────────────────────────────────
 Step "改写 profile"
 & $Py (Join-Path $Here "src\tools\patch_profile.py") (Join-Path $ProfDir "package.json") "file:../../plugins/$PluginId" $PluginId
+if ($LASTEXITCODE -ne 0) { Die "profile 写入失败，备份已保留" }
 
 # ── 3. pnpm ─────────────────────────────────────────────────────
+$DependenciesReady = $false
 if (-not $NoPnpm -and $Node -and $Pnpm) {
   Step "pnpm install"
   Push-Location $ProfDir
-  & $Node $Pnpm install --reporter=append-only
-  if ($LASTEXITCODE -ne 0) { Warn "pnpm install 失败：检查 registry / file: 路径" }
-  Pop-Location
+  try {
+    & $Node $Pnpm install --reporter=append-only
+    if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败：检查 registry / file: 路径后重试；备份已保留" }
+  } finally { Pop-Location }
+  if (-not (Test-Path -LiteralPath (Join-Path $ProfDir "node_modules\$PluginId\package.json"))) { Die "依赖未就位: node_modules/$PluginId" }
+  $DependenciesReady = $true
 }
 
 # ── 4. 资产 ─────────────────────────────────────────────────────
@@ -174,25 +214,22 @@ Ok "资产已落地"
 if ($Apply) {
   if (-not $Node) { Die "没有 node，无法 Apply" }
   Step "Apply"
-  if ($Sealed) {
+  if ($Profile -eq "desktop" -and $Sealed) {
     Push-Location $PlugDir
-    & $Node "lib\reapply-cli.js"
-    $rc = $LASTEXITCODE
-    Pop-Location
-    if ($rc -ne 0) { Die "reapply 失败" }
+    try { Invoke-DshCli "lib\reapply-cli.js" } finally { Pop-Location }
     Say ""
     Warn "密封桌面宿主：请完全退出 DeepSeek Harness，再执行："
     Say "    Move-Item `"$AppRoot\resources\app.asar`" `"$AppRoot\resources\app.asar.sealed.bak`""
     Say "    然后重新打开 DeepSeek Harness。"
   } else {
-    & $Node (Join-Path $PlugDir "bin\dsh-purge.js") --apply
-    if ($LASTEXITCODE -ne 0) { Die "apply 失败" }
+    Invoke-DshCli (Join-Path $PlugDir "bin\dsh-purge.js") @("--apply")
     Say ""; Say "重启 DeepSeek Harness 生效。"
   }
 }
 
 Say ""
-Ok "安装完成 ($Profile)"
+if ($DependenciesReady) { Ok "安装完成 ($Profile)" }
+else { Warn "文件部署完成 ($Profile)；已跳过依赖同步，需在该 profile 执行 pnpm install 后验证加载" }
 Say ""
 Say "下一步"
 if (-not $Apply) {

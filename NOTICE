@@ -63,3 +63,13 @@
 本项目为独立开源工程，与 DeepSeek 及其关联公司**无雇佣、商业、授权或背书关系**。
 「官方宿主」仅指用户本机已安装的 DeepSeek Harness 软件包，不表示 DeepSeek
 开发、认可或担保本项目。
+
+---
+
+## 5. fujiang-dsh 工程评审参考（未分发其源码或资产）
+
+- 来源：https://github.com/c3cvld7aag/fujiang-dsh
+- 快照：0.4.3 / ab86ddcd169f0f13bc74923b6ed95eda55224931
+- 上游文件标注许可：CC BY-NC-SA 4.0；其来源说明指向 Minglink/dsh-infinite-gen-4。
+- 本仓库在既有安装器和配置工具中独立实现安装检查、失败反馈及配置保护，未复制富江代码、提示词、题库或品牌资产。
+- 分析、采用范围及验证证据：`docs/FUJIANG-REVIEW.md`。本说明不对富江原作作重新许可。

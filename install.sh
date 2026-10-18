@@ -8,7 +8,7 @@
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.0.3"
+VERSION="1.0.4"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
@@ -101,13 +101,17 @@ fi
 say "${C_B}海鸥 harness${C_0} v$VERSION  ${C_D}($ROOT)${C_0}"
 
 # ── 定位 DSH_HOME ──────────────────────────────────────────────────
-cand_home=""
-for c in "$DSH_HOME_ARG" "${DSH_HOME:-}" "$HOME/.dsh" "$HOME/dsh-home" \
-         "${APPDATA:-}/DeepSeek Harness/dsh-home" "${LOCALAPPDATA:-}/DeepSeek Harness/dsh-home"; do
-  [ -n "$c" ] && [ -d "$c/profiles" ] && { cand_home="$c"; break; }
-done
+cand_home="${DSH_HOME_ARG:-${DSH_HOME:-}}"
+if [ -n "$cand_home" ]; then
+  [ -d "$cand_home/profiles" ] || die "指定的 DSH 主目录无效: $cand_home"
+else
+  for c in "$HOME/.dsh" "$HOME/dsh-home" \
+           "${APPDATA:-}/DeepSeek Harness/dsh-home" "${LOCALAPPDATA:-}/DeepSeek Harness/dsh-home"; do
+    [ -n "$c" ] && [ -d "$c/profiles" ] && { cand_home="$c"; break; }
+  done
+fi
 [ -n "$cand_home" ] || die "找不到 DSH 主目录（含 profiles/ 的 .dsh）。用 --dsh-home 指定。"
-DSH_HOME="$cand_home"
+DSH_HOME="$(cd "$cand_home" && pwd -P)"
 ok "DSH_HOME = $DSH_HOME"
 
 # ── 选择 profile ───────────────────────────────────────────────────
@@ -117,6 +121,7 @@ if [ -z "$PROFILE" ]; then
   done
 fi
 [ -n "$PROFILE" ] || die "没有任何 profile（desktop/web）。先启动一次 DeepSeek Harness 生成 profile。"
+case "$PROFILE" in desktop|web) ;; *) die "不支持的 profile: $PROFILE（desktop/web）" ;; esac
 PROFILE_DIR="$DSH_HOME/profiles/$PROFILE"
 [ -f "$PROFILE_DIR/package.json" ] || die "profile 不存在: $PROFILE_DIR"
 ok "profile   = $PROFILE"
@@ -129,6 +134,7 @@ if [ -z "$APP_ROOT" ]; then
   done
 fi
 if [ -n "$APP_ROOT" ] && [ -d "$APP_ROOT" ]; then
+  APP_ROOT="$(cd "$APP_ROOT" && pwd -P)"
   ok "安装根    = $APP_ROOT"
 else
   APP_ROOT=""
@@ -180,15 +186,41 @@ fi
 [ -n "$PY" ] || PY="$(command -v python || command -v python3 || true)"
 [ -n "$PY" ] || die "需要 python3（改 JSON 用）"
 
+"$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --validate "$(winpath "$PROFILE_DIR/package.json")" \
+  || die "profile 校验失败，未修改安装文件"
+if [ "$UNINSTALL" = 0 ]; then
+  for required in vendor/dsh-purge/package.json vendor/dsh-purge/cordis.patch.yml \
+      vendor/dsh-purge/lib/index.js vendor/dsh-purge/bin/dsh-purge.js vendor/dsh-purge/lib/reapply-cli.js \
+      src/prompt/prompt-inject.md src/rules/seagull-fullbreak.md src/rules/seagull-fullbreak.json; do
+    [ -f "$ROOT/$required" ] || die "安装包缺少: $required"
+  done
+  [ -d "$ROOT/src/skills" ] || die "安装包缺少: src/skills"
+  if [ "$APPLY" = 1 ]; then
+    [ -n "$APP_ROOT" ] && [ -n "$NODE_EMB" ] || die "缺少安装根或 node，无法 Apply"
+  fi
+fi
+
+# 子进程只操作本次选定的目标，不继承其他 profile 的定位变量。
+run_dsh_cli() (
+  export DSH_HOME="$(winpath "$DSH_HOME")" DSH_PROFILE="$PROFILE" DSH_SURFACE="$PROFILE"
+  if [ "$PROFILE" = desktop ]; then
+    export DSH_DESKTOP_INSTALL="$(winpath "$APP_ROOT")"
+    unset DSH_BASE
+  else
+    unset DSH_DESKTOP_INSTALL
+  fi
+  "$NODE_EMB" "$@"
+)
+
 # ── 卸载分支 ───────────────────────────────────────────────────────
 if [ "$UNINSTALL" = 1 ]; then
   step "卸载"
   if [ -f "$PLUGIN_DIR/bin/dsh-purge.js" ] && [ -n "$NODE_EMB" ]; then
-    "$NODE_EMB" "$PLUGIN_DIR/bin/dsh-purge.js" --revert >/dev/null 2>&1 || warn "revert 未完成（可能本来就未 apply）"
+    run_dsh_cli "$PLUGIN_DIR/bin/dsh-purge.js" --revert || die "revert 失败，保留插件和配置以便重试"
     ok "宿主补丁已还原"
   fi
-  "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --remove "$(winpath "$PROFILE_DIR/package.json")" "$PLUGIN_ID" 2>/dev/null \
-    || warn "profile 未改写（可能原本就没有）"
+  "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --remove "$(winpath "$PROFILE_DIR/package.json")" "$PLUGIN_ID" \
+    || die "profile 移除失败，保留插件文件"
   rm -rf "$PLUGIN_DIR" "$DSH_HOME/prompt-inject.md" \
          "$DSH_HOME/rules/seagull-fullbreak.md" "$DSH_HOME/rules/seagull-fullbreak.json" \
          "$PROFILE_DIR/node_modules/$PLUGIN_ID"
@@ -220,11 +252,14 @@ step "改写 profile"
 "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" "$(winpath "$PROFILE_DIR/package.json")" "file:../../plugins/$PLUGIN_ID" "$PLUGIN_ID"
 
 # ── 3. pnpm install ────────────────────────────────────────────────
+DEPENDENCIES_READY=0
 if [ "$NO_PNPM" = 0 ] && [ -n "$NODE_EMB" ] && [ -n "$PNPM_EMB" ]; then
   step "pnpm install"
   ( cd "$PROFILE_DIR" && "$NODE_EMB" "$PNPM_EMB" install --reporter=append-only ) \
-    || warn "pnpm install 失败：检查 registry / file: 路径；可加 --no-pnpm 手动处理"
-  [ -d "$PROFILE_DIR/node_modules/$PLUGIN_ID" ] && ok "依赖已链接" || warn "node_modules 里没有 $PLUGIN_ID"
+    || die "pnpm install 失败：检查 registry / file: 路径后重试；备份已保留"
+  [ -f "$PROFILE_DIR/node_modules/$PLUGIN_ID/package.json" ] || die "依赖未就位: node_modules/$PLUGIN_ID"
+  DEPENDENCIES_READY=1
+  ok "依赖已链接"
 fi
 
 # ── 4. 资产落地（幂等 + 备份）──────────────────────────────────────
@@ -250,20 +285,24 @@ ok "资产已落地"
 if [ "$APPLY" = 1 ]; then
   [ -n "$NODE_EMB" ] || die "没有 node，无法 Apply"
   step "Apply"
-  if [ "$SEALED" = 1 ]; then
-    ( cd "$PLUGIN_DIR" && "$NODE_EMB" lib/reapply-cli.js ) || die "reapply 失败"
+  if [ "$PROFILE" = desktop ] && [ "$SEALED" = 1 ]; then
+    ( cd "$PLUGIN_DIR" && run_dsh_cli lib/reapply-cli.js ) || die "reapply 失败"
     say ""
     warn "密封桌面宿主：请完全退出 DeepSeek Harness，再执行："
     say "    mv \"$APP_ROOT/resources/app.asar\" \"$APP_ROOT/resources/app.asar.sealed.bak\""
     say "    然后重新打开 DeepSeek Harness。"
   else
-    "$NODE_EMB" "$PLUGIN_DIR/bin/dsh-purge.js" --apply || die "apply 失败"
+    run_dsh_cli "$PLUGIN_DIR/bin/dsh-purge.js" --apply || die "apply 失败"
     say ""; say "重启 DeepSeek Harness 生效。"
   fi
 fi
 
 say ""
-ok "安装完成 ($PROFILE)"
+if [ "$DEPENDENCIES_READY" = 1 ]; then
+  ok "安装完成 ($PROFILE)"
+else
+  warn "文件部署完成 ($PROFILE)；已跳过依赖同步，需在该 profile 执行 pnpm install 后验证加载"
+fi
 say ""
 say "${C_B}下一步${C_0}"
 if [ "$APPLY" = 0 ]; then

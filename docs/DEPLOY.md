@@ -37,16 +37,22 @@ cd "$DSH_HOME/profiles/desktop" && node /path/to/pnpm.cjs install
 
 | 步 | 动作 | 失败时的降级 |
 |---|---|---|
-| 1 | 定位 `DSH_HOME`（含 `profiles/` 的 `.dsh`） | `--dsh-home` 指定 |
+| 1 | 定位 `DSH_HOME`（含 `profiles/` 的 `.dsh`） | 显式参数或环境变量无效时停止，不切换到其他目录 |
 | 2 | 选 profile（desktop 优先，否则 web） | `--profile` 指定 |
-| 3 | 定位安装根 + 内嵌 node/pnpm | 降级 files-only（跳过 pnpm/Apply） |
+| 3 | 定位安装根 + 内嵌 node/pnpm/Python，校验 profile 与必需资产 | 普通部署可降级 files-only；明确请求 Apply 且缺少安装根或 Node 时停止 |
 | 4 | `vendor/dsh-purge` → `$DSH_HOME/plugins/dsh-purge` | 已有的先备份成 `.bak` |
-| 5 | 改 profile `package.json`（加依赖 + bundle） | 自动备份 `.bak-seagull` |
-| 6 | 在该 profile 目录 `pnpm install` | `--no-pnpm` 跳过 |
+| 5 | 改 profile `package.json`（加依赖 + bundle） | 自动备份 `.bak-seagull`；原子替换失败保留原文件，停止后续步骤 |
+| 6 | 在该 profile 目录 `pnpm install`，检查依赖实际存在 | 失败非零退出；主动 `--no-pnpm` 跳过时仅报告文件部署完成 |
 | 7 | 落 `prompt-inject.md` / `rules/` / `skills/` | 已有的加时间戳备份 |
 | 8 | （`--apply` 时）解 asar + 打补丁 | 见 §3 |
 
 **幂等**：重复执行不会重复追加 bundle，不会破坏已有配置。
+
+v1.0.4 对 Apply / revert 子进程传递选定的 `DSH_HOME`、`DSH_PROFILE` 和 `DSH_SURFACE`。桌面模式还绑定安装目录并清除旧的 `DSH_BASE`；Web 模式保留显式指定的 `DSH_BASE`，使用 Web Apply 入口。PowerShell 调用后恢复原进程环境。
+
+失败停止不等于整次安装全部回滚：依赖安装失败时，已复制的插件及依赖声明可能保留，旧插件和 profile 备份仍在，后续人格资产不会继续覆盖。修复网络或配置后重跑即可。卸载时 revert 或 profile 移除失败会停止并保留插件文件。
+
+`--no-pnpm` / `-NoPnpm` 不验证新文件已进入 node_modules；完成依赖同步、重启及加载检查后才能确认更新生效。详细工程整合记录见 [fujiang-dsh 分析报告](FUJIANG-REVIEW.md)。
 
 ## 3. Apply —— 最容易卡的一步
 

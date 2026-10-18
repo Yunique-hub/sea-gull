@@ -3,6 +3,22 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.4] - 2026-10-18
+
+### Fixed
+
+- 整合 fujiang-dsh 源码评审中适用的安装可靠性能力，保留海鸥人格；新增完整的源码对比、采用范围与许可来源报告。
+- 显式 DSH_HOME 无效时停止，避免写入其他目录；配置结构、安装资产与 Apply 前提在落盘前检查。
+- Apply/revert 传递正确的 home、profile、surface；Web profile 使用 Web 入口，桌面清除继承的旧 DSH_BASE；PowerShell 调用后恢复环境变量。
+- pnpm、配置写入及 revert 失败停止；依赖缺失不报告成功；跳过 pnpm 明确提示仅完成文件部署。
+- profile 支持 UTF-8 BOM，拒绝异常字段类型，通过同目录临时文件原子替换；失败保留原文件和备份。
+
+### Tests
+
+- 新增 26 项 Windows 回归，覆盖失败传播、目标隔离、预检、配置保护、Web 分支、files-only 和偏好保留；全部 60 项回归及原冒烟测试通过。
+- 真实内嵌 pnpm 在隔离 home 连续安装两次，旧依赖文件刷新、单一挂载及 Steer 偏好保留均通过。
+- 真实 0.2.1 加载器再次验证红队主预设及执行预设；真机检查补丁 pending 为 0，原有资产保留。
+
 ## [1.0.3] - 2026-10-18
 
 ### Fixed

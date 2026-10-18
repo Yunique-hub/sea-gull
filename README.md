@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.3-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.4-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,7 +17,9 @@
 
 ---
 
-当前 **v1.0.3** 适配 DeepSeek Harness **0.2.1-rc.2**：修复红队模式加载失败，以及“插话”被强制延到下一轮的问题。Windows 真实界面已验证任务运行中按 Enter 插话、当前轮处理追加要求和普通消息排队。保留 dsh-purge **1.1.71 的全部 82 条补丁定义**、插件资产与旧版适配路径。测试证据见[红队模式与插话验证](docs/VERIFICATION.md#g-红队模式与运行中插话修复2026-10-18)，前版安装与文件读写记录仍保留。
+当前 **v1.0.4** 适配 DeepSeek Harness **0.2.1-rc.2**。按“保留海鸥人格、整合富江工程功能”的选择，补齐安装前检查、配置原子写入、目标目录隔离及失败反馈；Windows 本地 60 项回归通过，真实 pnpm 重复安装验证通过。源码比较、采用范围和验证边界见 [fujiang-dsh 分析与整合报告](docs/FUJIANG-REVIEW.md)。
+
+继续保留红队模式加载修复、立即插话与普通排队的区别，以及 dsh-purge **1.1.71 的全部 82 条补丁定义**、插件资产与旧版适配路径。此前 Windows 真实界面验证见[红队模式与插话验证](docs/VERIFICATION.md#g-红队模式与运行中插话修复2026-10-18)。
 
 已安装用户可重新执行一键安装命令更新海鸥插件。先完成 Harness 官方版本更新，再重新应用插件；仅替换版本号或把旧 `resources/app` 整目录复制到新版会重新加载旧宿主。Windows 更新若静默失败，会改为显示安装界面；取消或失败时恢复旧解包目录并提示退出码。
 
@@ -92,6 +94,8 @@ bash install.sh            # 或 powershell -File install.ps1
 
 > 设计上**不硬编码盘符和用户名**：自动探测 `DSH_HOME`、profile、安装根、内嵌 node/pnpm；
 > 探测不到安装根就降级为 files-only 模式。重复执行幂等。
+
+显式指定的 DSH 主目录无效时立即停止。profile 或安装包异常会在写入前报告；pnpm、配置写入或 revert 失败返回非零退出码。`--no-pnpm` / `-NoPnpm` 只部署文件，需完成目标 profile 的依赖同步和加载检查。`--apply` / `-Apply` 找不到安装根或 Node 时会提前停止。
 
 ---
 
