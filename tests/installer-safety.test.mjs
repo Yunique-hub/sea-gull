@@ -119,10 +119,10 @@ for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
     const calls = fs.readFileSync(f.log, 'utf8').trim().split('\n').map(JSON.parse);
     assert.equal(calls.length, 2);
     for (const call of calls) {
-      assert.equal(path.resolve(call.home), path.resolve(f.home));
+      assert.equal(fs.realpathSync.native(call.home), fs.realpathSync.native(f.home));
       assert.equal(call.profile, 'desktop');
       assert.equal(call.surface, 'desktop');
-      assert.equal(path.resolve(call.app), path.resolve(f.app));
+      assert.equal(fs.realpathSync.native(call.app), fs.realpathSync.native(f.app));
       assert.ok(!call.base);
     }
     assert.deepEqual(calls[1].args, ['--revert']);
