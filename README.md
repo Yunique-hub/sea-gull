@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.3-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,11 +17,13 @@
 
 ---
 
-当前 **v1.0.2** 已在 Windows 真机安装并验证 DeepSeek Harness **0.2.1-rc.2**：桌面启动、命令行版本、海鸥固定问候和实际文件读写通过。保留 dsh-purge **1.1.71 的全部 82 条补丁定义**、插件资产与旧版适配路径。0.2.0-rc.2 也经过官方安装包对照检查。测试证据与范围见[新版真机验证](docs/VERIFICATION.md#f-021-rc2-真机升级与行为验证2026-10-17)。
+当前 **v1.0.3** 适配 DeepSeek Harness **0.2.1-rc.2**：修复红队模式加载失败，以及“插话”被强制延到下一轮的问题。Windows 真实界面已验证任务运行中按 Enter 插话、当前轮处理追加要求和普通消息排队。保留 dsh-purge **1.1.71 的全部 82 条补丁定义**、插件资产与旧版适配路径。测试证据见[红队模式与插话验证](docs/VERIFICATION.md#g-红队模式与运行中插话修复2026-10-18)，前版安装与文件读写记录仍保留。
 
 已安装用户可重新执行一键安装命令更新海鸥插件。先完成 Harness 官方版本更新，再重新应用插件；仅替换版本号或把旧 `resources/app` 整目录复制到新版会重新加载旧宿主。Windows 更新若静默失败，会改为显示安装界面；取消或失败时恢复旧解包目录并提示退出码。
 
 新版更新交接会先摘除已验证指向共享 runtime 的目录联接，避免覆盖安装清理旧解包目录时影响运行时；安装失败后恢复联接。`verify-e2e.sh --stored-credentials` 可显式使用 GUI 已保存的凭据，默认仍沿用 headless 的启动环境认证。
+
+运行中发送分为 **Steer（插话，下一处理步骤读取）** 和 **Queue（下一轮处理）**。v1.0.3 尊重发送方式，不再把 Steer 改成 Queue。Enter 的行为由 `ui-conversation.busyEnter` 偏好控制；已配置的偏好不被安装器覆盖。红队模式保留原角色与主会话工具，新增的“红队执行者”预设由子任务自动使用，用来承接新版的工具过滤机制。
 
 ---
 

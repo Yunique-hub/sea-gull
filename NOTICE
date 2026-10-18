@@ -19,8 +19,10 @@
 | `vendor/dsh-purge/lib/index.js` | `DEFAULTS` 新增 `regionGate: true` 开关 |
 | `vendor/dsh-purge/lib/index.js` | `applyHostHooks()` 中 `installRegionGate(ctx)` 改为受 `cfg.regionGate !== false` 控制 |
 | `vendor/dsh-purge/cordis.patch.yml` | `regionGate: false`、`autoApplyOnStart: true` |
-| `vendor/dsh-purge/lib/core.js` | 适配 Harness 0.2.1-rc.2 的 Web 上下文包、required runtime contexts 和会话回退，保留全部 82 条补丁与 0.2.0-rc.2 路径 |
-| `vendor/dsh-purge/lib/identity.js` | 根据 assembled variables 决定是否生成工作目录插值后缀，适配 0.2.1 required working-directory context |
+| `vendor/dsh-purge/lib/core.js` | 适配 Harness 0.2.1-rc.2 的上下文、会话回退；#85 / #86 尊重 Steer 与 Queue 的投递语义并迁移旧标记，保留全部 82 条定义 |
+| `vendor/dsh-purge/lib/identity.js` | 根据 assembled variables 决定工作目录后缀；识别红队执行预设，保留子角色提示词路径 |
+| `vendor/dsh-purge/lib/redteam/preset-composition.js` | 将旧 toolFilter 在注册时迁到独立执行预设，保留用户源文件和原有工具限制 |
+| `vendor/dsh-purge/lib/redteam/index.js` | 注册及释放主／执行预设，汇总加载诊断并清理部分注册失败 |
 | `vendor/dsh-purge/lib/desktop.js` | 官方 CLI 修复同步完成备份，避免备份任务脱离调用生命周期 |
 | `vendor/dsh-purge/lib/official-update.wscript` | 兼容 `.sealed.bak`，从临时目录启动当前用户安装；更新前调用 runtime 联接保护；失败时恢复旧目录、联接并报告退出码 |
 | `vendor/dsh-purge/lib/official-update-runtime.ps1` | 新增 Windows 更新辅助脚本，仅摘除已验证指向共享 runtime 的联接，不递归操作目标；支持失败恢复 |

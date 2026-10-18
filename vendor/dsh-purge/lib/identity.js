@@ -451,7 +451,7 @@ function presetLabel(value) {
 export function isRedteamPresetId(value) {
   const text = presetLabel(value);
   if (!text) return false;
-  if (text === "redteam") return true;
+  if (text === "redteam" || text === "redteam-executor") return true;
   if (/^red[\s_-]*team$/i.test(text)) return true;
   const label = text.replace(/不是红队/g, "").replace(/非红队/g, "");
   if (/红队/.test(label)) return true;

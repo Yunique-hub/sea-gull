@@ -99,6 +99,12 @@ bash tests/smoke.sh       # 不碰真机
 
 0.2.1 的 headless 默认不读取 GUI 保存的密钥或账号登录。默认验证使用启动环境 / `.env` 中的 API key；若要沿用 GUI 凭据，显式运行 `bash verify-e2e.sh --stored-credentials`，可加 `--skip-ab` 省去对照调用。该选项只为本次验证生成覆盖文件，不改日常 profile 或凭据存储。验证失败会返回非零退出码，原始输出保存在 `_verify/`，请勿提交账号凭据或完整会话日志。
 
+### 4.1 运行中插话
+
+v1.0.3 恢复 Steer 的下一步投递，Queue 仍在下一轮处理。若希望运行中直接按 Enter 插话，可在 desktop profile 的 `cordis.patch.yml` 中配置 `ui-conversation` 项的 `config.busyEnter: steer`；已有同 id 项时合并该字段，不要重复添加。安装器保留这一用户偏好。消息会立即获接收，在当前工具返回后的下一处理步骤读取，不会强制中断正在执行的命令。
+
+红队模式新增“红队执行者”预设，子任务会自动选择；主会话继续选“红队模式”。原有自定义预设源文件不改写，注册时把失效的工具过滤迁到执行预设。无法自动迁移的自定义过滤会报告明确诊断，避免静默丢失约束。
+
 `verify.sh` 检查：DSH_HOME / profile / 插件版本 / profile 挂载 / node_modules /
 asar 状态 / 被改宿主文件数 / 官方身份句是否剥掉 / 补丁计数 / 注入文件 / 规则集 /
 技能数 / 三个全破开关。

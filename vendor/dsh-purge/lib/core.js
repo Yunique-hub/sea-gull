@@ -5522,10 +5522,10 @@ const NEW_TOOL_PATCHES = [
   },
   {
     id: 85,
-    name: "SESSION_PROMPT_ALWAYS_FOLLOWUP",
+    name: "SESSION_PROMPT_DELIVERY_MODE",
     layer: "代码",
     layer_en: "Code",
-    desc: "session-controller prompt() 一律 followup：UI 发消息永远新 turn，消 steer→next-step 竞态（二轮立刻发被拒根因）",
+    desc: "按发送方式投递：插话进入下一步，排队消息保留下一轮；修复旧版强制 followup",
     file: "api-session-controller",
     optional: true,
     skipIfMarked: true,
@@ -5535,17 +5535,25 @@ const NEW_TOOL_PATCHES = [
           "\t\t\t\t\tif (request.mode === \"steer\") agent.steer(message);\n" +
           "\t\t\t\t\telse agent.followup(message);",
         replace:
-          "\t\t\t\t\tagent.followup(message); // [dsh-purge-85] user prompt always next-turn (kill steer→next-step race)",
+          "\t\t\t\t\tif (request.mode === \"steer\") agent.steer(message); // [dsh-purge-85] respect prompt delivery mode\n" +
+          "\t\t\t\t\telse agent.followup(message);",
+      },
+      {
+        pattern: "\t\t\t\t\tagent.followup(message); // [dsh-purge-85] user prompt always next-turn (kill steer→next-step race)",
+        replace:
+          "\t\t\t\t\tif (request.mode === \"steer\") agent.steer(message); // [dsh-purge-85] respect prompt delivery mode\n" +
+          "\t\t\t\t\telse agent.followup(message);",
       },
     ],
-    markers: ["[dsh-purge-85] user prompt always next-turn"],
+    forbid: ["[dsh-purge-85] user prompt always next-turn"],
+    markers: ["[dsh-purge-85] respect prompt delivery mode"],
   },
   {
     id: 86,
-    name: "SESSION_STEER_ALWAYS_FOLLOWUP",
+    name: "SESSION_STEER_NEXT_STEP",
     layer: "代码",
     layer_en: "Code",
-    desc: "UI 队列 steer 走 followup/next-turn；公共 steer() 保持 next-step，send_message 仍下一步插入",
+    desc: "UI 队列插话和公共 steer() 均走 next-step，普通 followup 保留 next-turn",
     file: ["api-session-controller", "agent-loop"],
     optional: true,
     skipIfMarked: true,
@@ -5559,8 +5567,12 @@ const NEW_TOOL_PATCHES = [
         replace:
           "\t\t\tcase \"steer\":\n" +
           "\t\t\t\tagent.inbox.remove(request.itemId);\n" +
-          "\t\t\t\tagent.followup(message); // [dsh-purge-86] queue steer → next-turn\n" +
+          "\t\t\t\tagent.steer(message); // [dsh-purge-86] queue steer stays next-step\n" +
           "\t\t\t\tbreak;",
+      },
+      {
+        pattern: "\t\t\t\tagent.followup(message); // [dsh-purge-86] queue steer → next-turn",
+        replace: "\t\t\t\tagent.steer(message); // [dsh-purge-86] queue steer stays next-step",
       },
       {
         // 收回 1.1.69 误改的公共 steer()：send_message / 子代理投递仍要 next-step。
@@ -5584,8 +5596,9 @@ const NEW_TOOL_PATCHES = [
           "\t}",
       },
     ],
-    forbid: ["[dsh-purge-86] user steer always next-turn"],
-    markers: ["[dsh-purge-86] steer() stays next-step"],
+    forbid: ["[dsh-purge-86] user steer always next-turn", "[dsh-purge-86] queue steer → next-turn"],
+    markersAny: true,
+    markers: ["[dsh-purge-86] steer() stays next-step", "[dsh-purge-86] queue steer stays next-step"],
   },
   {
     id: 87,

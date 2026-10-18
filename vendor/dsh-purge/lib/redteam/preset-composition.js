@@ -400,4 +400,40 @@ function readPresetDefinition(id, dir) {
 		plugins: readCompositionRows(read("agent.cordis.yml"), dir)
 	};
 }
-export { CompositionError, readCompositionRows, readPresetDefinition };
+/** 将旧子工具过滤迁到独立执行预设，保留用户原始 YAML 与主会话工具。 */
+function preparePresetDefinitions(definition) {
+	const spawnRows = [];
+	const scan = (rows) => {
+		for (const row of rows) {
+			if (row.group === true) scan(row.config);
+			else if (row.name === "@deepseek-ai/dsh-tool-subagent" && row.config?.toolFilter !== undefined) spawnRows.push(row);
+		}
+	};
+	scan(definition.plugins);
+	if (spawnRows.length === 0) return [definition];
+	if (spawnRows.length !== 1) throw new CompositionError("redteam: multiple legacy toolFilter declarations need separate executor presets");
+	const spawn = spawnRows[0];
+	const filter = spawn.config.toolFilter;
+	const supported = new Set(["subagent_fork", "workflow", "ralph"]);
+	if (!filter || typeof filter !== "object" || spawn.config.provider !== "spawn" || Object.keys(filter).some((key) => key !== "deny") ||
+		!Array.isArray(filter.deny) || filter.deny.some((name) => !supported.has(name)) || spawn.config.agentPreset !== undefined) {
+		throw new CompositionError("redteam: custom toolFilter cannot be migrated automatically; configure an executor Agent Preset");
+	}
+	const denied = new Set(filter.deny);
+	const executorId = definition.id + "-executor";
+	const toolName = (row) => row.config?.toolName ?? ({
+		"@deepseek-ai/dsh-tool-workflow": "workflow",
+		"@deepseek-ai/dsh-tool-ralph": "ralph",
+	}[row.name]);
+	const copyRows = (rows, executor) => rows.filter((row) => !executor || !denied.has(toolName(row))).map((row) => {
+		if (row.group === true) return { ...row, config: copyRows(row.config, executor) };
+		if (row !== spawn) return { ...row };
+		const { toolFilter: _legacy, ...config } = row.config;
+		return { ...row, config: { ...config, agentPreset: executorId } };
+	});
+	return [
+		{ id: executorId, name: "红队执行者", description: "红队子智能体执行预设，保留原有工具过滤和深度限制。", order: (definition.order ?? 10) + 1, plugins: copyRows(definition.plugins, true) },
+		{ ...definition, plugins: copyRows(definition.plugins, false) },
+	];
+}
+export { CompositionError, readCompositionRows, readPresetDefinition, preparePresetDefinitions };

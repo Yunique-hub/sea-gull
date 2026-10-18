@@ -81,6 +81,8 @@ jobs:
                    vendor/dsh-purge/lib/core.js \
                    vendor/dsh-purge/lib/identity.js \
                    vendor/dsh-purge/lib/desktop.js \
+                   vendor/dsh-purge/lib/redteam/index.js \
+                   vendor/dsh-purge/lib/redteam/preset-composition.js \
                    vendor/dsh-purge/lib/reapply.js \
                    vendor/dsh-purge/lib/net-scope.js; do
             node --check "$f" && echo "OK $f"

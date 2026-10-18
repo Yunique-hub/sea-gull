@@ -10,7 +10,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileS
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { readPresetDefinition } from './preset-composition.js'
+import { readPresetDefinition, preparePresetDefinitions } from './preset-composition.js'
 
 /** Cordis 插件名。 */
 export const name = 'dsh-purge-redteam'
@@ -510,10 +510,20 @@ export function apply(ctx) {
     Promise.resolve()
       .then(async () => {
         await undeclare()
-        releaseDeclared = await registry.register(definition)
+        const releases = []
+        try {
+          for (const item of preparePresetDefinitions(definition)) releases.push(await registry.register(item))
+        } catch (error) {
+          for (const release of releases.reverse()) await release()
+          throw error
+        }
+        releaseDeclared = async () => {
+          for (const release of releases.reverse()) await release()
+        }
         let broken = null
         try {
-          const row = (await registry.list()).find((p) => p.id === REDTEAM_PRESET_ID)
+          const row = (await registry.list()).find((p) =>
+            (p.id === REDTEAM_PRESET_ID || p.id === REDTEAM_PRESET_ID + '-executor') && p.broken)
           broken = row?.broken || null
         } catch { /* ignore */ }
         writeStatus({
