@@ -403,8 +403,8 @@ bash tests/smoke.sh
 | 独立 Queue | 任务运行时接收，在第 2 轮执行，结束无错误 |
 | 本机最终补丁状态 | applied 78 / na 6 / missing_file 1 / skipped 1；无 pending。缺失可选外部组件与跳过旧构建不计为生效 |
 | 本地数据 | 用户指定旧项目已备份移出；两个临时测试项目已归档；最终演练台无项目；正常启动关闭调试端口 |
-| 一键更新远程入口 | 本地 Update 模式已通过 Windows / Bash 回归；远程下载入口在推送后验证 |
-| GitHub CI | 由本次提交对应的 Actions run 记录 |
+| 一键更新远程入口 | Windows PowerShell 与 Git Bash 均从已发布入口获取最新 GitHub 快照并完成真实 pnpm 更新；5 个关键运行文件一致，定制人格、启动保留、偏好、项目与额外技能均保留 |
+| GitHub CI | [代码提交 dbe4b9d 的 CI](https://github.com/Yunique-hub/sea-gull/actions/runs/39214252513) 全部通过（Windows、Ubuntu、插件语法）；后续文档提交状态见 Actions |
 
 本机备份共 7072 个文件，逐文件 SHA-256 校验；4 个联接仅记录而未递归跟随。提示词、凭据、客户端偏好及其他插件没有发布到仓库。仓库测试使用临时项目与隔离数据，不记录用户指定项目的真实名称或内容。
 
