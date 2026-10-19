@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          for f in install.sh verify.sh verify-e2e.sh tests/smoke.sh; do bash -n "$f"; echo "OK $f"; done
+          for f in install.sh update.sh verify.sh verify-e2e.sh tests/smoke.sh; do bash -n "$f"; echo "OK $f"; done
           python -m py_compile src/tools/patch_profile.py && echo "OK patch_profile.py"
 
       - name: shellcheck
@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
-          shellcheck -S error install.sh verify.sh verify-e2e.sh tests/smoke.sh
+          shellcheck -S error install.sh update.sh verify.sh verify-e2e.sh tests/smoke.sh
 
       - name: 冒烟测试（假 DSH_HOME，装/验/幂等/卸 全闭环）
         shell: bash
@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          for p in VERSION LICENSE NOTICE README.md install.sh install.ps1 verify.sh verify.ps1 \
+          for p in VERSION LICENSE NOTICE README.md install.sh install.ps1 update.sh update.ps1 verify.sh verify.ps1 \
                    src/prompt/prompt-inject.md src/rules/seagull-fullbreak.md src/rules/seagull-fullbreak.json \
                    src/tools/patch_profile.py src/skills/redteam vendor/dsh-purge/lib/index.js; do
             [ -e "$p" ] || { echo "缺: $p"; exit 1; }
@@ -77,12 +77,16 @@ jobs:
         run: |
           set -e
           for f in vendor/dsh-purge/bin/dsh-purge.js \
+                   vendor/dsh-purge/client.js \
                    vendor/dsh-purge/lib/index.js \
                    vendor/dsh-purge/lib/core.js \
                    vendor/dsh-purge/lib/identity.js \
                    vendor/dsh-purge/lib/desktop.js \
                    vendor/dsh-purge/lib/redteam/index.js \
                    vendor/dsh-purge/lib/redteam/preset-composition.js \
+                   vendor/dsh-purge/lib/redteam/store-core.js \
+                   vendor/dsh-purge/lib/preset-default.js \
+                   vendor/dsh-purge/lib/mnemon-settings.js \
                    vendor/dsh-purge/lib/reapply.js \
                    vendor/dsh-purge/lib/net-scope.js; do
             node --check "$f" && echo "OK $f"

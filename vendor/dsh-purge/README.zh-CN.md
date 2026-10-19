@@ -26,10 +26,14 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> | <a href="README.zh-CN.md">中文</a>
+  <a href="README.md"><strong>中文</strong></a> · <a href="README.en.md">English</a>
 </p>
 
-> **暂停更新。** 作者因工作安排，近期没有稳定收入，项目维护暂时搁置：不再发版、暂不收 issue / PR，也不保证跟进新版 dsh。仓库仍可自用；赞助见下方。恢复维护时会在本 README 说明。
+> **暂时停更。**
+>
+> 这段时间要先把工作安顿好，项目维护先放一放：暂不发新版本，暂不处理 issue / PR，新版 dsh 也不保证跟上。已经发布的版本可以继续用，仓库也还在。等我恢复维护，会写在这篇 README 开头。
+>
+> 这个项目一直是业余在做。若它对你有帮助，欢迎看看下面的 [赞助](#sponsor)；也在征集 README [广告位](#ad)，换一点把项目撑下去的空间。
 
 > **官方 Web 和官方桌面端都支持。** 官方 `dsh web` 用 profile `web`；官方桌面 EXE（DeepSeek Harness **0.2.0-rc.2**）用 profile `desktop`。两边分开安装、分开点「应用」。当前版本只适配 dsh 0.2；更早的 dsh 用对应的老版本插件。社区桌面端不维护。
 >
@@ -40,6 +44,7 @@
 ## 目录
 
 - [赞助](#sponsor)
+- [广告位](#ad)
 - [介绍](#介绍)
 - [署名要求](#署名要求)
 - [违规商用公示](#违规商用公示)
@@ -68,6 +73,21 @@
 | Ethereum    | `0xB68BD60C0e8c519513B7DF9bB147696815423B3E`   |
 | Bitcoin     | `bc1qu70yxkrtwnymt8ryluz9x8y8hqzune5340npht`   |
 
+---
+
+<a id="ad"></a>
+
+## 广告位
+
+README 长期有人看，现开放少量展示位。收入用于贴补业余维护。
+
+| 位置 | 状态 |
+| --- | --- |
+| 本页赞助区上方（文字链 + 一句介绍，或一张小图） | **空缺，可定** |
+
+名额少，谈妥再上。不接灰产、盗版、冒充本仓库、纯引流盘。
+
+合作请发邮件 [a2269198325@163.com](mailto:a2269198325@163.com)，或 GitHub [@YuJunZhiXue](https://github.com/YuJunZhiXue) 私信。标题注明「dsh-purge 广告位」。
 
 ---
 

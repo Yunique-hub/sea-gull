@@ -1,0 +1,14 @@
+		const transformed = await this.ctx.waterfall(scopeTarget(this, scope), "system-prompt/assemble", assembly, context, () => Promise.resolve(assembly));
+		const dshPurgeSections = (transformed.sections || []).filter((s) => String(s && s.name || "").startsWith("dsh-purge") && String(s.text || "").length > 0);
+		const dshPurgeRest = (transformed.sections || []).filter((s) => !String(s && s.name || "").startsWith("dsh-purge"));
+		if (completeSection === void 0 && !runtimeContextSuppressed) return { ...transformed, sections: [...dshPurgeSections, ...dshPurgeRest] }; // [dsh-purge] every mode keeps system inject
+		const requiredContexts = new Set([...contextByName.values()].filter((entry) => entry.required === true).map((entry) => entry.name));
+		return {
+			...transformed,
+			sections: completeSection === void 0 ? [...dshPurgeSections, ...dshPurgeRest] : (function (complete, purge, rest) {
+				const base = { ...complete };
+				const tail = rest.filter((s) => String(s?.name || "") !== String(base.name || ""));
+				return [...purge, ...tail, base]; // [dsh-purge] complete prompt keeps inject + agent-instructions
+			})(completeSection, dshPurgeSections, dshPurgeRest),
+			contexts: runtimeContextSuppressed ? transformed.contexts.filter((entry) => requiredContexts.has(entry.name)) : transformed.contexts
+		};

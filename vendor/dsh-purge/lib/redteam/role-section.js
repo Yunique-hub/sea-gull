@@ -8,7 +8,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { isRedteamSession } from '../identity.js'
+import { isChildAgentContext, isRedteamSession } from '../identity.js'
 import { redteamRoot } from './platform-config.js'
 
 const ROLE_TAG = /^[ \t]*redteamRole:[ \t]*(recon|assess|vuln-scan|exploit|internal)[ \t]*$/im
@@ -50,9 +50,8 @@ function remember(agent, role) {
 }
 
 function isRedteamChild(session, agent) {
-  const header = session?.header
-  if (header?.origin !== 'subagent' && !((header?.delegationDepth ?? 0) > 0)) return false
-  return isRedteamSession({ session, agent: agent ? { ...agent, session } : { session } })
+  const wrapped = { session, agent: agent ? { ...agent, session } : { session } }
+  return isChildAgentContext(wrapped) && isRedteamSession(wrapped)
 }
 
 export function noteClaimedMessage(payload) {

@@ -68,7 +68,7 @@ test('0.2.1 complete prompts retain custom sections and required runtime context
   const contextByName = new Map([['required', { name: 'required', required: true }], ['optional', { name: 'optional' }]]);
   const owner = { ctx: { waterfall: async () => assembly } };
   const suppressed = await assemble.call(owner, () => null, null, assembly, {}, complete, true, contextByName);
-  assert.deepEqual(suppressed.sections, [custom, instructions, complete]);
+  assert.deepEqual(suppressed.sections, [custom, complete, instructions]);
   assert.deepEqual(suppressed.contexts, [{ name: 'required' }]);
   assert.deepEqual(suppressed.tools, assembly.tools);
   assert.deepEqual(suppressed.variables, assembly.variables);

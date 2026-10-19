@@ -53,7 +53,7 @@ export function normalizeConfig(raw = {}) {
   return {
     autoRetry: src.autoRetry !== false && retryMax > 0,
     retryMax,
-    autoContinue: src.autoContinue !== false && continueMax > 0,
+    autoContinue: src.autoContinue === true && continueMax > 0,
     continueMax,
     continueText: text || DEFAULT_CONTINUE_RETRY.continueText,
   };
@@ -75,7 +75,11 @@ export function loadSettings(dshHome) {
 }
 
 export function mergeConfig(pluginCfg, saved) {
-  return normalizeConfig({ ...DEFAULT_CONTINUE_RETRY, ...pluginCfg, ...saved });
+  const merged = { ...DEFAULT_CONTINUE_RETRY, ...pluginCfg, ...saved };
+  if (pluginCfg?.autoContinue !== true && DEFAULT_CONTINUE_RETRY.autoContinue !== true) {
+    merged.autoContinue = false;
+  }
+  return normalizeConfig(merged);
 }
 
 export function lastTurnEnd(events) {

@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.4-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.5-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,11 +17,11 @@
 
 ---
 
-当前 **v1.0.4** 适配 DeepSeek Harness **0.2.1-rc.2**。按“保留海鸥人格、整合富江工程功能”的选择，补齐安装前检查、配置原子写入、目标目录隔离及失败反馈；Windows 本地 60 项回归通过，真实 pnpm 重复安装验证通过。源码比较、采用范围和验证边界见 [fujiang-dsh 分析与整合报告](docs/FUJIANG-REVIEW.md)。
+当前 **v1.0.5** 适配 DeepSeek Harness **0.2.1-rc.2**，引擎升级为 dsh-purge **1.1.72**，采用已核验的上游 master 固定提交 [`ec691667`](https://github.com/YuJunZhiXue/dsh-purge/tree/ec69166706bed95efb6c35e225b01588f3cd9b72)。核对时最新 Release 仍为 1.1.71；本次使用 package.json 已声明 1.1.72 的源码快照，118 个上游 Git blob 全部核验一致。
 
-继续保留红队模式加载修复、立即插话与普通排队的区别，以及 dsh-purge **1.1.71 的全部 82 条补丁定义**、插件资产与旧版适配路径。此前 Windows 真实界面验证见[红队模式与插话验证](docs/VERIFICATION.md#g-红队模式与运行中插话修复2026-10-18)。
+保留海鸥人格、**28 个技能**、原有安装与更新保护、红队预设，以及运行中立即插话和普通排队的区别；补丁定义从 82 增至 **86 条**。演练台补齐新建项目入口、错误反馈和重复提交保护，修复切换竞争与项目页面状态混用；同时修复旧提示词补丁迁移、定制人格保存标记、原生系统消息保留及卸载时的预设清理。5 个海鸥技能补齐官方发现所需的元数据，正文保持原样。验证范围见[升级与验证记录](docs/VERIFICATION.md#i-dsh-purge-1172-升级与演练台项目修复2026-10-19)。
 
-已安装用户可重新执行一键安装命令更新海鸥插件。先完成 Harness 官方版本更新，再重新应用插件；仅替换版本号或把旧 `resources/app` 整目录复制到新版会重新加载旧宿主。Windows 更新若静默失败，会改为显示安装界面；取消或失败时恢复旧解包目录并提示退出码。
+已安装用户请使用下方“一键更新”命令，更新模式会保留现有提示词。先完成 Harness 官方版本更新，再重新应用插件；仅替换版本号或把旧 `resources/app` 整目录复制到新版会重新加载旧宿主。Windows 更新若静默失败，会改为显示安装界面；取消或失败时恢复旧解包目录并提示退出码。
 
 新版更新交接会先摘除已验证指向共享 runtime 的目录联接，避免覆盖安装清理旧解包目录时影响运行时；安装失败后恢复联接。`verify-e2e.sh --stored-credentials` 可显式使用 GUI 已保存的凭据，默认仍沿用 headless 的启动环境认证。
 
@@ -41,7 +41,7 @@
 
 | 来源 | 提供什么 |
 |---|---|
-| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.71 | 宿主层引擎：**82 条补丁** + 红队演练台 + 23 个红队技能 |
+| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.72 | 宿主层引擎：**86 条补丁定义** + 红队演练台 + 23 个红队技能 |
 | [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | 海鸥人格（00a–00r 规则体系）+ 5 个领域技能 |
 
 合并不是拼盘——`SOUL.md` 不能直接当 DSH 提示词（插值白名单、ChatML 信封、技能目录协议
@@ -80,6 +80,24 @@ bash install.sh            # 或 powershell -File install.ps1
   （或 bash install.sh --apply，再按提示挪 asar）
 ```
 
+### 一键更新
+
+先结束当前任务并完全退出 Harness。更新器每次从 GitHub 拉取最新 main 源码，更新插件、内置规则和技能，保留现有提示词、客户端偏好、项目数据库及额外技能；完成后重新启动 Harness，按提示检查 Apply。它不会代替官方 Harness 安装器升级宿主。
+
+**Windows PowerShell**
+
+```powershell
+irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 | iex
+```
+
+**Linux / macOS / WSL / Git Bash**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh | bash
+```
+
+已有最新源码 checkout 时可执行 `powershell -File install.ps1 -Update` 或 `bash install.sh --update`；本地模式使用当前 checkout，不会自动 git pull。未安装海鸥会提示先安装；下载、配置或依赖同步失败返回错误，缺少 pnpm 时明确报告仅部署文件。
+
 ### 安装器选项
 
 | 选项 | 说明 |
@@ -90,6 +108,7 @@ bash install.sh            # 或 powershell -File install.ps1
 | `--apply` | 装完立刻尝试 Apply（desktop 会解 asar，需宿主已退出） |
 | `--no-pnpm` | 跳过 pnpm install（离线 / 已装过） |
 | `--dry-run` | 只打印计划，不落盘 |
+| `--update` / `-Update` | 更新当前源码中的海鸥，保留现有提示词 |
 | `--uninstall` | 卸载（还原 profile、删插件与注入文件，保留你的技能） |
 
 > 设计上**不硬编码盘符和用户名**：自动探测 `DSH_HOME`、profile、安装根、内嵌 node/pnpm；
@@ -236,7 +255,7 @@ mv "$APP_ROOT/resources/app.asar.sealed.bak" "$APP_ROOT/resources/app.asar"
 
 - 本项目自身代码：**MIT**（[LICENSE](LICENSE)）
 - 宿主层引擎派生自 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)（MIT © 2026 小杨），
-  本项目对其的全部改动在 [NOTICE](NOTICE) 中逐条列出，仅 3 处
+  本项目对其的全部改动在 [NOTICE](NOTICE) 中逐条列出
 - 人格与技能来自 [Yunique-hub/hermes-seagull](https://github.com/Yunique-hub/hermes-seagull)（MIT）
 - 与 DeepSeek 无雇佣 / 商业 / 授权 / 背书关系
 

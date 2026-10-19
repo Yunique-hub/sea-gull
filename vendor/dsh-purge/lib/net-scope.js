@@ -407,10 +407,6 @@ function allowDecision(dshHome) {
   return readAllowExact(dshHome);
 }
 
-export function ownServerNote() {
-  return "";
-}
-
 function permittedHost(host, allow) {
   return allow.exact.has(host);
 }

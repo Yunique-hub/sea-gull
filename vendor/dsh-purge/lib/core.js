@@ -356,9 +356,33 @@ export function findDshBinRoot(aiBase = findAiBase()) {
   return resolveDshBinRoot(aiBase);
 }
 
+function isPackagedDesktopDshRoot(p) {
+  if (!p) return false;
+  const n = String(p).replace(/\\/g, "/").toLowerCase();
+  if (n.includes("/resources/app/dsh")) return true;
+  if (n.includes("deepseekharnessdesktop")) return true;
+  try {
+    return desktop.isInsideDesktopInstall(p);
+  } catch {
+    return false;
+  }
+}
+
 export function ensureHiddenConsole(aiBase = findAiBase()) {
   const live = installHideConsole();
   const entryRoot = findDshBinRoot(aiBase);
+  const desktopBin = isPackagedDesktopDshRoot(entryRoot) || isPackagedDesktopDshRoot(aiBase);
+  if (desktopBin) {
+    let entry = "skipped_desktop";
+    try {
+      const reverted = revertHideConsoleFromBin(entryRoot || aiBase);
+      if (reverted === "reverted") entry = "skipped_desktop_reverted";
+      else if (reverted && reverted !== "absent") entry = reverted;
+    } catch {
+      /* 官方桌面不靠改 bin.js 启动 */
+    }
+    return { live, entry, entryRoot };
+  }
   const entry = installHideConsoleIntoBin(entryRoot || aiBase);
   return { live, entry, entryRoot };
 }
@@ -381,6 +405,9 @@ export function silenceCmdFlash(aiBase = findAiBase()) {
     hide.entry === "already_injected" ||
     hide.entry === "skipped_not_win32" ||
     hide.entry === "skipped_source_cli" ||
+    hide.entry === "skipped_desktop" ||
+    hide.entry === "skipped_desktop_reverted" ||
+    hide.entry === "skipped_electron" ||
     hide.entry === "missing_bin" ||
     hide.entry === "sealed_asar" ||
     (typeof hide.entry === "string" && hide.entry.startsWith("error:"));
@@ -2391,17 +2418,15 @@ export function rememberCommittedOverride(dshHome, text) {
   committedOverride = { home, text: typeof text === "string" ? text : "" };
 }
 
-/** $DSH_HOME/prompt-inject.md 正文（应用/解包后由加密槽落下；注入与设置框以它为准）。 */
+/** $DSH_HOME/prompt-inject.md 原文。注入按文件原样，不改换行、不裁剪。 */
 export function readPromptInjectFileSync(dshHome) {
   const fp = findOverrideFile(dshHome);
-  let disk = "";
   try {
-    if (fp && fs.existsSync(fp)) disk = fs.readFileSync(fp, "utf8");
+    if (fp && fs.existsSync(fp)) return fs.readFileSync(fp, "utf8").replace(/^\uFEFF/, "");
   } catch {
-    disk = "";
+    /* 读失败当空 */
   }
-  const norm = normalizeOverride(disk);
-  return norm ? disk.replace(/\r\n/g, "\n") : "";
+  return "";
 }
 
 /** 仅本进程提示词框提交；重启后为空，注入改读 prompt-inject.md（#74）。 */
@@ -2456,37 +2481,73 @@ const OFFICIAL_REPLACEMENT_BODY =
   "Use them as guidance when applicable. More specific instructions " +
   "take precedence over broader ones. They do not override system, " +
   "developer, or direct user instructions.";
-const REPLACEMENT_BASELINE_PREFIX =
-  "This complete workspace instruction baseline replaces all earlier " +
-  "workspace instruction baselines. ";
 const OFFICIAL_SCOPE =
   "Use them as guidance when relevant; more specific instructions " +
   "take precedence. They do not override system, developer, or " +
   "direct user instructions.";
 
-function quotedConst(name, body) {
-  return `const ${name} = "${body}"`;
-}
-
-const COMPLETE_PROMPT_WATERFALL_INJECT =
+const COMPLETE_PROMPT_WATERFALL_INJECT_PREV =
   "\t\tconst transformed = await this.ctx.waterfall(scopeTarget(this, scope), \"system-prompt/assemble\", assembly, context, () => Promise.resolve(assembly));\n" +
   "\t\tconst dshPurgeSections = (transformed.sections || []).filter((s) => String(s && s.name || \"\").startsWith(\"dsh-purge\") && String(s.text || \"\").length > 0);\n" +
   "\t\tconst dshPurgeRest = (transformed.sections || []).filter((s) => !String(s && s.name || \"\").startsWith(\"dsh-purge\"));\n" +
   "\t\tif (completeSection === void 0 && !runtimeContextSuppressed) return { ...transformed, sections: [...dshPurgeSections, ...dshPurgeRest] }; // [dsh-purge] every mode keeps system inject\n" +
   "\t\treturn {\n" +
   "\t\t\t...transformed,\n" +
-  "\t\t\tsections: completeSection === void 0 ? [...dshPurgeSections, ...dshPurgeRest] : (function (complete, purge, rest) {\n" +
-  "\t\t\t\tconst base = { ...complete };\n" +
-  "\t\t\t\tconst tail = rest.filter((s) => String(s?.name || \"\") !== String(base.name || \"\"));\n" +
-  "\t\t\t\treturn [...purge, ...tail, base]; // [dsh-purge] complete prompt keeps inject + agent-instructions\n" +
-  "\t\t\t})(completeSection, dshPurgeSections, dshPurgeRest),\n" +
+  "\t\t\tsections: completeSection === void 0 ? [...dshPurgeSections, ...dshPurgeRest] : (function (complete, purge, rest, assembled) {\n" +
+  "\t\t\t\tconst name = String(complete && complete.name || \"\");\n" +
+  "\t\t\t\tconst after = (assembled || []).find((s) => String(s && s.name || \"\") === name);\n" +
+  "\t\t\t\tconst base = after ? { ...after } : { ...complete };\n" +
+  "\t\t\t\tconst tail = rest.filter((s) => String(s?.name || \"\") !== name);\n" +
+  "\t\t\t\treturn [...purge, ...tail, base]; // [dsh-purge] complete prompt keeps inject + assembled complete\n" +
+  "\t\t\t})(completeSection, dshPurgeSections, dshPurgeRest, transformed.sections),\n" +
+  "\t\t\tcontexts: runtimeContextSuppressed ? [] : transformed.contexts\n" +
+  "\t\t};";
+
+const COMPLETE_PROMPT_WATERFALL_INJECT =
+  "\t\tconst transformed = await this.ctx.waterfall(scopeTarget(this, scope), \"system-prompt/assemble\", assembly, context, () => Promise.resolve(assembly));\n" +
+  "\t\tconst dshPurgeSections = (transformed.sections || []).filter((s) => String(s && s.name || \"\").startsWith(\"dsh-purge\") && String(s.text || \"\").length > 0);\n" +
+  "\t\tconst dshPurgeRest = (transformed.sections || []).filter((s) => !String(s && s.name || \"\").startsWith(\"dsh-purge\"));\n" +
+  "\t\tif (completeSection === void 0 && !runtimeContextSuppressed) return { ...transformed, sections: [...dshPurgeRest, ...dshPurgeSections] }; // [dsh-purge] inject last after closer\n" +
+  "\t\treturn {\n" +
+  "\t\t\t...transformed,\n" +
+  "\t\t\tsections: completeSection === void 0 ? [...dshPurgeRest, ...dshPurgeSections] : (function (complete, purge, rest, assembled) {\n" +
+  "\t\t\t\tconst name = String(complete && complete.name || \"\");\n" +
+  "\t\t\t\tconst after = (assembled || []).find((s) => String(s && s.name || \"\") === name);\n" +
+  "\t\t\t\tconst base = after ? { ...after } : { ...complete };\n" +
+  "\t\t\t\tconst tail = rest.filter((s) => String(s?.name || \"\") !== name);\n" +
+  "\t\t\t\treturn [...tail, base, ...purge]; // [dsh-purge] inject last after closer\n" +
+  "\t\t\t})(completeSection, dshPurgeSections, dshPurgeRest, transformed.sections),\n" +
+  "\t\t\tcontexts: runtimeContextSuppressed ? [] : transformed.contexts\n" +
+  "\t\t};";
+
+// 折进 persona 后 complete 段本身已含注入，必须放在最前；不能再用 PREV 的 [...tail, base]。
+const COMPLETE_PROMPT_WATERFALL_INJECT_HEAD =
+  "\t\tconst transformed = await this.ctx.waterfall(scopeTarget(this, scope), \"system-prompt/assemble\", assembly, context, () => Promise.resolve(assembly));\n" +
+  "\t\tconst dshPurgeSections = (transformed.sections || []).filter((s) => String(s && s.name || \"\").startsWith(\"dsh-purge\") && String(s.text || \"\").length > 0);\n" +
+  "\t\tconst dshPurgeRest = (transformed.sections || []).filter((s) => !String(s && s.name || \"\").startsWith(\"dsh-purge\"));\n" +
+  "\t\tif (completeSection === void 0 && !runtimeContextSuppressed) return { ...transformed, sections: [...dshPurgeSections, ...dshPurgeRest] }; // [dsh-purge] fold-complete inject first\n" +
+  "\t\treturn {\n" +
+  "\t\t\t...transformed,\n" +
+  "\t\t\tsections: completeSection === void 0 ? [...dshPurgeSections, ...dshPurgeRest] : (function (complete, purge, rest, assembled) {\n" +
+  "\t\t\t\tconst name = String(complete && complete.name || \"\");\n" +
+  "\t\t\t\tconst after = (assembled || []).find((s) => String(s && s.name || \"\") === name);\n" +
+  "\t\t\t\tconst base = after ? { ...after } : { ...complete };\n" +
+  "\t\t\t\tconst tail = rest.filter((s) => String(s?.name || \"\") !== name);\n" +
+  "\t\t\t\treturn [...purge, base, ...tail]; // [dsh-purge] fold-complete inject first\n" +
+  "\t\t\t})(completeSection, dshPurgeSections, dshPurgeRest, transformed.sections),\n" +
   "\t\t\tcontexts: runtimeContextSuppressed ? [] : transformed.contexts\n" +
   "\t\t};";
 
 // 0.2.1 keeps required runtime facts even when ordinary contexts are suppressed.
-const COMPLETE_PROMPT_REQUIRED_CONTEXTS_INJECT = COMPLETE_PROMPT_WATERFALL_INJECT
+const COMPLETE_PROMPT_REQUIRED_CONTEXTS_INJECT_PREV = COMPLETE_PROMPT_WATERFALL_INJECT
   .replace("\t\treturn {\n", "\t\tconst requiredContexts = new Set([...contextByName.values()].filter((entry) => entry.required === true).map((entry) => entry.name));\n\t\treturn {\n")
   .replace("runtimeContextSuppressed ? [] : transformed.contexts", "runtimeContextSuppressed ? transformed.contexts.filter((entry) => requiredContexts.has(entry.name)) : transformed.contexts");
+
+const COMPLETE_PROMPT_REQUIRED_CONTEXTS_INJECT = COMPLETE_PROMPT_WATERFALL_INJECT_HEAD
+  .replace("\t\treturn {\n", "\t\tconst requiredContexts = new Set([...contextByName.values()].filter((entry) => entry.required === true).map((entry) => entry.name));\n\t\treturn {\n")
+  .replace("runtimeContextSuppressed ? [] : transformed.contexts", "runtimeContextSuppressed ? transformed.contexts.filter((entry) => requiredContexts.has(entry.name)) : transformed.contexts");
+
+const COMPLETE_PROMPT_REQUIRED_CONTEXTS_LEGACY = "\t\tconst transformed = await this.ctx.waterfall(scopeTarget(this, scope), \"system-prompt/assemble\", assembly, context, () => Promise.resolve(assembly));\n\t\tconst dshPurgeSections = (transformed.sections || []).filter((s) => String(s && s.name || \"\").startsWith(\"dsh-purge\") && String(s.text || \"\").length > 0);\n\t\tconst dshPurgeRest = (transformed.sections || []).filter((s) => !String(s && s.name || \"\").startsWith(\"dsh-purge\"));\n\t\tif (completeSection === void 0 && !runtimeContextSuppressed) return { ...transformed, sections: [...dshPurgeSections, ...dshPurgeRest] }; // [dsh-purge] every mode keeps system inject\n\t\tconst requiredContexts = new Set([...contextByName.values()].filter((entry) => entry.required === true).map((entry) => entry.name));\n\t\treturn {\n\t\t\t...transformed,\n\t\t\tsections: completeSection === void 0 ? [...dshPurgeSections, ...dshPurgeRest] : (function (complete, purge, rest) {\n\t\t\t\tconst base = { ...complete };\n\t\t\t\tconst tail = rest.filter((s) => String(s?.name || \"\") !== String(base.name || \"\"));\n\t\t\t\treturn [...purge, ...tail, base]; // [dsh-purge] complete prompt keeps inject + agent-instructions\n\t\t\t})(completeSection, dshPurgeSections, dshPurgeRest),\n\t\t\tcontexts: runtimeContextSuppressed ? transformed.contexts.filter((entry) => requiredContexts.has(entry.name)) : transformed.contexts\n\t\t};";
 
 function clearShellNetworkBan(pattern) {
   return pattern
@@ -2515,15 +2576,6 @@ const SHELL_NETWORK_SDK =
   "          Run commands in a PowerShell shell\n" +
   "          * When invoking this tool, the contents of the \"command\" parameter does NOT need to be XML-escaped.\n" +
   "          * You don't have access to the internet via this tool.";
-
-function replacementPrecedenceRewrites(name) {
-  const official = quotedConst(name, REPLACEMENT_BASELINE_PREFIX + OFFICIAL_REPLACEMENT_BODY);
-  // 长句在前。V1/V2 是完整强句的前缀，先换短句会把后半截留在引号里。
-  return [STRONG_INTRO, STRONG_INTRO_V2, STRONG_INTRO_V1].map((strong) => ({
-    pattern: quotedConst(name, REPLACEMENT_BASELINE_PREFIX + strong),
-    replace: official,
-  }));
-}
 
 const PATCHES = [
   {
@@ -2603,12 +2655,37 @@ const PATCHES = [
     id: 2, name: "REPLACEMENT_WORKSPACE_CONTEXT_INTRO", layer: "提示词", layer_en: "Prompt",
     desc: "替换稿不压过 system / replacement does not override system",
     file: "agent-instructions",
-    // 完成标记是 0.1.7 的「不得覆盖 system」。强句还在时必须改回去，不能因 ACTIVE 标记跳过。
     skipIfMarked: true,
     rel: ["lib", "index.js"],
     replacements: [
-      ...replacementPrecedenceRewrites("REPLACEMENT_WORKSPACE_CONTEXT_INTRO"),
-      ...replacementPrecedenceRewrites("REPLACEMENT_AGENT_INSTRUCTIONS_INTRO"),
+      {
+        pattern:
+          "const REPLACEMENT_AGENT_INSTRUCTIONS_INTRO = " +
+          '"' + STRONG_INTRO + '"',
+        replace:
+          "const REPLACEMENT_AGENT_INSTRUCTIONS_INTRO = " +
+          '"This complete workspace instruction baseline replaces all earlier workspace instruction baselines. ' +
+          OFFICIAL_REPLACEMENT_BODY +
+          '"',
+      },
+      {
+        pattern:
+          "const REPLACEMENT_WORKSPACE_CONTEXT_INTRO = " +
+          '"' + STRONG_INTRO + '"',
+        replace:
+          "const REPLACEMENT_WORKSPACE_CONTEXT_INTRO = " +
+          '"This complete workspace instruction baseline replaces all earlier workspace instruction baselines. ' +
+          OFFICIAL_REPLACEMENT_BODY +
+          '"',
+      },
+      {
+        pattern:
+          "const EMPTY_REPLACEMENT_AGENT_INSTRUCTIONS_INTRO = " +
+          '"Workspace instruction files are empty. The operator system prompt is unchanged."',
+        replace:
+          "const EMPTY_REPLACEMENT_AGENT_INSTRUCTIONS_INTRO = " +
+          '"This complete workspace instruction baseline replaces all earlier workspace instruction baselines. No workspace instructions are currently active."',
+      },
     ],
     markers: [OFFICIAL_REPLACEMENT_BODY],
   },
@@ -3375,7 +3452,7 @@ const NEW_TOOL_PATCHES = [
     ],
   },
   {
-    // 极简工具表保持官方 persistent shell；inject 侧用 identity.adaptInjectForMinimalPreset（#78/#79 已撤）。
+    // 极简工具表保持官方 persistent shell（#78/#79 已撤）。
     id: 80,
     name: "MINIMAL_OFFICIAL_TOOLSET",
     layer: "工具",
@@ -3779,6 +3856,57 @@ const NEW_TOOL_PATCHES = [
     markers: ["[dsh-purge] subagent scope lock neutralized"],
   },
   {
+    id: 92,
+    name: "SUBAGENT_SAME_INJECT_PATH",
+    layer: "代码",
+    layer_en: "Code",
+    desc: "子代理创建时立刻挂 assemble 注入，并继承父会话权限 / wrap child assemble at spawn and inherit parent permission preset",
+    file: ["subagent", "subagent-types"],
+    optional: true,
+    skipIfMarked: true,
+    replacements: [
+      {
+        pattern:
+          "\tif (composition.toolFilter !== void 0) childCtx.tools.restrict(composition.toolFilter);\n" +
+          "}",
+        replace:
+          "\tif (composition.toolFilter !== void 0) childCtx.tools.restrict(composition.toolFilter);\n" +
+          "\ttry {\n" +
+          "\t\tconst prepare = globalThis.__dshPurgePrepareAssemble;\n" +
+          "\t\tif (typeof prepare === \"function\") prepare(childCtx);\n" +
+          "\t} catch {}\n" +
+          "} // [dsh-purge-92] child assemble same as parent",
+      },
+      {
+        pattern:
+          "    if (composition.toolFilter !== undefined)\n" +
+          "        childCtx.tools.restrict(composition.toolFilter);\n" +
+          "}",
+        replace:
+          "    if (composition.toolFilter !== undefined)\n" +
+          "        childCtx.tools.restrict(composition.toolFilter);\n" +
+          "    try {\n" +
+          "        const prepare = globalThis.__dshPurgePrepareAssemble;\n" +
+          "        if (typeof prepare === \"function\") prepare(childCtx);\n" +
+          "    } catch {}\n" +
+          "} // [dsh-purge-92] child assemble same as parent",
+      },
+      {
+        pattern:
+          "\t\tpermissionPreset: preset === \"auto\" || preset === \"danger-full-access\" ? preset : void 0,",
+        replace:
+          "\t\tpermissionPreset: preset || \"danger-full-access\", // [dsh-purge-92] child inherits parent access",
+      },
+      {
+        pattern:
+          "        permissionPreset: preset === 'auto' || preset === 'danger-full-access' ? preset : undefined,",
+        replace:
+          "        permissionPreset: preset || 'danger-full-access', // [dsh-purge-92] child inherits parent access",
+      },
+    ],
+    markers: ["[dsh-purge-92] child assemble same as parent"],
+  },
+  {
     // 0.1.5 schema 不认 text；社区预设仍带 text 时挂载失败。
     id: 38, name: "PERSONA_TEXT_PREFIX_ALIAS", layer: "代码", layer_en: "Code",
     desc: "dsh-persona：兼容 0.1.2 text 字段，否则梁神会话起不来 / accept legacy text as prefix",
@@ -3826,12 +3954,14 @@ const NEW_TOOL_PATCHES = [
     markers: ["[dsh-purge] mnemon summary off-notice"],
   },
   {
-    // complete:true 会在 waterfall 之后只留完整段。操作者段是 waterfall 里加上的，
-    // 必须从 waterfall 的结果里抄，不能从 waterfall 之前的段落里抄。
+    // complete:true 会在 waterfall 之后只留完整段。注入已折进 persona 时，
+    // 必须用瀑布之后的 complete 段，并放到最前。
     id: 40, name: "COMPLETE_PROMPT_KEEP_INJECT", layer: "0.1.5 兼容", layer_en: "0.1.5",
-    desc: "complete 预设仍保留 dsh-purge 注入 / keep inject after complete prompt",
+    desc: "complete 预设把已折进 persona 的注入放最前 / keep folded inject first after complete prompt",
     file: ["system-prompt", "system-prompt-nested"],
     replacements: [
+      { pattern: COMPLETE_PROMPT_REQUIRED_CONTEXTS_LEGACY, replace: COMPLETE_PROMPT_REQUIRED_CONTEXTS_INJECT },
+      { pattern: COMPLETE_PROMPT_REQUIRED_CONTEXTS_INJECT_PREV, replace: COMPLETE_PROMPT_REQUIRED_CONTEXTS_INJECT },
       {
         pattern:
           '\t\tconst transformed = await this.ctx.waterfall(scopeTarget(this, scope), "system-prompt/assemble", assembly, context, () => Promise.resolve(assembly));\n' +
@@ -3847,7 +3977,7 @@ const NEW_TOOL_PATCHES = [
       {
         // 缩进不固定。0.2 有的构建用 tab，有的用空格；只认 tab 时匹配为 0，重启校验会说没写进宿主。
         pattern: /[ \t]*const transformed = await this\.ctx\.waterfall\(scopeTarget\(this, scope\), "system-prompt\/assemble", assembly, context, \(\) => Promise\.resolve\(assembly\)\);\n[ \t]*if \(completeSection === void 0 && !runtimeContextSuppressed\) return transformed;\n[ \t]*return \{\n[ \t]*\.\.\.transformed,\n[ \t]*sections: completeSection === void 0 \? transformed\.sections : \[completeSection\],\n[ \t]*contexts: runtimeContextSuppressed \? \[\] : transformed\.contexts\n[ \t]*\};/,
-        replace: COMPLETE_PROMPT_WATERFALL_INJECT,
+        replace: COMPLETE_PROMPT_WATERFALL_INJECT_HEAD,
       },
       {
         pattern:
@@ -3864,7 +3994,7 @@ const NEW_TOOL_PATCHES = [
           "\t\t\t})(completeSection, dshPurgeInject),\n" +
           "\t\t\tcontexts: runtimeContextSuppressed ? [] : transformed.contexts\n" +
           "\t\t};",
-        replace: COMPLETE_PROMPT_WATERFALL_INJECT,
+        replace: COMPLETE_PROMPT_WATERFALL_INJECT_HEAD,
       },
       {
         pattern:
@@ -3879,7 +4009,7 @@ const NEW_TOOL_PATCHES = [
           "\t\t\t})(completeSection, dshPurgeSections),\n" +
           "\t\t\tcontexts: runtimeContextSuppressed ? [] : transformed.contexts\n" +
           "\t\t};",
-        replace: COMPLETE_PROMPT_WATERFALL_INJECT,
+        replace: COMPLETE_PROMPT_WATERFALL_INJECT_HEAD,
       },
       {
         pattern:
@@ -3895,7 +4025,15 @@ const NEW_TOOL_PATCHES = [
           "\t\t\t})(completeSection, dshPurgeSections),\n" +
           "\t\t\tcontexts: runtimeContextSuppressed ? [] : transformed.contexts\n" +
           "\t\t};",
-        replace: COMPLETE_PROMPT_WATERFALL_INJECT,
+        replace: COMPLETE_PROMPT_WATERFALL_INJECT_HEAD,
+      },
+      {
+        pattern: COMPLETE_PROMPT_WATERFALL_INJECT_PREV,
+        replace: COMPLETE_PROMPT_WATERFALL_INJECT_HEAD,
+      },
+      {
+        pattern: COMPLETE_PROMPT_WATERFALL_INJECT,
+        replace: COMPLETE_PROMPT_WATERFALL_INJECT_HEAD,
       },
       {
         pattern:
@@ -3905,14 +4043,16 @@ const NEW_TOOL_PATCHES = [
           "\t\tif (completeSection === void 0 && !runtimeContextSuppressed) return { ...transformed, sections: [...dshPurgeSections, ...dshPurgeRest] }; // [dsh-purge] every mode keeps system inject\n" +
           "\t\treturn {\n" +
           "\t\t\t...transformed,\n" +
-          "\t\t\tsections: completeSection === void 0 ? [...dshPurgeSections, ...dshPurgeRest] : (function (complete, purge, rest) {\n" +
-          "\t\t\t\tconst base = { ...complete };\n" +
-          "\t\t\t\tconst tail = rest.filter((s) => String(s?.name || \"\") !== String(base.name || \"\"));\n" +
-          "\t\t\t\treturn [...purge, ...tail, base]; // [dsh-purge] complete prompt keeps inject + agent-instructions\n" +
-          "\t\t\t})(completeSection, dshPurgeSections, dshPurgeRest),\n" +
+          "\t\t\tsections: completeSection === void 0 ? [...dshPurgeSections, ...dshPurgeRest] : (function (complete, purge, rest, assembled) {\n" +
+          "\t\t\t\tconst name = String(complete && complete.name || \"\");\n" +
+          "\t\t\t\tconst after = (assembled || []).find((s) => String(s && s.name || \"\") === name);\n" +
+          "\t\t\t\tconst base = after ? { ...after } : { ...complete };\n" +
+          "\t\t\t\tconst tail = rest.filter((s) => String(s?.name || \"\") !== name);\n" +
+          "\t\t\t\treturn [...purge, ...tail, base]; // [dsh-purge] complete prompt keeps inject + assembled complete\n" +
+          "\t\t\t})(completeSection, dshPurgeSections, dshPurgeRest, transformed.sections),\n" +
           "\t\t\tcontexts: runtimeContextSuppressed ? [] : transformed.contexts\n" +
           "\t\t};",
-        replace: COMPLETE_PROMPT_WATERFALL_INJECT,
+        replace: COMPLETE_PROMPT_WATERFALL_INJECT_HEAD,
       },
       {
         pattern:
@@ -3929,15 +4069,13 @@ const NEW_TOOL_PATCHES = [
           "\t\t\t})(completeSection, dshPurgeSections, dshPurgeRest),\n" +
           "\t\t\tcontexts: runtimeContextSuppressed ? [] : transformed.contexts\n" +
           "\t\t};",
-        replace: COMPLETE_PROMPT_WATERFALL_INJECT,
+        replace: COMPLETE_PROMPT_WATERFALL_INJECT_HEAD,
       },
     ],
     forbid: ["dsh-purge:committed"],
     markersAny: true,
     markers: [
-      "complete prompt keeps waterfall inject",
-      "complete prompt keeps inject + agent-instructions",
-      "inject last after closer",
+      "fold-complete inject first",
     ],
   },
   {
@@ -5532,6 +5670,13 @@ const NEW_TOOL_PATCHES = [
     replacements: [
       {
         pattern:
+          "\t\t\t\t\tagent.followup(message); // [dsh-purge-85] user prompt always next-turn (kill steer→next-step race)",
+        replace:
+          "\t\t\t\t\tif (request.mode === \"steer\") agent.steer(message); // [dsh-purge-85] steer stays interrupt\n" +
+          "\t\t\t\t\telse agent.followup(message);",
+      },
+      {
+        pattern:
           "\t\t\t\t\tif (request.mode === \"steer\") agent.steer(message);\n" +
           "\t\t\t\t\telse agent.followup(message);",
         replace:
@@ -5557,7 +5702,20 @@ const NEW_TOOL_PATCHES = [
     file: ["api-session-controller", "agent-loop"],
     optional: true,
     skipIfMarked: true,
+    markersAny: true,
     replacements: [
+      {
+        pattern:
+          "\t\t\tcase \"steer\":\n" +
+          "\t\t\t\tagent.inbox.remove(request.itemId);\n" +
+          "\t\t\t\tagent.followup(message); // [dsh-purge-86] queue steer → next-turn\n" +
+          "\t\t\t\tbreak;",
+        replace:
+          "\t\t\tcase \"steer\":\n" +
+          "\t\t\t\tagent.inbox.remove(request.itemId);\n" +
+          "\t\t\t\tagent.steer(message); // [dsh-purge-86] queue steer stays steer\n" +
+          "\t\t\t\tbreak;",
+      },
       {
         pattern:
           "\t\t\tcase \"steer\":\n" +
@@ -5602,31 +5760,14 @@ const NEW_TOOL_PATCHES = [
   },
   {
     id: 87,
-    name: "HUNG_PROMPT_LF_NEEDLE",
+    name: "PREPARE_ASSEMBLE_USE_RETURNED",
     layer: "代码",
     layer_en: "Code",
-    desc: "空白宿主先挂全文，再用 LF 比对头尾，避免 CRLF 误判再糊一份",
+    desc: "首次 assemble 用 prepare 返回的当前模式 systemPrompt",
     file: ["agent-loop"],
     optional: true,
     skipIfMarked: true,
     replacements: [
-      {
-        // 新宿主 (0.2.x step(assembly) 直接拿 assembly):变量名改成 system,不再从 decision 解构。
-        pattern:
-          "\t\tconst system = renderPrompt(assembly);\n" +
-          "\t\twhile (true) {\n" +
-          "\t\t\tconst { request, preparedCall } = await this.buildRequest(turn, step, assembly.tools, system, this.session.deriveMessages(), signal);",
-        replace:
-          "\t\tlet system = renderPrompt(assembly);\n" +
-          "\t\tconst dshPurgeHungFn = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? globalThis.__dshPurgeHungPrompt : null;\n" +
-          "\t\tconst dshPurgeHung = dshPurgeHungFn ? String(dshPurgeHungFn() || \"\").trim() : \"\";\n" +
-          "\t\tconst dshPurgeTail = dshPurgeHung.slice(-96);\n" +
-          "\t\tif (dshPurgeHung && (!dshPurgeTail || !String(system || \"\").includes(dshPurgeTail))) {\n" +
-          "\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge] hang full prompt-inject at head\n" +
-          "\t\t}\n" +
-          "\t\twhile (true) {\n" +
-          "\t\t\tconst { request, preparedCall } = await this.buildRequest(turn, step, assembly.tools, system, this.session.deriveMessages(), signal);",
-      },
       {
         pattern:
           "\t\tconst dshPurgePrepare = globalThis.__dshPurgePrepareAssemble;\n" +
@@ -5643,139 +5784,381 @@ const NEW_TOOL_PATCHES = [
           "\t\tconst dshPurgeAssemble = dshPurgePrompt && typeof dshPurgePrompt.assemble === \"function\" ? dshPurgePrompt : this.loopCtx.systemPrompt;\n" +
           "\t\tconst assembly = await dshPurgeAssemble.assemble(assembleContextFor(this, signal));",
       },
-      {
-        pattern:
-          "\t\tconst { assembly } = decision;\n" +
-          "\t\tconst renderedPrompt = renderPrompt(assembly);",
-        replace:
-          "\t\tconst { assembly } = decision;\n" +
-          "\t\tlet renderedPrompt = renderPrompt(assembly);\n" +
-          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n" +
-          "\t\tconst dshPurgeTail = dshPurgeHung.slice(-96);\n" +
-          "\t\tif (dshPurgeHung && (!dshPurgeTail || !String(renderedPrompt || \"\").includes(dshPurgeTail))) {\n" +
-          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge] hang full prompt-inject at head\n" +
-          "\t\t}",
-      },
-      {
-        pattern:
-          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? globalThis.__dshPurgeHungPrompt() : \"\";\n" +
-          "\t\tconst dshPurgeNeedle = String(dshPurgeHung || \"\").trim().slice(0, 96);\n" +
-          "\t\tif (dshPurgeNeedle && !String(renderedPrompt || \"\").includes(dshPurgeNeedle)) {\n" +
-          "\t\t\trenderedPrompt = String(dshPurgeHung).trim() + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge] hang full prompt-inject every step\n" +
-          "\t\t}",
-        replace:
-          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n" +
-          "\t\tconst dshPurgeTail = dshPurgeHung.slice(-96);\n" +
-          "\t\tif (dshPurgeHung && (!dshPurgeTail || !String(renderedPrompt || \"\").includes(dshPurgeTail))) {\n" +
-          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge] hang full prompt-inject at head\n" +
-          "\t\t}",
-      },
-      {
-        pattern:
-          "\t\t\trenderedPrompt = (renderedPrompt ? renderedPrompt + \"\\n\\n\" : \"\") + dshPurgeHung; // [dsh-purge] hang full prompt-inject after closer\n",
-        replace:
-          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge] hang full prompt-inject at head\n",
-      },
-      {
-        pattern:
-          "\t\t\tsystem = (system ? system + \"\\n\\n\" : \"\") + dshPurgeHung; // [dsh-purge] hang full prompt-inject after closer\n",
-        replace:
-          "\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge] hang full prompt-inject at head\n",
-      },
-      {
-        pattern:
-          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n" +
-          "\t\tconst dshPurgeTail = dshPurgeHung.slice(-96);\n" +
-          "\t\tif (dshPurgeHung && (!dshPurgeTail || !String(renderedPrompt || \"\").includes(dshPurgeTail))) {\n" +
-          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge] hang full prompt-inject at head\n" +
-          "\t\t}",
-        replace:
-          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n" +
-          "\t\tconst dshPurgeNorm = String(renderedPrompt || \"\").replace(/\\r\\n/g, \"\\n\");\n" +
-          "\t\tconst dshPurgeHungNorm = dshPurgeHung.replace(/\\r\\n/g, \"\\n\");\n" +
-          "\t\tconst dshPurgeTail = dshPurgeHungNorm.slice(-96);\n" +
-          "\t\tconst dshPurgeHead = dshPurgeHungNorm.slice(0, 80);\n" +
-          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail) && dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) {\n" +
-          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
-          "\t\t}",
-      },
-      {
-        pattern:
-          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n" +
-          "\t\tconst dshPurgeTail = dshPurgeHung.slice(-96);\n" +
-          "\t\tif (dshPurgeHung && (!dshPurgeTail || !String(system || \"\").includes(dshPurgeTail))) {\n" +
-          "\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge] hang full prompt-inject at head\n" +
-          "\t\t}",
-        replace:
-          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n" +
-          "\t\tconst dshPurgeNorm = String(system || \"\").replace(/\\r\\n/g, \"\\n\");\n" +
-          "\t\tconst dshPurgeHungNorm = dshPurgeHung.replace(/\\r\\n/g, \"\\n\");\n" +
-          "\t\tconst dshPurgeTail = dshPurgeHungNorm.slice(-96);\n" +
-          "\t\tconst dshPurgeHead = dshPurgeHungNorm.slice(0, 80);\n" +
-          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail) && dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) {\n" +
-          "\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
-          "\t\t}",
-      },
     ],
-    markers: ["[dsh-purge-87] hang needle uses LF"],
+    markers: ["const dshPurgeAssemble = dshPurgePrompt"],
   },
   {
     id: 88,
-    name: "HUNG_PROMPT_STRICT_NEEDLE",
+    name: "HUNG_PROMPT_REMOVED",
     layer: "代码",
     layer_en: "Code",
-    desc: "ChatML 头和正文尾都在才算挂住，只剩头或只剩尾都重新置顶",
+    desc: "去掉 renderPrompt 后的挂针，注入只走 assemble 整段",
+    file: ["agent-loop"],
+    optional: true,
+    skipIfMarked: true,
+    replacements: [
+      {
+        pattern: /let renderedPrompt = renderPrompt\(assembly\);\r?\n\t\tconst dshPurgeHung[\s\S]*?\n\t\t\}/,
+        replace: "let renderedPrompt = renderPrompt(assembly); // [dsh-purge-88] hang removed",
+      },
+      {
+        pattern: /const renderedPrompt = renderPrompt\(assembly\);\r?\n\t\tconst dshPurgeHung[\s\S]*?\n\t\t\}/,
+        replace: "let renderedPrompt = renderPrompt(assembly); // [dsh-purge-88] hang removed",
+      },
+      {
+        pattern: /let system = renderPrompt\(assembly\);\r?\n\t\tconst dshPurgeHung[\s\S]*?\n\t\t\}/,
+        replace: "let system = renderPrompt(assembly); // [dsh-purge-88] hang removed",
+      },
+      {
+        pattern: /const system = renderPrompt\(assembly\);\r?\n\t\tconst dshPurgeHung[\s\S]*?\n\t\t\}/,
+        replace: "let system = renderPrompt(assembly); // [dsh-purge-88] hang removed",
+      },
+      {
+        pattern:
+          "\t\tlet renderedPrompt = renderPrompt(assembly);\n" +
+          "\t\tlet firstAttempt = true;",
+        replace:
+          "\t\tlet renderedPrompt = renderPrompt(assembly); // [dsh-purge-88] hang removed\n" +
+          "\t\tlet firstAttempt = true;",
+      },
+    ],
+    markers: ["[dsh-purge-88] hang removed"],
+  },
+  {
+    id: 89,
+    name: "SYSTEM_MESSAGE_CONTRACT",
+    layer: "代码",
+    layer_en: "Code",
+    desc: "保留原生 system 消息及更新顺序，修复旧提取补丁造成的提示词丢失 / preserve native system messages and update ordering",
     file: ["agent-loop"],
     optional: true,
     skipIfMarked: true,
     replacements: [
       {
         pattern:
-          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail)) && !(dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) {\n" +
-          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
-          "\t\t}",
+          "\t\tconst boundaryMessages = session.deriveMessages(); // [dsh-purge-89] system field extract\n" +
+          "\t\tconst systemParts = [];\n" +
+          "\t\tconst nonSystemMessages = [];\n" +
+          "\t\tfor (const message of boundaryMessages) {\n" +
+          "\t\t\tif (message && message.role === \"system\") {\n" +
+          "\t\t\t\tconst content = message.content;\n" +
+          "\t\t\t\tif (Array.isArray(content)) {\n" +
+          "\t\t\t\t\tfor (const block of content) {\n" +
+          "\t\t\t\t\t\tif (block && block.type === \"text\" && typeof block.text === \"string\" && block.text.length > 0) {\n" +
+          "\t\t\t\t\t\t\tsystemParts.push(block.text);\n" +
+          "\t\t\t\t\t\t}\n" +
+          "\t\t\t\t\t}\n" +
+          "\t\t\t\t} else if (typeof content === \"string\" && content.length > 0) {\n" +
+          "\t\t\t\t\tsystemParts.push(content);\n" +
+          "\t\t\t\t}\n" +
+          "\t\t\t} else {\n" +
+          "\t\t\t\tnonSystemMessages.push(message);\n" +
+          "\t\t\t}\n" +
+          "\t\t}\n" +
+          "\t\tconst systemField = systemParts.length > 0 ? systemParts.join(\"\\n\\n\") : void 0;\n" +
+          "\t\tfor (const message of nonSystemMessages) {\n" +
+          "\t\t\tif (this.frozenMessages.has(message)) continue;\n" +
+          "\t\t\tdeepFreeze(message);\n" +
+          "\t\t\tthis.frozenMessages.add(message);\n" +
+          "\t\t}\n" +
+          "\t\tObject.freeze(nonSystemMessages);\n" +
+          "\t\treturn markAgentLoopRequest(Object.freeze({\n" +
+          "\t\t\t...header.config,\n" +
+          "\t\t\t...systemField !== void 0 ? { system: systemField } : {},\n" +
+          "\t\t\tmessages: nonSystemMessages,\n" +
+          "\t\t\ttoolHistory: session.toolHistory(),\n" +
+          "\t\t\t...header.tools !== void 0 ? { tools: header.tools } : {},\n" +
+          "\t\t\tsessionId: this.session.id,\n" +
+          "\t\t\tsignal\n" +
+          "\t\t}));",
         replace:
-          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail) && dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) { // [dsh-purge-88]\n" +
-          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
-          "\t\t}",
+          "\t\tconst boundaryMessages = session.deriveMessages(); // [dsh-purge-89] native system messages preserved\n" +
+          "\t\tfor (const message of boundaryMessages) {\n" +
+          "\t\t\tif (this.frozenMessages.has(message)) continue;\n" +
+          "\t\t\tdeepFreeze(message);\n" +
+          "\t\t\tthis.frozenMessages.add(message);\n" +
+          "\t\t}\n" +
+          "\t\tObject.freeze(boundaryMessages);\n" +
+          "\t\treturn markAgentLoopRequest(Object.freeze({\n" +
+          "\t\t\t...header.config,\n" +
+          "\t\t\tmessages: boundaryMessages,\n" +
+          "\t\t\ttoolHistory: session.toolHistory(),\n" +
+          "\t\t\t...header.tools !== void 0 ? { tools: header.tools } : {},\n" +
+          "\t\t\tsessionId: this.session.id,\n" +
+          "\t\t\tsignal\n" +
+          "\t\t}));",
       },
       {
         pattern:
-          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail)) && !(dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) {\n" +
-          "\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
-          "\t\t}",
+          "\t\tconst boundaryMessages = session.deriveMessages();\n" +
+          "\t\tfor (const message of boundaryMessages) {\n" +
+          "\t\t\tif (this.frozenMessages.has(message)) continue;\n" +
+          "\t\t\tdeepFreeze(message);\n" +
+          "\t\t\tthis.frozenMessages.add(message);\n" +
+          "\t\t}\n" +
+          "\t\tObject.freeze(boundaryMessages);\n" +
+          "\t\treturn markAgentLoopRequest(Object.freeze({\n" +
+          "\t\t\t...header.config,\n" +
+          "\t\t\tmessages: boundaryMessages,\n" +
+          "\t\t\ttoolHistory: session.toolHistory(),\n" +
+          "\t\t\t...header.tools !== void 0 ? { tools: header.tools } : {},\n" +
+          "\t\t\tsessionId: this.session.id,\n" +
+          "\t\t\tsignal\n" +
+          "\t\t}));",
         replace:
-          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail) && dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) { // [dsh-purge-88]\n" +
-          "\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
-          "\t\t}",
-      },
-      {
-        // 现行 #87 已写出 AND 头尾，只补 #88 标记，避免 0.2 renderedPrompt 宿主一直 pending。
-        pattern:
-          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail) && dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) {\n" +
-          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
-          "\t\t}",
-        replace:
-          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail) && dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) { // [dsh-purge-88]\n" +
-          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
-          "\t\t}",
-      },
-      {
-        pattern:
-          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail) && dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) {\n" +
-          "\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
-          "\t\t}",
-        replace:
-          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail) && dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) { // [dsh-purge-88]\n" +
-          "\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
-          "\t\t}",
+          "\t\tconst boundaryMessages = session.deriveMessages(); // [dsh-purge-89] native system messages preserved\n" +
+          "\t\tfor (const message of boundaryMessages) {\n" +
+          "\t\t\tif (this.frozenMessages.has(message)) continue;\n" +
+          "\t\t\tdeepFreeze(message);\n" +
+          "\t\t\tthis.frozenMessages.add(message);\n" +
+          "\t\t}\n" +
+          "\t\tObject.freeze(boundaryMessages);\n" +
+          "\t\treturn markAgentLoopRequest(Object.freeze({\n" +
+          "\t\t\t...header.config,\n" +
+          "\t\t\tmessages: boundaryMessages,\n" +
+          "\t\t\ttoolHistory: session.toolHistory(),\n" +
+          "\t\t\t...header.tools !== void 0 ? { tools: header.tools } : {},\n" +
+          "\t\t\tsessionId: this.session.id,\n" +
+          "\t\t\tsignal\n" +
+          "\t\t}));",
       },
     ],
-    markers: ["[dsh-purge-88]"],
+    forbid: ["[dsh-purge-89] system field extract"],
+    markers: ["[dsh-purge-89] native system messages preserved"],
+  },
+  {
+    id: 90,
+    name: "OPENAI_NATIVE_SYSTEM_ROLE",
+    layer: "代码",
+    layer_en: "Code",
+    desc: "openai-completions 把 systemPrompt 折进 messages[0].role=system（chat/completions 原生槽），不再塞进 last user / fold systemPrompt into native role:system for /chat/completions",
+    file: ["pi-ai-completions"],
+    optional: true,
+    skipIfMarked: true,
+    replacements: [
+      {
+        pattern:
+          "export const stream = (model, context, options) => {\n" +
+          "    const stream = new AssistantMessageEventStream();\n" +
+          "    const normalizedContext = resolveTranscript(context, getCompat(model).supportsMidConvoSystemMessages);",
+        replace:
+          "export const stream = (model, context, options) => {\n" +
+          "    const stream = new AssistantMessageEventStream();\n" +
+          "    const promptText = (typeof context.systemPrompt === \"string\" && context.systemPrompt.length > 0) ? context.systemPrompt : ((typeof context.system === \"string\" && context.system.length > 0) ? context.system : \"\");\n" +
+          "    const seeded = (promptText && context.messages?.[0]?.role !== \"system\") ? { ...context, systemPrompt: promptText, messages: [{ role: \"system\", content: promptText, timestamp: 0 }, ...context.messages] } : context;\n" +
+          "    const normalizedContext = { ...seeded, ...resolveTranscript(seeded, getCompat(model).supportsMidConvoSystemMessages) }; // [dsh-purge-90] native system role",
+      },
+      {
+        pattern:
+          "export function convertMessages(model, context, compat, options) {\n" +
+          "    const normalizedContext = resolveTranscript(context, compat.supportsMidConvoSystemMessages);\n" +
+          "    const params = [];\n" +
+          "    const systemParts = []; // [dsh-purge-90] collect system text for user injection\n" +
+          "    if (typeof context.system === \"string\" && context.system.length > 0) systemParts.push(sanitizeSurrogates(context.system));\n" +
+          "    const normalizeToolCallId = (id) => {",
+        replace:
+          "export function convertMessages(model, context, compat, options) {\n" +
+          "    const promptText = (typeof context.systemPrompt === \"string\" && context.systemPrompt.length > 0) ? context.systemPrompt : ((typeof context.system === \"string\" && context.system.length > 0) ? context.system : \"\");\n" +
+          "    const seeded = (promptText && context.messages?.[0]?.role !== \"system\") ? { ...context, messages: [{ role: \"system\", content: promptText, timestamp: 0 }, ...context.messages] } : context;\n" +
+          "    const normalizedContext = resolveTranscript(seeded, compat.supportsMidConvoSystemMessages); // [dsh-purge-90] native system role\n" +
+          "    const params = [];\n" +
+          "    const normalizeToolCallId = (id) => {",
+      },
+      {
+        pattern:
+          "export function convertMessages(model, context, compat, options) {\n" +
+          "    const normalizedContext = resolveTranscript(context, compat.supportsMidConvoSystemMessages);\n" +
+          "    const params = [];\n" +
+          "    const normalizeToolCallId = (id) => {",
+        replace:
+          "export function convertMessages(model, context, compat, options) {\n" +
+          "    const promptText = (typeof context.systemPrompt === \"string\" && context.systemPrompt.length > 0) ? context.systemPrompt : ((typeof context.system === \"string\" && context.system.length > 0) ? context.system : \"\");\n" +
+          "    const seeded = (promptText && context.messages?.[0]?.role !== \"system\") ? { ...context, messages: [{ role: \"system\", content: promptText, timestamp: 0 }, ...context.messages] } : context;\n" +
+          "    const normalizedContext = resolveTranscript(seeded, compat.supportsMidConvoSystemMessages); // [dsh-purge-90] native system role\n" +
+          "    const params = [];\n" +
+          "    const normalizeToolCallId = (id) => {",
+      },
+      {
+        pattern:
+          "            const text = i === 0 ? getSystemMessageText(msg) : renderSystemMessageUpdate(msg);\n" +
+          "            if (text.length > 0) {\n" +
+          "                systemParts.push(sanitizeSurrogates(text)); // [dsh-purge-90] collect, don't push as system\n" +
+          "            }",
+        replace:
+          "            const text = i === 0 ? getSystemMessageText(msg) : renderSystemMessageUpdate(msg);\n" +
+          "            if (text.length > 0) {\n" +
+          "                params.push({ role: instructionRole, content: sanitizeSurrogates(text).replace(/<\\|im_start\\|>\\s*system\\s*:\\s*/gi, \"\").replace(/<\\/?project_instructions>/gi, \"\").replace(/<\\|im_end\\|>/g, \"\").trim() }); // [dsh-purge-90] native system role\n" +
+          "            }",
+      },
+      {
+        pattern:
+          "            const text = i === 0 ? getSystemMessageText(msg) : renderSystemMessageUpdate(msg);\n" +
+          "            if (text.length > 0) {\n" +
+          "                params.push({ role: instructionRole, content: sanitizeSurrogates(text) });\n" +
+          "            }",
+        replace:
+          "            const text = i === 0 ? getSystemMessageText(msg) : renderSystemMessageUpdate(msg);\n" +
+          "            if (text.length > 0) {\n" +
+          "                params.push({ role: instructionRole, content: sanitizeSurrogates(text).replace(/<\\|im_start\\|>\\s*system\\s*:\\s*/gi, \"\").replace(/<\\/?project_instructions>/gi, \"\").replace(/<\\|im_end\\|>/g, \"\").trim() }); // [dsh-purge-90] native system role\n" +
+          "            }",
+      },
+      {
+        pattern:
+          "        lastRole = msg.role;\n" +
+          "    }\n" +
+          "    if (systemParts.length > 0) { // [dsh-purge-90] inject once\n" +
+          "        const systemText = systemParts.join(\"\\n\\n\").replace(/<\\|im_start\\|>\\s*system\\s*:\\s*/gi, \"\").replace(/<\\/?project_instructions>/gi, \"\").replace(/<\\|im_end\\|>/g, \"\").trim();\n" +
+          "        const lastUser = params.findLastIndex(m => m.role === \"user\");\n" +
+          "        if (lastUser !== -1) {\n" +
+          "            const uc = params[lastUser].content;\n" +
+          "            if (typeof uc === \"string\") params[lastUser].content = systemText + \"\\n\\n\" + uc;\n" +
+          "            else if (Array.isArray(uc)) params[lastUser].content = [{ type: \"text\", text: systemText }, ...uc];\n" +
+          "        } else {\n" +
+          "            params.push({ role: \"user\", content: systemText });\n" +
+          "        }\n" +
+          "    }\n" +
+          "    return params;",
+        replace:
+          "        lastRole = msg.role;\n" +
+          "    }\n" +
+          "    return params;",
+      },
+      {
+        pattern:
+          "        lastRole = msg.role;\n" +
+          "    }\n" +
+          "    if (systemParts.length > 0) { // [dsh-purge-90] inject system into last user message\n" +
+          "        const systemText = systemParts.join(\"\\n\\n\").replace(/<\\|im_start\\|>\\s*system\\s*:\\s*/gi, \"\").replace(/<\\/?project_instructions>/gi, \"\").replace(/<\\|im_end\\|>/g, \"\").trim();\n" +
+          "        const lastUser = params.findLastIndex(m => m.role === \"user\");\n" +
+          "        if (lastUser !== -1) {\n" +
+          "            const uc = params[lastUser].content;\n" +
+          "            if (typeof uc === \"string\") params[lastUser].content = systemText + \"\\n\\n\" + uc;\n" +
+          "            else if (Array.isArray(uc)) params[lastUser].content = [{ type: \"text\", text: systemText }, ...uc];\n" +
+          "        } else {\n" +
+          "            params.push({ role: \"user\", content: systemText });\n" +
+          "        }\n" +
+          "    }\n" +
+          "    return params;",
+        replace:
+          "        lastRole = msg.role;\n" +
+          "    }\n" +
+          "    return params;",
+      },
+    ],
+    markers: ["[dsh-purge-90] native system role"],
+  },
+  {
+    id: 91,
+    name: "ANTHROPIC_NATIVE_PARAMS_SYSTEM",
+    layer: "代码",
+    layer_en: "Code",
+    desc: "anthropic-messages 把 systemPrompt 写入顶层 params.system（/messages 原生槽），不再塞进 last user / write systemPrompt to native params.system for /messages",
+    file: ["pi-ai-anthropic-messages"],
+    optional: true,
+    skipIfMarked: true,
+    replacements: [
+      {
+        pattern:
+          "export const stream = (model, context, options) => {\n" +
+          "    const stream = new AssistantMessageEventStream();\n" +
+          "    const normalizedContext = resolveTranscript(context, getAnthropicCompat(model).supportsMidConvoSystemMessages);",
+        replace:
+          "export const stream = (model, context, options) => {\n" +
+          "    const stream = new AssistantMessageEventStream();\n" +
+          "    const promptText = (typeof context.systemPrompt === \"string\" && context.systemPrompt.length > 0) ? context.systemPrompt : ((typeof context.system === \"string\" && context.system.length > 0) ? context.system : \"\");\n" +
+          "    const seeded = (promptText && context.messages?.[0]?.role !== \"system\") ? { ...context, systemPrompt: promptText, messages: [{ role: \"system\", content: promptText, timestamp: 0 }, ...context.messages] } : context;\n" +
+          "    const normalizedContext = { ...seeded, ...resolveTranscript(seeded, getAnthropicCompat(model).supportsMidConvoSystemMessages) }; // [dsh-purge-91] native params.system",
+      },
+      {
+        pattern:
+          "    const initialSystemMessage = getInitialSystemMessage(context.messages);\n" +
+          "    const initialSystemText = (typeof context.system === \"string\" && context.system.length > 0) // [dsh-purge-91] fallback to context.system (#89 compat)\n" +
+          "        ? context.system\n" +
+          "        : (initialSystemMessage ? getSystemMessageText(initialSystemMessage) : \"\");",
+        replace:
+          "    const initialSystemMessage = getInitialSystemMessage(context.messages);\n" +
+          "    const initialSystemText = (typeof context.systemPrompt === \"string\" && context.systemPrompt.length > 0) // [dsh-purge-91] native params.system\n" +
+          "        ? context.systemPrompt\n" +
+          "        : ((typeof context.system === \"string\" && context.system.length > 0)\n" +
+          "            ? context.system\n" +
+          "            : (initialSystemMessage ? getSystemMessageText(initialSystemMessage) : \"\"));",
+      },
+      {
+        pattern:
+          "    const initialSystemMessage = getInitialSystemMessage(context.messages);\n" +
+          "    const initialSystemText = initialSystemMessage ? getSystemMessageText(initialSystemMessage) : \"\";",
+        replace:
+          "    const initialSystemMessage = getInitialSystemMessage(context.messages);\n" +
+          "    const initialSystemText = (typeof context.systemPrompt === \"string\" && context.systemPrompt.length > 0) // [dsh-purge-91] native params.system\n" +
+          "        ? context.systemPrompt\n" +
+          "        : ((typeof context.system === \"string\" && context.system.length > 0)\n" +
+          "            ? context.system\n" +
+          "            : (initialSystemMessage ? getSystemMessageText(initialSystemMessage) : \"\"));",
+      },
+      {
+        pattern:
+          "    // [dsh-purge-91] system injected into last user message (0.1.7 style)",
+        replace:
+          "    if (initialSystemText) { // [dsh-purge-91] native params.system\n" +
+          "        const systemText = sanitizeSurrogates(initialSystemText).replace(/<\\|im_start\\|>\\s*system\\s*:\\s*/gi, \"\").replace(/<\\/?project_instructions>/gi, \"\").replace(/<\\|im_end\\|>/g, \"\").trim();\n" +
+          "        params.system = [\n" +
+          "            {\n" +
+          "                type: \"text\",\n" +
+          "                text: systemText,\n" +
+          "                ...(cacheControl ? { cache_control: cacheControl } : {}),\n" +
+          "            },\n" +
+          "        ];\n" +
+          "    }",
+      },
+      {
+        pattern:
+          "    if (initialSystemText) { // [dsh-purge-91] inject once\n" +
+          "        const systemText = sanitizeSurrogates(initialSystemText).replace(/<\\|im_start\\|>\\s*system\\s*:\\s*/gi, \"\").replace(/<\\/?project_instructions>/gi, \"\").replace(/<\\|im_end\\|>/g, \"\").trim();\n" +
+          "        const lastUser = params.messages.findLastIndex(m => m.role === \"user\");\n" +
+          "        if (lastUser !== -1) {\n" +
+          "            const uc = params.messages[lastUser].content;\n" +
+          "            if (typeof uc === \"string\") params.messages[lastUser].content = systemText + \"\\n\\n\" + uc;\n" +
+          "            else if (Array.isArray(uc)) params.messages[lastUser].content = [{ type: \"text\", text: systemText }, ...uc];\n" +
+          "        } else {\n" +
+          "            params.messages.push({ role: \"user\", content: [{ type: \"text\", text: systemText }] });\n" +
+          "        }\n" +
+          "    }\n" +
+          "    return params;",
+        replace:
+          "    return params;",
+      },
+      {
+        pattern:
+          "    if (initialSystemText) { // [dsh-purge-91] inject system into last user message\n" +
+          "        const systemText = sanitizeSurrogates(initialSystemText).replace(/<\\|im_start\\|>\\s*system\\s*:\\s*/gi, \"\").replace(/<\\/?project_instructions>/gi, \"\").replace(/<\\|im_end\\|>/g, \"\").trim();\n" +
+          "        const lastUser = params.messages.findLastIndex(m => m.role === \"user\");\n" +
+          "        if (lastUser !== -1) {\n" +
+          "            const uc = params.messages[lastUser].content;\n" +
+          "            if (typeof uc === \"string\") params.messages[lastUser].content = systemText + \"\\n\\n\" + uc;\n" +
+          "            else if (Array.isArray(uc)) params.messages[lastUser].content = [{ type: \"text\", text: systemText }, ...uc];\n" +
+          "        } else {\n" +
+          "            params.messages.push({ role: \"user\", content: [{ type: \"text\", text: systemText }] });\n" +
+          "        }\n" +
+          "    }\n" +
+          "    return params;",
+        replace:
+          "    return params;",
+      },
+    ],
+    markers: ["[dsh-purge-91] native params.system"],
   },
 ];
 
+
 export const ALL_PATCHES = [...PATCHES, ...CODE_PATCHES, ...ENGINE_PATCHES, ...NEW_TOOL_PATCHES];
+
+/** Read the installed request contract; saving a prompt does not imply a host patch was applied. */
+export function systemFieldExtracted(aiBase = findAiBase()) {
+  try {
+    const files = targetFiles(aiBase)['agent-loop'];
+    return [files].flat().filter(Boolean).some(file => fs.readFileSync(file, 'utf8').includes('[dsh-purge-89] system field extract'));
+  } catch { return false; }
+}
 
 /** 同一条清洗的升级链。Apply 仍按 ALL_PATCHES 全打，只有清洗页 / 计数展示合成一行。 */
 export const PATCH_DISPLAY_GROUPS = {
@@ -5784,11 +6167,26 @@ export const PATCH_DISPLAY_GROUPS = {
   approval_policy: [8, 9, 10],
   desktop_update: [45, 46],
   desktop_close: [83, 84],
-  followup: [85, 86],
-  hang: [87, 88],
   hooks_deny: [30, 31],
   hooks_steer: [64, 65],
 };
+
+const DISPLAY_GROUP_TITLE = {
+  disclaimer: "全局 / 替换 / 作用域免责 → 强指令",
+  approval_sentence: "审批提示句 → 自动放行",
+  approval_policy: "审批默认 never + 自动放行",
+  desktop_update: "官方桌面更新交接",
+  desktop_close: "host 退出不再报错弹框",
+  hooks_deny: "hooks deny→allow",
+  hooks_steer: "Stop / UserPromptSubmit 不再假插话或整轮 reject",
+};
+
+function displayTitleOf(groupKey, lead) {
+  if (groupKey && DISPLAY_GROUP_TITLE[groupKey]) return DISPLAY_GROUP_TITLE[groupKey];
+  const desc = String(lead?.desc || "");
+  const zh = desc.split(" / ")[0].trim();
+  return zh || lead?.name || `patch-${lead?.id ?? "?"}`;
+}
 
 const DISPLAY_GROUP_BY_ID = new Map();
 for (const [key, ids] of Object.entries(PATCH_DISPLAY_GROUPS)) {
@@ -5814,10 +6212,11 @@ export function groupPatchesForDisplay(patches = ALL_PATCHES, patch_status = {},
     if (!patchAppliesHere(p, surface)) continue;
     const st = patch_status[p.id];
     if (!st || st === "na") continue;
-    const key = DISPLAY_GROUP_BY_ID.get(p.id) || `solo:${p.id}`;
+    const groupKey = DISPLAY_GROUP_BY_ID.get(p.id) || "";
+    const key = groupKey || `solo:${p.id}`;
     let bucket = buckets.get(key);
     if (!bucket) {
-      bucket = { lead: p, ids: [], statuses: [] };
+      bucket = { lead: p, ids: [], statuses: [], groupKey };
       buckets.set(key, bucket);
     }
     bucket.ids.push(p.id);
@@ -5831,6 +6230,7 @@ export function groupPatchesForDisplay(patches = ALL_PATCHES, patch_status = {},
       ids: bucket.ids,
       layer: bucket.lead.layer || "",
       status: rollupDisplayStatus(bucket.statuses),
+      title: displayTitleOf(bucket.groupKey, bucket.lead),
     }));
 }
 
@@ -5982,6 +6382,145 @@ export async function dropStaleUserProfilePatchBackups(dshHome = findDshHome()) 
 }
 
 const BAK_SUFFIX = ".dshpurge.bak";
+const DSH_PURGE_MARKER_NEEDLE = "dsh-purge";
+
+function sidecarBakPath(fp) {
+  return `${fp}${BAK_SUFFIX}`;
+}
+
+function hostBakVaultRoot(dshHome = findDshHome()) {
+  return path.join(dshHome, "dsh-purge", "host-backups");
+}
+
+function hostPathNorms(fp) {
+  const norms = [];
+  const push = (p) => {
+    if (!p) return;
+    const n = path.normalize(String(p)).replace(/\\/g, "/").toLowerCase();
+    if (n && !norms.includes(n)) norms.push(n);
+  };
+  push(fp);
+  try { push(fs.realpathSync(fp)); } catch { /* asar 虚路径或未落盘 */ }
+  return norms;
+}
+
+function hostBakDigest(norm) {
+  return createHash("sha1").update(norm).digest("hex").slice(0, 24);
+}
+
+function vaultBakPath(fp, dshHome = findDshHome()) {
+  const norms = hostPathNorms(fp);
+  const key = norms[norms.length - 1] || norms[0] || "";
+  return path.join(hostBakVaultRoot(dshHome), `${hostBakDigest(key)}.bak`);
+}
+
+function vaultBakCandidates(fp, dshHome = findDshHome()) {
+  const root = hostBakVaultRoot(dshHome);
+  return hostPathNorms(fp).map((n) => path.join(root, `${hostBakDigest(n)}.bak`));
+}
+
+function tryReadBuf(fp) {
+  try {
+    const buf = fs.readFileSync(fp);
+    return Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
+  } catch {
+    return null;
+  }
+}
+
+function isOfficialSnapshotBuf(buf) {
+  return Boolean(buf && buf.length > 0 && !buf.includes(DSH_PURGE_MARKER_NEEDLE));
+}
+
+function writeBufAtomic(fp, buf) {
+  const dir = path.dirname(fp);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = `${fp}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tmp, buf);
+  try {
+    fs.renameSync(tmp, fp);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+    throw e;
+  }
+}
+
+function writeVaultMeta(vaultFp, fp) {
+  const meta = vaultFp.replace(/\.bak$/i, ".json");
+  try {
+    atomicWriteSync(meta, `${JSON.stringify({
+      path: path.normalize(fp),
+      at: new Date().toISOString(),
+    })}\n`);
+  } catch { /* 还原仍可按 digest 找到 .bak */ }
+}
+
+/** 官方原文快照：旁边 .dshpurge.bak，或 $DSH_HOME/dsh-purge/host-backups（#106）。 */
+function readOfficialSnapshot(fp) {
+  if (!fp || isUserProfilePatchFile(fp)) return null;
+  const sidecar = sidecarBakPath(fp);
+  const sideBuf = tryReadBuf(sidecar);
+  if (isOfficialSnapshotBuf(sideBuf)) return { buf: sideBuf, from: sidecar };
+  for (const vault of vaultBakCandidates(fp)) {
+    const buf = tryReadBuf(vault);
+    if (isOfficialSnapshotBuf(buf)) return { buf, from: vault };
+  }
+  return null;
+}
+
+function writeOfficialSnapshot(fp, buf) {
+  const made = { vault: false, sidecar: false };
+  if (!fp || !isOfficialSnapshotBuf(buf) || isUserProfilePatchFile(fp)) return made;
+  const vaultFp = vaultBakPath(fp);
+  try {
+    const prev = tryReadBuf(vaultFp);
+    if (!prev || !prev.equals(buf)) {
+      writeBufAtomic(vaultFp, buf);
+      made.vault = true;
+    }
+    writeVaultMeta(vaultFp, fp);
+  } catch { /* 主目录不可写时再试旁边 bak */ }
+  try {
+    const side = sidecarBakPath(fp);
+    const prev = tryReadBuf(side);
+    if (!prev || !prev.equals(buf)) {
+      writeBufAtomic(side, buf);
+      made.sidecar = true;
+    }
+  } catch {
+    /* app.asar 映出来的目录新建文件常 ENOENT，保险柜在就够 */
+  }
+  return made;
+}
+
+function listVaultEntries(dshHome = findDshHome()) {
+  const root = hostBakVaultRoot(dshHome);
+  const out = [];
+  let names = [];
+  try { names = fs.readdirSync(root); } catch { return out; }
+  for (const name of names) {
+    if (!/\.json$/i.test(name)) continue;
+    try {
+      const meta = JSON.parse(fs.readFileSync(path.join(root, name), "utf8"));
+      const bak = path.join(root, name.replace(/\.json$/i, ".bak"));
+      if (meta && meta.path) out.push({ path: String(meta.path), bak });
+    } catch { /* 坏 meta 跳过 */ }
+  }
+  return out;
+}
+
+function ensureOfficialSnapshot(fp) {
+  if (!fp || isUserProfilePatchFile(fp) || !fs.existsSync(fp)) return false;
+  const existing = readOfficialSnapshot(fp);
+  if (existing) {
+    writeOfficialSnapshot(fp, existing.buf);
+    return true;
+  }
+  const buf = tryReadBuf(fp);
+  if (!isOfficialSnapshotBuf(buf)) return false;
+  const made = writeOfficialSnapshot(fp, buf);
+  return made.vault || made.sidecar;
+}
 
 function shouldRestoreOriginal(original, bak) {
   if (isUserProfilePatchFile(original)) return false;
@@ -6002,7 +6541,7 @@ function shouldRestoreOriginal(original, bak) {
 }
 
 /**
- * 正式文件不见、或被写成空文件时，从旁边的 .dshpurge.bak 拷回去。
+ * 正式文件不见、或被写成空文件时，从旁边的 .dshpurge.bak 或保险柜拷回去。
  * 不删 bak。targetFiles 只认还在的文件，所以丢了以后还原/应用都看不见这份备份。
  * @returns 已拷回的正式路径
  */
@@ -6013,10 +6552,10 @@ export function restoreMissingOriginalsFromBak(aiBase) {
   const consider = (original) => {
     if (!original || seen.has(original)) return;
     seen.add(original);
-    const bak = original + BAK_SUFFIX;
-    if (!shouldRestoreOriginal(original, bak)) return;
+    const snap = readOfficialSnapshot(original);
+    if (!snap || !shouldRestoreOriginal(original, snap.from)) return;
     try {
-      fs.copyFileSync(bak, original);
+      writeBufAtomic(original, snap.buf);
       restored.push(original);
     } catch {
       /* 文件被占用时下次启动再试 */
@@ -6058,16 +6597,10 @@ export function restoreMissingOriginalsAllHosts(options = {}) {
   return restored;
 }
 
-const DSH_PURGE_MARKER_NEEDLE = "dsh-purge";
-
 /**
- * DSH 自升级会把宿主文件整个换成官方新版,但旁边的 .dshpurge.bak 不会动
- * (backupAll 对已有 bak 走 wx 独占直接 continue)。老 bak 变过期后:
- *   · revertAll 会把当前的新版文件写回成老版 → 新代码/旧代码混合直接崩
- *   · patchesMatchInstall 的 hostCleanMarkersPresent 只看任一文件存在清洗 marker 就算对齐,
-     *     结果 #74/#87 这类放到 agent-loop 的补丁从未被重打,hang-inject 全路径哑火。
- * 这里:current 里不含任何 dsh-purge marker 字串、且和 bak 字节不同 → 把 bak 刷到 current。
- * 本函数不动文件内容,只重做基线;后续 applyPatches 会把 marker 补回去。
+ * DSH 自升级会把宿主文件整个换成官方新版,但旁边的 .dshpurge.bak 不会动。
+ * 老 bak 变过期后 revert 会把新版写回成老版。
+ * current 不含 dsh-purge 且和快照不同 → 把快照刷成这份新官方原文。
  */
 export function refreshStaleBaksForUpgrade(aiBase) {
   const refreshed = [];
@@ -6087,17 +6620,13 @@ export function refreshStaleBaksForUpgrade(aiBase) {
       const original = fp.slice(0, -BAK_SUFFIX.length);
       if (isUserProfilePatchFile(original)) continue;
       let originalBuf;
-      let bakBuf;
       try {
         originalBuf = fs.readFileSync(original);
-        bakBuf = fs.readFileSync(fp);
       } catch { continue; }
-      if (originalBuf.equals(bakBuf)) continue;
-      // 原文件里只要还带 dsh-purge 标识就视为"我们打过的版本",不碰 bak。
       if (originalBuf.includes(DSH_PURGE_MARKER_NEEDLE)) continue;
       try {
-        fs.writeFileSync(fp, originalBuf);
-        refreshed.push(original);
+        const made = writeOfficialSnapshot(original, originalBuf);
+        if (made.vault || made.sidecar) refreshed.push(original);
       } catch {
         /* bak 被占用下次再试 */
       }
@@ -6114,43 +6643,65 @@ export async function backupAll(aiBase) {
   const skippedUser = [];
   for (const fp of flattenTargetPaths(files)) {
     if (!fs.existsSync(fp)) continue;
-    // 用户 patch 层永不建 bak（#43）。
     if (isUserProfilePatchFile(fp)) {
       skippedUser.push(fp);
       continue;
     }
-    const bak = fp + ".dshpurge.bak";
-    // M36:race-free。existsSync+copyFile 之间可能被覆盖。
-    // 先用 wx 独占创建占位,成功就正式写入内容;EEXIST 代表 bak 已经存在,无需重建。
-    let placeholderFd;
-    try {
-      placeholderFd = fs.openSync(bak, "wx");
-    } catch (e) {
-      if (e && e.code === "EEXIST") continue;
-      errors.push([fp, String(e)]);
+    const existing = readOfficialSnapshot(fp);
+    if (existing) {
+      writeOfficialSnapshot(fp, existing.buf);
       continue;
     }
-    try { fs.closeSync(placeholderFd); } catch { /* ignore */ }
-    try {
-      await atomicCopyFile(fp, bak);
-      made.push(bak);
-    } catch (e) {
-      // atomicCopyFile 失败时清掉占位,避免下次误判已有有效 bak。
-      try { fs.unlinkSync(bak); } catch { /* ignore */ }
-      errors.push([fp, String(e)]);
+    const buf = tryReadBuf(fp);
+    if (!isOfficialSnapshotBuf(buf)) {
+      errors.push([fp, "already patched, no official backup"]);
+      continue;
     }
+    const wrote = writeOfficialSnapshot(fp, buf);
+    if (wrote.vault || wrote.sidecar) made.push(fp);
+    else errors.push([fp, "backup write failed"]);
   }
   const dropped = await dropStaleUserProfilePatchBackups();
   return { made, errors, skippedUser, dropped };
 }
 
-async function sameFileBytes(left, right) {
-  try {
-    const [a, b] = await Promise.all([fsp.readFile(left), fsp.readFile(right)]);
-    return a.equals(b);
-  } catch {
-    return false;
+function stripPurgePatchesFromText(text, fp = "") {
+  const crlf = typeof text === "string" && text.includes("\r\n");
+  const yaml = isYamlPath(fp);
+  let out = asLf(text);
+  let changed = false;
+  for (const p of [...ALL_PATCHES].reverse()) {
+    const applied = patchApplied(out, p);
+    for (const { pattern, replace } of [...patchReplacements(p)].reverse()) {
+      if (!pattern || typeof replace !== "string" || pattern instanceof RegExp) continue;
+      if (yaml && isBareIdentityNeedle(pattern)) continue;
+      const written = yaml ? yamlJsCommentsToHash(asLf(replace)) : asLf(replace);
+      const needle = asLf(pattern);
+      if (!written || written === needle || !out.includes(written)) continue;
+      if (!written.includes(DSH_PURGE_MARKER_NEEDLE) && !applied) continue;
+      out = out.split(written).join(needle);
+      changed = true;
+    }
   }
+  if (!changed) return { text, changed: false };
+  if (crlf) out = out.replace(/\n/g, "\r\n");
+  return { text: out, changed: true };
+}
+
+function collectRevertTargets(aiBase, files) {
+  const out = [];
+  const seen = new Set();
+  const add = (fp) => {
+    if (!fp || seen.has(fp) || isUserProfilePatchFile(fp)) return;
+    seen.add(fp);
+    out.push(fp);
+  };
+  for (const fp of flattenTargetPaths(files)) add(fp);
+  for (const entry of listVaultEntries()) {
+    if (!entry.path || (aiBase && !pathIsUnder(entry.path, aiBase))) continue;
+    add(entry.path);
+  }
+  return out;
 }
 
 export async function revertAll(aiBase, options = {}) {
@@ -6162,40 +6713,53 @@ export async function revertAll(aiBase, options = {}) {
   const errors = [];
   const preserveClientBundles = options.preserveClientBundles === true;
   for (const fp of flattenTargetPaths(files)) {
-    const bak = fp + ".dshpurge.bak";
-    // 启动自愈不能把前端 client.js 盖回去：copyFile 即使字节相同也会改 mtime（#63）。
+    if (!isUserProfilePatchFile(fp)) continue;
+    const bak = sidecarBakPath(fp);
+    if (fs.existsSync(bak)) {
+      try {
+        await fsp.unlink(bak);
+        preservedUser.push(fp);
+      } catch (e) {
+        errors.push([fp, String(e)]);
+      }
+    }
+  }
+  for (const fp of collectRevertTargets(aiBase, files)) {
     if (preserveClientBundles && isWatchedClientBundle(fp)) {
       skipped.push(fp);
       continue;
     }
-    // 用户 patch 层：有 bak 也只丢掉 bak，绝不 copy 回去（#43）。
-    if (isUserProfilePatchFile(fp)) {
-      if (fs.existsSync(bak)) {
-        try {
-          await fsp.unlink(bak);
-          preservedUser.push(fp);
-        } catch (e) {
-          errors.push([fp, String(e)]);
-        }
-      }
-      continue;
-    }
-    if (fs.existsSync(bak)) {
+    const snap = readOfficialSnapshot(fp);
+    const current = tryReadBuf(fp);
+    if (snap) {
       try {
-        if (fs.existsSync(fp) && await sameFileBytes(fp, bak)) {
+        if (current && current.equals(snap.buf)) {
           skipped.push(fp);
           continue;
         }
-        await fsp.copyFile(bak, fp);
-        await fsp.unlink(bak);
+        writeBufAtomic(fp, snap.buf);
+        writeOfficialSnapshot(fp, snap.buf);
         reverted.push(fp);
       } catch (e) {
         errors.push([fp, String(e)]);
       }
       continue;
     }
-    // 没有 bak 时绝不删除目标。源码部署的构建产物缺备份时，删了无法自愈（#41）。
-    if (fs.existsSync(fp)) skipped.push(fp);
+    // #106：没有官方快照时绝不删目标；有清洗痕迹则按补丁反拆。
+    if (current && current.includes(DSH_PURGE_MARKER_NEEDLE)) {
+      try {
+        const stripped = stripPurgePatchesFromText(current.toString("utf8"), fp);
+        if (stripped.changed) {
+          await saveText(fp, stripped.text);
+          reverted.push(fp);
+          continue;
+        }
+      } catch (e) {
+        errors.push([fp, String(e)]);
+        continue;
+      }
+    }
+    if (current) skipped.push(fp);
   }
   const dropped = await dropStaleUserProfilePatchBackups();
   return { reverted, skipped, preservedUser, dropped, errors };
@@ -7071,6 +7635,7 @@ export async function applyPatches(aiBase, patches = ALL_PATCHES, options = {}) 
           lastError = "read_error";
           continue;
         }
+        ensureOfficialSnapshot(fp);
         // 启动自愈才跳过。点应用/重启若也跳过，client.js 上的补丁会一直 pending，重启被取消。
         if (preserveClientBundles && isWatchedClientBundle(fp)) {
           if (filePatchSettled(text, p, fp)) already += 1;
@@ -7144,8 +7709,7 @@ export function patchWatchedClientBundlesSync(aiBase = findAiBase()) {
           const next = Buffer.from(appliedText.text, "utf8");
           const current = fs.readFileSync(fp);
           if (current.equals(next)) continue;
-          const bak = `${fp}.dshpurge.bak`;
-          if (!fs.existsSync(bak)) fs.copyFileSync(fp, bak);
+          ensureOfficialSnapshot(fp);
           fs.writeFileSync(fp, next);
           const packageName = clientBundlePackageName(fp);
           if (packageName && !written.includes(packageName)) written.push(packageName);
@@ -7204,11 +7768,16 @@ export async function patchStatus(aiBase, patches = ALL_PATCHES) {
 }
 
 export async function hasBackup(aiBase) {
-  const files = targetFiles(aiBase);
-  for (const fp of flattenTargetPaths(files)) {
-    if (isUserProfilePatchFile(fp)) continue;
-    if (fs.existsSync(fp + ".dshpurge.bak")) return true;
+  if (aiBase) {
+    for (const fp of flattenTargetPaths(targetFiles(aiBase))) {
+      if (isUserProfilePatchFile(fp)) continue;
+      if (readOfficialSnapshot(fp)) return true;
+    }
   }
+  try {
+    const names = fs.readdirSync(hostBakVaultRoot());
+    if (names.some((name) => /\.bak$/i.test(name))) return true;
+  } catch { /* 保险柜尚未建立 */ }
   return false;
 }
 
@@ -7669,10 +8238,12 @@ export async function writeOverrideState(dshHome, state) {
   await atomicWriteFile(fp, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
-export async function markOverrideCustomized(dshHome, customized, text) {
+export async function markOverrideCustomized(dshHome, customized, text, extra = {}) {
+  const isExplicit = extra.explicitSave === true;
   await writeOverrideState(dshHome, {
     customized: Boolean(customized),
-    hash: hashOverride(text ?? defaultOverrideText()),
+    explicitSave: isExplicit,
+    hash: isExplicit ? "" : hashOverride(text ?? defaultOverrideText()),
     seedHash: defaultOverrideHash(),
     updatedAt: new Date().toISOString(),
   });
@@ -7707,16 +8278,19 @@ export function looksLikePluginDefault(text) {
   return PLUGIN_DEFAULT_MARKS.every((mark) => n.includes(mark));
 }
 
-/** 框里/盘上这份是不是「用户另写的稿」。插件旧默认、当前槽、上次 seed 都算否。 */
+/** 点保存落下的原文必须保住。和当前加密槽不同的非空稿也保住，即使还带小码酱标记。 */
 export function isKeepableUserOverride(dshHome, text) {
   const incoming = normalizeOverride(text);
   if (!incoming) return false;
-  if (incoming === normalizeOverride(defaultOverrideText())) return false;
-  if (looksLikePluginDefault(text)) return false;
+  const bundled = normalizeOverride(defaultOverrideText());
+  if (incoming === bundled) return false;
   const state = readOverrideStateSync(dshHome);
+  // Older releases recorded a hash even for customized text. The explicit
+  // customization flag must take precedence over that ownership stamp.
+  if (state.explicitSave === true || state.customized === true) return true;
   const stamp = hashOverride(text);
   if (typeof state?.seedHash === "string" && state.seedHash === stamp) return false;
-  if (state.customized !== true && overrideTextIsOurs(state, text)) return false;
+  if (overrideTextIsOurs(state, text)) return false;
   return true;
 }
 
@@ -7761,8 +8335,8 @@ function writeOverrideStateSync(dshHome, state) {
 }
 
 /**
- * 组装/对话读的是磁盘 prompt-inject.md；设置框里的预览来自加密槽，点保存才 POST。
- * 缺文件或仍是插件落盘的旧默认时，静默同步当前槽到磁盘，避免「界面看着对、聊天却用旧稿/空稿」。
+ * 组装/对话读磁盘 prompt-inject.md。点保存落下的用户稿不覆盖。
+ * 缺文件或仍是插件自己落盘的旧默认时，才把当前槽同步上去。
  */
 export function syncPromptInjectOnDiskSync(dshHome) {
   const home = path.normalize(String(dshHome || findDshHome() || ""));
@@ -7784,6 +8358,7 @@ export function syncPromptInjectOnDiskSync(dshHome) {
     atomicWriteSync(fp, bundled, "utf8");
     writeOverrideStateSync(home, {
       customized: false,
+      explicitSave: false,
       hash: hashOverride(bundled),
       seedHash: defaultOverrideHash(),
       updatedAt: new Date().toISOString(),
@@ -7841,15 +8416,8 @@ export async function installOverride(dshHome, force = false) {
   // 用户正文（与内置不同、且不是我们上次写下去的那一份）一律保留，除非显式 force。
   // 必须先排掉「插件自己写的旧默认」：否则重新加密后会被误判成用户自改，
   // 还会被 markOverrideCustomized(true) 永久钉死，之后任何 Apply 都不再更新这个文件。
-  const state = await readOverrideState(dshHome);
-  if (
-    !force
-    && normalizeOverride(disk)
-    && hashOverride(disk) !== defaultOverrideHash()
-    && !overrideTextIsOurs(state, disk)
-    && !looksLikePluginDefault(disk)
-  ) {
-    await markOverrideCustomized(dshHome, true, disk);
+  if (!force && normalizeOverride(disk) && isKeepableUserOverride(dshHome, disk)) {
+    await markOverrideCustomized(dshHome, true, disk, { explicitSave: true });
     return "exists";
   }
   if (!force && await isUserCustomizedOverride(dshHome)) return "exists";
@@ -7870,9 +8438,21 @@ export async function installOverride(dshHome, force = false) {
 export async function commitOverrideOnApply(dshHome, incoming) {
   const home = path.normalize(String(dshHome || findDshHome() || ""));
   if (!home) return { action: "skip", reason: "no_home" };
-  if (isKeepableUserOverride(home, incoming)) {
-    const saved = await saveOverrideContent(home, incoming);
+  let effective = typeof incoming === "string" ? incoming : null;
+  if (effective === null) {
+    try { effective = readPromptInjectFileSync(home); } catch { effective = ""; }
+  }
+  if (typeof effective === "string" && normalizeOverride(effective) && isKeepableUserOverride(home, effective)) {
+    const saved = await saveOverrideContent(home, effective);
     return { ...saved, action: "saved_user" };
+  }
+  const diskRaw = readPromptInjectFileSync(home);
+  const diskNorm = normalizeOverride(diskRaw);
+  const bundledNorm = normalizeOverride(defaultOverrideText());
+  if (diskNorm && diskNorm !== bundledNorm) {
+    await markOverrideCustomized(home, true, diskRaw, { explicitSave: true });
+    rememberCommittedOverride(home, diskRaw);
+    return { action: "kept_user_custom", path: findOverrideFile(home), content: diskRaw };
   }
   const seed = seedPromptInjectAtBoot(home);
   try {
@@ -7884,8 +8464,6 @@ export async function commitOverrideOnApply(dshHome, incoming) {
 export async function saveOverrideContent(dshHome, content) {
   const bundled = defaultOverrideText();
   const incoming = typeof content === "string" ? content : "";
-  const customized = Boolean(normalizeOverride(incoming))
-    && normalizeOverride(incoming) !== normalizeOverride(bundled);
   const home = path.normalize(dshHome);
   const fp = findOverrideFile(home);
   await fsp.mkdir(home, { recursive: true });
@@ -7896,10 +8474,14 @@ export async function saveOverrideContent(dshHome, content) {
   } finally {
     await handle.close();
   }
+  // 没改框不必保存：启动/应用会把默认稿 seed 进 prompt-inject.md。
+  // 只有框里和默认不同才算用户稿；点保存才覆盖文件。
+  const customized = Boolean(normalizeOverride(incoming))
+    && normalizeOverride(incoming) !== normalizeOverride(bundled);
   rememberCommittedOverride(home, incoming);
   if (!String(process.env.DSH_HOME || "").trim()) process.env.DSH_HOME = home;
-  await markOverrideCustomized(home, customized, incoming);
-  return { path: fp, customized, content: incoming, defaultContent: bundled };
+  await markOverrideCustomized(home, customized, incoming, { explicitSave: true });
+  return { path: fp, customized, content: incoming, defaultContent: bundled, explicitSave: true };
 }
 
 export function editOverride(dshHome) {
@@ -8013,7 +8595,7 @@ export async function gatherState() {
     display_skipped: displayTally.skipped,
     display_ready: displayTally.ready,
     display_total: displayTally.total,
-    has_backup: aiBase ? await hasBackup(aiBase) : false,
+    has_backup: await hasBackup(aiBase),
     shim_cmd,
     shim_ps1,
     shim_bin,

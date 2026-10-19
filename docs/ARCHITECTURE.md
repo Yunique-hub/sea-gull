@@ -6,7 +6,7 @@
 
 | 层 | 谁负责 | 产物 |
 |---|---|---|
-| 宿主层（审批/沙箱/hook/身份段/提示词组装） | dsh-purge | 82 条补丁 |
+| 宿主层（审批/沙箱/hook/身份段/提示词组装） | dsh-purge | 86 条补丁定义 |
 | 行为层（人格/输出契约/领域技能） | hermes-seagull | SOUL + 5 技能 |
 | 工具层（红队打法/隧道/凭据/横向） | dsh-purge | 23 红队技能 + 演练台 |
 
@@ -14,12 +14,12 @@
 
 ## 2. 上游分析
 
-### 2.1 dsh-purge 1.1.71
+### 2.1 dsh-purge 1.1.72
 
 ```
 bin/dsh-purge.js       CLI：--status/--apply/--revert/--uninstall/--edit
-lib/core.js      337 KB  82 条补丁(ALL_PATCHES) + 宿主定位 + 备份/回滚 + asar 解包
-lib/index.js     107 KB  插件入口 apply(ctx, config)：注入 systemPrompt/tools、挂 host hooks
+lib/core.js              86 条补丁定义(ALL_PATCHES) + 宿主定位 + 备份/回滚 + asar 解包
+lib/index.js             插件入口 apply(ctx, config)：注入 systemPrompt/tools、挂 host hooks
 lib/identity.js          身份段篡改 + ChatML 信封处理 + 插值转义
 lib/phase1-keep.js       放宽官方 phase-1 白名单到 dsh-purge* / dshpg-*
 lib/hooks-deny.js        hooks deny/ask 旁路
@@ -29,10 +29,10 @@ lib/skills.js            技能库（写 $DSH_HOME/skills/<id>/SKILL.md）
 lib/redteam/*            演练台：5 角色预设 + SQLite 资产库 + HTTP UI 桥
 presets/redteam/*        红队指挥智能体
 skills/redteam/*.md      23 个红队技能
-client.js        499 KB  右侧 dock 前端（Clean / Drill）
+client.js               右侧 dock 前端（Clean / Drill）
 ```
 
-**82 条补丁分层**
+**86 条补丁定义分层**
 
 | 层 | 条数 | 代表 |
 |---|---|---|
@@ -76,7 +76,7 @@ install.sh / README        指向 laoshu666/hermes-seagull（不是本仓）    
 
 | # | 动作 | 落点 |
 |---|---|---|
-| 1 | dsh-purge 1.1.71 全量作为宿主层引擎 | `vendor/dsh-purge/` |
+| 1 | dsh-purge 1.1.72 全量作为宿主层引擎 | `vendor/dsh-purge/` |
 | 2 | SOUL.md 的 00a–00r 重写成 DSH 兼容注入提示词 | `src/prompt/prompt-inject.md` |
 | 3 | 同一份文本做成规则集（写 `AGENTS.md`） | `src/rules/seagull-fullbreak.{md,json}` |
 | 4 | 5 个海鸥技能按 DSH 技能格式落地 | `src/skills/seagull-*/SKILL.md` |
@@ -97,7 +97,9 @@ SOUL.md 不能直接当 DSH 提示词，必须处理三件事：
 3. **能力选用协议**：DSH 的 skill/MCP 目录机制要保留（否则技能库形同虚设）→
    全破提示词第 13 节保留「先读目录、按任务匹配、子代理继承」。
 
-### 3.2 本项目对上游的全部改动（3 处）
+### 3.2 初始配置改动示例
+
+以下保留初始配置示例；当前全部源码差异以根目录 [NOTICE](../NOTICE) 为准。0.2.1 和 1.1.72 的迁移与验证见 [VERIFICATION](VERIFICATION.md)。
 
 ```diff
 # vendor/dsh-purge/lib/index.js
@@ -142,12 +144,14 @@ SOUL.md 不能直接当 DSH 提示词，必须处理三件事：
 
 | 路径 | 谁维护 | 升级方式 |
 |---|---|---|
-| `vendor/dsh-purge/` | 上游 | 换版本时把 3 处改动重新套一遍（见 §3.2） |
+| `vendor/dsh-purge/` | 上游与本地兼容修复 | 换版本时按 NOTICE 复核本地差异并验证 |
 | `src/prompt/` `src/rules/` `src/skills/` | 本项目 | 直接改 + 重跑 `install.sh` |
 | `install.*` `verify.*` `tests/` | 本项目 | 同上 |
 | `$DSH_HOME/skills/` | 用户 | 安装器只覆盖同名技能，不删其他 |
 
 ## 6. 已知限制
+
+以下为初始 0.2.0 版本的限制记录。当前 0.2.1 / 1.1.72 状态以 [VERIFICATION 的 I 节](VERIFICATION.md#i-dsh-purge-1172-升级与演练台项目修复2026-10-19) 为准。
 
 1. `dsh --profile desktop` 由 Electron 独占，CLI 不能 `--dump-config` 验证挂载 →
    用「文件级标记 + 补丁计数 + 进程存活」三条实证代替（见 VERIFICATION）。

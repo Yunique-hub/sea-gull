@@ -24,6 +24,9 @@ _archive/
 
 # 嵌入前的提示词原文
 lib/default-prompt-inject.md
+lib/default-prompt-inject.md.bak
+lib/default-prompt-inject.zh.md
+lib/default-prompt-inject.en.md
 default-prompt-inject.md
 
 # 本机官方安装包、解包目录、拆出的压缩包

@@ -6,6 +6,7 @@
   patch_profile.py --remove <package.json> <dep_name>        # 移除
   patch_profile.py --check  <package.json> <dep_name>        # 只检查
   patch_profile.py --validate <package.json>                # 只校验结构
+  patch_profile.py --protect-prompt <DSH_HOME>               # 更新时保留现有提示词
 
 添加时只改两处，其余键与顺序全保留（幂等，先备份 .bak-seagull）：
   1. dependencies[<name>] = <spec>
@@ -58,7 +59,8 @@ def dump(fp: Path, data) -> None:
             output.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
             output.flush()
             os.fsync(output.fileno())
-        shutil.copymode(fp, temporary)
+        if fp.exists():
+            shutil.copymode(fp, temporary)
         os.replace(temporary, fp)
     finally:
         if temporary is not None and temporary.exists():
@@ -147,6 +149,22 @@ def main(argv: list[str]) -> int:
     if not argv:
         print(__doc__)
         return 2
+    if argv[0] == "--protect-prompt":
+        if len(argv) != 2:
+            return 2
+        home = Path(argv[1])
+        if not (home / "prompt-inject.md").is_file():
+            raise ValueError("没有可保留的提示词")
+        state_file = home / "dsh-purge" / "override-state.json"
+        state = json.loads(state_file.read_text(encoding="utf-8-sig")) if state_file.exists() else {}
+        if not isinstance(state, dict):
+            raise ValueError("提示词状态必须是对象")
+        state.update(customized=True, explicitSave=True, hash="", seedHash="")
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        if state_file.exists():
+            backup(state_file)
+        dump(state_file, state)
+        return 0
     if argv[0] == "--validate":
         if len(argv) != 2:
             return 2

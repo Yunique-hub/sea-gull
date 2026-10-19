@@ -8,7 +8,7 @@
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.0.4"
+VERSION="1.0.5"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
@@ -48,13 +48,14 @@ usage() {
   --no-pnpm                跳过 pnpm install（离线/已装过时用）
   --dry-run                只打印计划，不落盘
   --uninstall              卸载（还原 profile、删插件与注入文件，保留技能）
+  --update                 更新已安装海鸥，保留现有提示词及配置
   -q, --quiet              安静模式
   -h, --help               显示帮助
   -V, --version            显示版本
 EOF
 }
 
-PROFILE=""; DSH_HOME_ARG=""; APP_ROOT=""; DRY=0; NO_PNPM=0; APPLY=0; UNINSTALL=0
+PROFILE=""; DSH_HOME_ARG=""; APP_ROOT=""; DRY=0; NO_PNPM=0; APPLY=0; UNINSTALL=0; UPDATE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --profile)     PROFILE="${2:-}"; shift 2 ;;
@@ -64,12 +65,14 @@ while [ $# -gt 0 ]; do
     --no-pnpm)     NO_PNPM=1; shift ;;
     --dry-run)     DRY=1; shift ;;
     --uninstall)   UNINSTALL=1; shift ;;
+    --update)      UPDATE=1; shift ;;
     -q|--quiet)    QUIET=1; shift ;;
     -h|--help)     usage; exit 0 ;;
     -V|--version)  printf 'seagull-harness %s\n' "$VERSION"; exit 0 ;;
     *) die "未知参数: $1（-h 看帮助）" ;;
   esac
 done
+[ "$UPDATE" = 0 ] || [ "$UNINSTALL" = 0 ] || die "--update 和 --uninstall 不能同时使用"
 
 # ── 定位仓库内容（本地 checkout / pipe 模式自取 tarball）─────────────
 SELF="${BASH_SOURCE[0]:-}"
@@ -161,6 +164,9 @@ if [ -n "$APP_ROOT" ]; then
 fi
 
 PLUGIN_DIR="$DSH_HOME/plugins/$PLUGIN_ID"
+if [ "$UPDATE" = 1 ] && [ ! -f "$PLUGIN_DIR/package.json" ]; then
+  die "尚未安装海鸥，请先运行 install.sh"
+fi
 SRC_PLUGIN="$ROOT/vendor/$PLUGIN_ID"
 
 say ""
@@ -266,7 +272,12 @@ fi
 step "落地提示词 / 规则集 / 技能"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 put() { if [ -e "$2" ]; then cp -r "$2" "$2.bak-$STAMP"; fi; cp -r "$1" "$2"; }
-put "$ROOT/src/prompt/prompt-inject.md" "$DSH_HOME/prompt-inject.md"
+if [ "$UPDATE" = 1 ] && [ -s "$DSH_HOME/prompt-inject.md" ]; then
+  "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --protect-prompt "$(winpath "$DSH_HOME")" || die "提示词保护失败，已停止更新"
+  ok "已保留现有提示词"
+else
+  put "$ROOT/src/prompt/prompt-inject.md" "$DSH_HOME/prompt-inject.md"
+fi
 mkdir -p "$DSH_HOME/rules"
 cp "$ROOT/src/rules/seagull-fullbreak.md"   "$DSH_HOME/rules/seagull-fullbreak.md"
 cp "$ROOT/src/rules/seagull-fullbreak.json" "$DSH_HOME/rules/seagull-fullbreak.json"

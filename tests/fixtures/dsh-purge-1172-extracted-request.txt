@@ -1,0 +1,35 @@
+		const boundaryMessages = session.deriveMessages(); // [dsh-purge-89] system field extract
+		const systemParts = [];
+		const nonSystemMessages = [];
+		for (const message of boundaryMessages) {
+			if (message && message.role === "system") {
+				const content = message.content;
+				if (Array.isArray(content)) {
+					for (const block of content) {
+						if (block && block.type === "text" && typeof block.text === "string" && block.text.length > 0) {
+							systemParts.push(block.text);
+						}
+					}
+				} else if (typeof content === "string" && content.length > 0) {
+					systemParts.push(content);
+				}
+			} else {
+				nonSystemMessages.push(message);
+			}
+		}
+		const systemField = systemParts.length > 0 ? systemParts.join("\n\n") : void 0;
+		for (const message of nonSystemMessages) {
+			if (this.frozenMessages.has(message)) continue;
+			deepFreeze(message);
+			this.frozenMessages.add(message);
+		}
+		Object.freeze(nonSystemMessages);
+		return markAgentLoopRequest(Object.freeze({
+			...header.config,
+			...systemField !== void 0 ? { system: systemField } : {},
+			messages: nonSystemMessages,
+			toolHistory: session.toolHistory(),
+			...header.tools !== void 0 ? { tools: header.tools } : {},
+			sessionId: this.session.id,
+			signal
+		}));

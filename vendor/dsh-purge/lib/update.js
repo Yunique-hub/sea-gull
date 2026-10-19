@@ -27,6 +27,7 @@ const COPY_NAMES = [
   "package.json",
   "README.md",
   "README.zh-CN.md",
+  "README.en.md",
   "LICENSE",
 ];
 

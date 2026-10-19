@@ -94,34 +94,6 @@ function isRoundPromptEvent(event) {
 }
 
 /** 最近一轮已经 turn/end 的边界。用 turn 窗口找提示，避免第二轮完成却退回第一句。 */
-function lastClosedTurnBounds(events) {
-  const list = asEventList(events);
-  let endIdx = -1;
-  for (let i = list.length - 1; i >= 0; i -= 1) {
-    if (list[i]?.type === "turn/end") {
-      endIdx = i;
-      break;
-    }
-  }
-  if (endIdx < 0) return null;
-  const endEvent = list[endIdx];
-  const endSeq = Number(endEvent.seq);
-  const turnNum = endEvent.data?.turn;
-  let floorSeq = -1;
-  for (let i = 0; i < endIdx; i += 1) {
-    if (list[i]?.type === "turn/end") floorSeq = Math.max(floorSeq, Number(list[i].seq));
-  }
-  let startSeq = -1;
-  if (turnNum != null) {
-    for (const e of list) {
-      if (e?.type !== "turn/start" || e.data?.turn !== turnNum) continue;
-      const seq = Number(e.seq);
-      if (seq <= endSeq && seq > floorSeq) startSeq = seq;
-    }
-  }
-  return { turn: turnNum, startSeq, endSeq, floorSeq };
-}
-
 function eventsInOrder(events) {
   return asEventList(events)
     .map((event, index) => ({ event, seq: Number.isFinite(Number(event?.seq)) ? Number(event.seq) : index }))
@@ -195,49 +167,107 @@ export function lastTurnSubagentIds(events, fromSeq = -1) {
   return ids;
 }
 
-export function planRewind(events) {
-  const ordered = eventsInOrder(events);
-  const bounds = lastClosedTurnBounds(events);
-  let candidates = ordered.filter((row) => isRoundPromptEvent(row.event));
-  if (bounds) {
-    candidates = candidates.filter((row) => row.seq > bounds.floorSeq && row.seq <= bounds.endSeq);
+function seqBefore(events, cutSeq) {
+  const floor = Number(cutSeq);
+  let prev = null;
+  for (const row of eventsInOrder(events)) {
+    if (!Number.isFinite(row.seq)) continue;
+    if (Number.isFinite(floor) && row.seq >= floor) break;
+    prev = row;
   }
-  const last = candidates.at(-1);
-  if (!last) {
-    return { ok: false, error: "没有可回退的上一句" };
-  }
-  const fromSeq = bounds && bounds.startSeq >= 0 ? bounds.startSeq : last.seq;
-  return {
-    ok: true,
-    mode: "input",
-    text: userTextFromEvent(last.event),
-    fromSeq,
-  };
+  return prev && Number.isFinite(prev.seq) ? prev.seq : null;
 }
 
-/** 回退标记只占表面位置，不能再进下一轮模型请求。 */
-export function isRewindDerivedMessage(message) {
-  if (!message) return true;
-  const id = message.id;
-  return typeof id === "string" && id.startsWith("rewind-");
+function lastEventOfType(events, type) {
+  const list = asEventList(events);
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i]?.type === type) return list[i];
+  }
+  return null;
 }
 
-/** 只拿掉 fromSeq 及之后的表面节点。系统提示停在节点 0 时不动它。前面连续的回退空标记一并清掉，避免下一次发送还带着上一轮。 */
-export function cutSurfaceNodes(nodes, fromSeq, eventAt) {
-  const list = (Array.isArray(nodes) ? nodes : []).map((seq) => Number(seq));
+function userTextFromRange(events, fromSeq) {
+  const list = asEventList(events);
   const floor = Number(fromSeq);
-  let startIdx = list.findIndex((seq) => Number.isFinite(floor) ? seq >= floor : true);
-  if (startIdx < 0) return [];
-  const lookup = typeof eventAt === "function" ? eventAt : () => null;
-  if (startIdx === 0 && lookup(list[0])?.type === "system/message") startIdx = 1;
-  while (startIdx > 0) {
-    const prev = lookup(list[startIdx - 1]);
-    if (!prev || prev.type === "system/message" || !isRewindMarkerEvent(prev)) break;
-    startIdx -= 1;
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const event = list[i];
+    const seq = Number(event?.seq);
+    if (Number.isFinite(floor) && Number.isFinite(seq) && seq < floor) break;
+    if (isRoundPromptEvent(event)) return userTextFromEvent(event);
   }
-  if (startIdx === 0 && lookup(list[0])?.type === "system/message") startIdx = 1;
-  if (startIdx >= list.length) return [];
-  return list.slice(startIdx);
+  return "";
+}
+
+function isFirstStepOfTurn(events, start) {
+  if (!start) return true;
+  const turn = start.data?.turn;
+  const startSeq = Number(start.seq);
+  return !asEventList(events).some((event) => (
+    event?.type === "step/start"
+    && event !== start
+    && Number(event.seq) < startSeq
+    && (turn == null || event.data?.turn === turn)
+  ));
+}
+
+function turnStartFor(events, turn, beforeSeq) {
+  const limit = Number(beforeSeq);
+  let found = null;
+  for (const event of asEventList(events)) {
+    const seq = Number(event?.seq);
+    if (Number.isFinite(limit) && Number.isFinite(seq) && seq > limit) break;
+    if (event?.type === "turn/start" && (turn == null || event.data?.turn === turn)) found = event;
+  }
+  return found;
+}
+
+/** once = 撤最后一步；round = 撤最后一整轮。fork 的 atSeq 含这一条，之后的消息都不要。 */
+export function planRewind(events, mode = "once") {
+  return mode === "round" ? planRewindTurn(events) : planRewindStep(events);
+}
+
+function planRewindStep(events) {
+  const start = lastEventOfType(events, "step/start");
+  if (!start) return planRewindTurn(events);
+  const turn = start.data?.turn;
+  const step = start.data?.step;
+  let cutSeq = Number(start.seq);
+  if (isFirstStepOfTurn(events, start)) {
+    const turnStart = turnStartFor(events, turn, start.seq);
+    if (turnStart && Number.isFinite(Number(turnStart.seq))) cutSeq = Number(turnStart.seq);
+  }
+  const text = userTextFromRange(events, cutSeq);
+  const atSeq = seqBefore(events, cutSeq);
+  if (atSeq == null) {
+    if (!text) return { ok: false, error: "没有可回退的上一句" };
+    return { ok: true, mode: "blank", text, unit: "step", turn, step, fromSeq: cutSeq };
+  }
+  return { ok: true, mode: "fork", atSeq, text, unit: "step", turn, step, fromSeq: cutSeq };
+}
+
+function planRewindTurn(events) {
+  const list = asEventList(events);
+  const open = lastOpenTurn(list);
+  let turnStart = open;
+  if (!turnStart) {
+    const ended = lastEventOfType(list, "turn/end");
+    if (ended) turnStart = turnStartFor(list, ended.data?.turn, ended.seq) || ended;
+  }
+  if (!turnStart) {
+    const lastUser = [...list].reverse().find((event) => isRoundPromptEvent(event));
+    if (!lastUser) return { ok: false, error: "没有可回退的上一句" };
+    const cutSeq = Number(lastUser.seq);
+    const text = userTextFromEvent(lastUser);
+    const atSeq = seqBefore(list, cutSeq);
+    if (atSeq == null) return { ok: true, mode: "blank", text, unit: "turn", fromSeq: cutSeq };
+    return { ok: true, mode: "fork", atSeq, text, unit: "turn", fromSeq: cutSeq };
+  }
+  const cutSeq = Number(turnStart.seq);
+  const text = userTextFromRange(list, cutSeq);
+  const atSeq = seqBefore(list, cutSeq);
+  if (!text && atSeq == null) return { ok: false, error: "没有可回退的上一句" };
+  if (atSeq == null) return { ok: true, mode: "blank", text, unit: "turn", fromSeq: cutSeq };
+  return { ok: true, mode: "fork", atSeq, text, unit: "turn", fromSeq: cutSeq };
 }
 
 function rememberDraft(sessionId, text, parentId) {
@@ -377,35 +407,16 @@ function resetRequestSeries(ctx, sessionId) {
   try { agent.frozenMessages?.clear?.(); } catch { /* ignore */ }
 }
 
-/** surface replace 后强制丢掉 derive 缓存，避免仍带着被切掉的旧消息。 */
-function invalidateDerivedCache(session) {
-  if (!session) return;
-  try { session.derived = []; } catch { /* ignore */ }
-  try { session.derivedNodes = 0; } catch { /* ignore */ }
-  try { session.derivedGeneration = -1; } catch { /* ignore */ }
-}
-
-export function wrapSessionDeriveMessages(session) {
-  if (!session || typeof session.deriveMessages !== "function" || session.__dshPurgeRewindDerive) return session;
-  const orig = session.deriveMessages.bind(session);
-  session.deriveMessages = function deriveMessagesWithoutRewind() {
-    // 抛错不能改成空数组。空历史仍会发出请求，界面停在进行中，模型没有可答的内容。
-    const messages = orig();
-    if (!Array.isArray(messages)) return [];
-    return messages.filter((message) => !isRewindDerivedMessage(message));
-  };
-  session.__dshPurgeRewindDerive = true;
-  return session;
-}
-
-async function disarmRewoundSession(ctx, sessionId) {
+async function disarmRewoundSession(ctx, sessionId, options = {}) {
   if (!sessionId) return;
   const controller = service(ctx, "sessionController");
   const agent = getAgent(ctx, sessionId);
-  // 只停回退开始时还在跑的那一轮。延迟再 cancel 会把用户刚发出的下一句一起掐掉，界面停在进行中，请求发不出去。
-  const runningAbort = agent?.phase?.kind && agent.phase.kind !== "idle" ? agent.phase.abort : null;
-  if (runningAbort) {
-    try { ignoreSettled(agent.cancel({ kind: "user" }, { keepInbox: true })); } catch { /* ignore */ }
+  // 只清 inbox。fork 出的新会话不要 cancel：abort 后再发会走官方 wakingAfterAbort，等于误唤醒。
+  if (options.cancel !== false) {
+    const runningAbort = agent?.phase?.kind && agent.phase.kind !== "idle" ? agent.phase.abort : null;
+    if (runningAbort) {
+      try { ignoreSettled(agent.cancel({ kind: "user" }, { keepInbox: true })); } catch { /* ignore */ }
+    }
   }
 
   const ids = [];
@@ -465,110 +476,99 @@ function liveSession(ctx, sessionId) {
   }
 }
 
-function flatMessageText(message) {
-  const content = message?.content;
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content.map((block) => {
-    if (!block) return "";
-    if (typeof block === "string") return block;
-    return typeof block.text === "string" ? block.text : "";
-  }).join("");
+async function createBlank(ctx, controller, sourceId, cwd) {
+  const workspace = findWorkspace(ctx, sourceId, cwd);
+  if (workspace?.id) return controller.create({ workspaceId: workspace.id });
+  if (cwd) return controller.create({ cwd });
+  return controller.create({});
 }
 
-function derivedStillContains(session, text) {
-  const needle = String(text || "").trim();
-  if (!needle || typeof session?.deriveMessages !== "function") return false;
-  let messages = [];
-  try {
-    messages = session.deriveMessages();
-  } catch {
-    return false;
-  }
-  if (!Array.isArray(messages)) return false;
-  for (const message of messages) {
-    if (!message || message.role === "system" || isRewindDerivedMessage(message)) continue;
-    if (flatMessageText(message).includes(needle)) return true;
-  }
-  return false;
+function findWorkspace(ctx, sessionId, cwd) {
+  const registry = service(ctx, "workspaceRegistry");
+  const list = registry?.list?.() || [];
+  return list.find((workspace) => (workspace?.sessionIds || []).includes(sessionId))
+    || (cwd ? list.find((workspace) => workspace?.path === cwd) : undefined);
 }
 
-/** 留在当前会话，不另开会话、不开分支。把 fromSeq 起已发送的消息从模型请求里拿掉。 */
-function clearModelHistory(session, text, fromSeq = 0) {
-  if (!session || typeof session.append !== "function" || !session.surface) {
-    throw new Error("没有清掉之前发送的内容");
+async function hideRewoundSource(ctx, sessionId) {
+  if (!sessionId) return false;
+  const registry = service(ctx, "workspaceRegistry");
+  const workspaces = service(ctx, "workspaces");
+  const target = typeof registry?.archiveSession === "function"
+    ? registry
+    : (typeof workspaces?.archiveSession === "function" ? workspaces : null);
+  let hidden = false;
+  if (target) {
+    await target.archiveSession(sessionId, { stopActivity: true });
+    hidden = true;
   }
-  const nodes = session.surface.nodes;
-  if (!Array.isArray(nodes) || nodes.length === 0) {
-    if (derivedStillContains(session, text)) {
-      throw new Error("没有清掉之前发送的内容");
-    }
-    return true;
+  const listed = findWorkspace(ctx, sessionId);
+  const entity = listed?.id && typeof registry?.get === "function" ? registry.get(listed.id) : null;
+  if (entity && typeof entity.detachSession === "function") {
+    await entity.detachSession(sessionId);
+    hidden = true;
   }
-  const events = asEventList(typeof session.snapshotEvents === "function" ? session.snapshotEvents() : []);
-  const eventAt = (seq) => events.find((event) => event?.seq === seq) || session.eventAt?.(seq);
-  const shadowed = cutSurfaceNodes(nodes, fromSeq, eventAt);
-  if (shadowed.length === 0) {
-    if (derivedStillContains(session, text)) {
-      throw new Error("没有清掉之前发送的内容");
-    }
-    return true;
-  }
-  const startSeq = shadowed[0];
-  const endSeq = shadowed[shadowed.length - 1];
-  if (!Number.isSafeInteger(startSeq) || !Number.isSafeInteger(endSeq)) {
-    throw new Error("没有清掉之前发送的内容");
-  }
-  session.append("user/message", {
-    id: `rewind-${Date.now().toString(36)}-${shadowed.length}`,
-    role: "user",
-    source: { kind: "user" },
-    content: [],
-  }, {
-    surfaceOp: { op: "replace", startSeq, endSeq },
-    sourceEventSeqs: shadowed,
-  });
-  invalidateDerivedCache(session);
-  const left = new Set((session.surface.nodes || []).map((seq) => Number(seq)));
-  if (shadowed.some((seq) => left.has(seq))) {
-    throw new Error("没有清掉之前发送的内容");
-  }
-  if (derivedStillContains(session, text)) {
-    throw new Error("没有清掉之前发送的内容");
-  }
-  return true;
+  return hidden;
 }
 
 const rewindLocks = new Map();
 
+/** 官方 fork 要求 events[atSeq].seq === atSeq（从 0 起连续）。 */
+function officialForkBoundary(events, atSeq) {
+  const list = asEventList(events);
+  let n = Number(atSeq);
+  if (!Number.isSafeInteger(n) || n < 0) return null;
+  while (n >= 0) {
+    if (list[n]?.seq === n) return n;
+    n -= 1;
+  }
+  return null;
+}
+
+function prepareForkedChild(ctx, childId) {
+  resetRequestSeries(ctx, childId);
+  return liveSession(ctx, childId);
+}
+
 async function doRewindOneSession(ctx, controller, sessionId, options = {}) {
+  if (!controller || typeof controller.fork !== "function" || typeof controller.create !== "function") {
+    return { ok: false, error: "当前 dsh 没有会话回退接口" };
+  }
   let log = await readSessionLog(ctx, sessionId);
   if (lastOpenTurn(log.events)) {
     try { ignoreSettled(controller.cancel?.({ sessionId })); } catch { /* ignore */ }
     log = await waitTurnClosed(ctx, sessionId);
   }
-  const plan = planRewind(log.events);
+  const plan = planRewind(log.events, options.mode === "round" ? "round" : "once");
   if (!plan.ok) return plan;
 
-  await disarmRewoundSession(ctx, sessionId);
-  const session = wrapSessionDeriveMessages(liveSession(ctx, sessionId));
-  let cleared = false;
-  try {
-    cleared = clearModelHistory(session, plan.text, plan.fromSeq);
-  } catch (err) {
-    return { ok: false, error: errorText(err) };
+  let created;
+  if (plan.mode === "fork") {
+    const atSeq = officialForkBoundary(log.events, plan.atSeq);
+    if (atSeq == null) return { ok: false, error: "没有可回退的上一句" };
+    created = await controller.fork({ sessionId, atSeq });
+  } else {
+    created = await createBlank(ctx, controller, sessionId, log.cwd);
   }
-  resetRequestSeries(ctx, sessionId);
+  const childId = created?.sessionId || (typeof created === "string" ? created : "");
+  if (!childId) return { ok: false, error: "回退会话创建失败" };
 
-  const rec = rememberDraft(sessionId, plan.text, sessionId);
+  prepareForkedChild(ctx, childId);
+  await disarmRewoundSession(ctx, childId, { cancel: false });
+  let archived = false;
+  try {
+    archived = await hideRewoundSource(ctx, sessionId);
+  } catch { /* 旧会话没藏住也不挡新会话重发 */ }
+
+  const rec = rememberDraft(childId, plan.text, sessionId);
   return {
     ok: true,
-    sessionId,
+    sessionId: childId,
     parentId: sessionId,
-    archived: false,
-    cleared,
+    archived,
+    cleared: true,
     text: rec.text,
-    cut: plan.mode,
+    cut: plan.unit || plan.mode,
     at: rec.at,
   };
 }
@@ -623,20 +623,19 @@ export async function applyRewind(ctx, sessionId, mode) {
       if (sessionId !== target.sessionId) {
         try { ignoreSettled(controller.cancel?.({ sessionId })); } catch { /* ignore */ }
       }
-      const preview = planRewind(target.log?.events || []);
+      const preview = planRewind(target.log?.events || [], "round");
       const children = preview.ok ? lastTurnSubagentIds(target.log.events, preview.fromSeq) : [];
-      const result = await rewindOneSession(ctx, controller, target.sessionId);
+      const result = await rewindOneSession(ctx, controller, target.sessionId, { mode: "round" });
       if (!result.ok) return result;
       for (const childId of children) {
         if (!childId || childId === target.sessionId) continue;
-        if (!liveSession(ctx, childId)) continue;
-        const child = await rewindOneSession(ctx, controller, childId);
-        if (!child.ok) return child;
+        try { ignoreSettled(controller.cancel?.({ sessionId: childId })); } catch { /* ignore */ }
+        try { await hideRewoundSource(ctx, childId); } catch { /* ignore */ }
       }
       return { ...result, sourceId: sessionId, mode: "round" };
     }
 
-    const result = await rewindOneSession(ctx, controller, sessionId);
+    const result = await rewindOneSession(ctx, controller, sessionId, { mode: "once" });
     if (!result.ok) return result;
     return { ...result, sourceId: sessionId, mode: "once" };
   } catch (err) {

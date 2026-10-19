@@ -1,32 +1,10 @@
 # 上游署名 / Upstream attribution
 
-本目录是 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的快照。
+本目录基于 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)，作者：小杨（YuJunZhiXue）。
 
-- 版本：1.1.71（master 分支，2026-10-12）
-- 作者：小杨（YuJunZhiXue）
-- 许可：MIT，Copyright (c) 2026 小杨 —— 全文见同目录 `LICENSE`
+- 包版本：1.1.72，目标 Harness：0.2.1-rc.2。
+- 固定 master 提交：[`ec691667`](https://github.com/YuJunZhiXue/dsh-purge/tree/ec69166706bed95efb6c35e225b01588f3cd9b72)。
+- 2026-10-19 核验快照的 118 个 Git blob。核对时最新 Release 仍为 1.1.71。
+- 原许可和署名见同目录 LICENSE，原文保留。
 
-## 本仓库对它的全部改动（仅 3 处）
-
-1. `lib/index.js` — `DEFAULTS` 新增 `regionGate: true`
-2. `lib/index.js` — `applyHostHooks()` 中 `installRegionGate(ctx)` 改为
-   `if (cfg.regionGate !== false) installRegionGate(ctx);`
-3. `cordis.patch.yml` — 增加 `regionGate: false`，`autoApplyOnStart` 改为 `true`
-
-其余文件与上游逐字节一致。
-
-## 上游的使用条款声明
-
-上游 README 写明：非营利公开项目，禁止商业销售、付费转售、以及从非法或灰产活动中获利；
-**二开必须署名并指明来源仓库**。
-
-MIT 许可本身允许商用与再分发，但本仓库尊重上游意愿，按**非营利**项目分发，
-并在根目录 `NOTICE`、`README`、`SECURITY.md` 中保留完整署名。
-
-若你要商业使用本目录下的代码，请先联系上游作者取得明确同意。
-
-## 上游已知状态
-
-上游 README 声明「维护暂停」（作者无稳定收入，暂停更新，不接 issue/PR）。
-本项目按 1.1.71 快照固定；上游恢复维护或 dsh 升级导致锚点不匹配时，
-未匹配的补丁会显示 skipped / pending，不会盲写。
+海鸥的人格、配置、即时插话、更新保护及兼容性修复继续保留。本地新增、修改及省略附属文件的完整清单见根目录 [NOTICE](../../NOTICE)；验证范围见 [VERIFICATION](../../docs/VERIFICATION.md)。升级时按实际差异复核并运行回归。

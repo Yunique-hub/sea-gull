@@ -237,22 +237,22 @@ export async function setActive(dshHome, id) {
 }
 
 /**
- * 本进程框内提交 > $DSH_HOME/prompt-inject.md > 加密槽。
- * 规则集只改 agents 目标文件，不参与 system 注入链（#74 磁盘与 UI/注入一致）。
+ * $DSH_HOME/prompt-inject.md（点保存覆盖的那份）> 本进程未落盘的框 > 加密槽。
+ * 规则集只改 agents 目标文件，不参与 system 注入链。
  */
 export function resolveInjectText(dshHome) {
   const home = path.normalize(String(dshHome || findDshHome() || ""));
+  const disk = readPromptInjectFileSync(home);
+  if (normalizeOverride(disk)) {
+    const source = hashOverride(disk) === defaultOverrideHash() ? "default" : "prompt";
+    return { text: disk, source, ruleId: null };
+  }
   const pinned = peekCommittedOverride(home);
   if (typeof pinned === "string" && normalizeOverride(pinned)) {
-    return { text: normalizeOverride(pinned), source: "prompt", ruleId: null };
+    return { text: String(pinned).replace(/\r\n/g, "\n"), source: "prompt", ruleId: null };
   }
-  const diskNorm = normalizeOverride(readPromptInjectFileSync(home));
-  if (diskNorm) {
-    const source = hashOverride(diskNorm) === defaultOverrideHash() ? "default" : "prompt";
-    return { text: diskNorm, source, ruleId: null };
-  }
-  const bundled = normalizeOverride(defaultOverrideText());
-  if (bundled) return { text: bundled, source: "default", ruleId: null };
+  const bundled = defaultOverrideText();
+  if (normalizeOverride(bundled)) return { text: bundled, source: "default", ruleId: null };
   return { text: "", source: "none", ruleId: null };
 }
 

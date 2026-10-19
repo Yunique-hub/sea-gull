@@ -746,11 +746,11 @@ export function dispatch(store, req = {}) {
       const active = typeof store.activeEngagementId === 'function' ? store.activeEngagementId() : undefined
       return {
         ok: true, root: store.root, engagements,
-        current: req.engagement || active || (engagements[0] && engagements[0].id) || null,
+        current: engagements.some(row => row.id === req.engagement) ? req.engagement : active || (engagements[0] && engagements[0].id) || null,
       }
     }
     if (op === 'openEngagement') {
-      return { ok: true, engagement: store.openEngagement(req.name, req.scope) }
+      return { ok: true, engagement: store.openEngagement(req.name, req.scope, { createOnly: req.createOnly === true }) }
     }
     if (op === 'activateEngagement') {
       const activated = store.setActiveEngagement(req.engagement)
@@ -1020,7 +1020,13 @@ export class RedteamStore {
    *   让某个会话 open 一个靶标就改掉全局指针，是"报告被写串"的直接原因。
    */
   openEngagement(name, scope, options = {}) {
+    if (typeof name !== 'string' || !name.trim() || name.trim().length > 100 || /[\x00-\x1f]/.test(name)) {
+      throw new Error('项目名称不能为空，长度不能超过 100 个字符')
+    }
+    name = name.trim()
     const id = slugify(name)
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(id)) throw new Error('请换一个项目名称')
+    if (options.createOnly === true && existsSync(this.dirOf(id))) throw new Error('项目已存在，请从列表选择或使用其他名称')
     mkdirSync(this.dirOf(id), { recursive: true })
     for (const sub of ['agents', 'runs', 'reports']) mkdirSync(join(this.dirOf(id), sub), { recursive: true })
     const existing = readMeta(this.metaPathOf(id))

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { hashOverride, seedPromptInjectAtBoot } from '../vendor/dsh-purge/lib/core.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const windows = process.platform === 'win32';
@@ -49,7 +50,7 @@ if (!process.exitCode && !process.env.TEST_NO_LINK) {
   const run = (options = {}, env = {}) => {
     const values = { 'dsh-home': home, 'app-root': app, profile: 'desktop', ...options };
     const args = shell === 'bash' ? [path.join(repo, 'install.sh')] : ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(repo, 'install.ps1')];
-    const psNames = { 'dsh-home': 'DshHome', 'app-root': 'AppRoot', profile: 'Profile', 'no-pnpm': 'NoPnpm', 'dry-run': 'DryRun', apply: 'Apply', uninstall: 'Uninstall' };
+    const psNames = { 'dsh-home': 'DshHome', 'app-root': 'AppRoot', profile: 'Profile', 'no-pnpm': 'NoPnpm', 'dry-run': 'DryRun', apply: 'Apply', uninstall: 'Uninstall', update: 'Update' };
     for (const [key, value] of Object.entries(values)) {
       if (value === false) continue;
       args.push(shell === 'bash' ? '--' + key : '-' + psNames[key]);
@@ -64,6 +65,52 @@ if (!process.exitCode && !process.env.TEST_NO_LINK) {
 }
 
 for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
+  test(shell + ' update refreshes plugin files while preserving persona, preferences, projects and extra skills', t => {
+    const f = fixture(t, shell);
+    const installed = f.run();
+    assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+    const persona = '用户定制海鸥人格\n';
+    write(path.join(f.home, 'prompt-inject.md'), persona);
+    write(path.join(f.home, 'dsh-purge/override-state.json'), JSON.stringify({ customized: false, hash: hashOverride(persona) }));
+    const protectedFiles = {
+      'profiles/desktop/cordis.patch.yml': '- id: ui-conversation\n  config:\n    busyEnter: steer\n',
+      'redteam/engagements/local-project/meta.json': '{"name":"local-project"}',
+      'skills/my-own-skill/SKILL.md': 'my own skill',
+    };
+    for (const [file, text] of Object.entries(protectedFiles)) write(path.join(f.home, file), text);
+    write(path.join(f.repo, 'vendor/dsh-purge/lib/index.js'), '// updated plugin\nexport {};');
+    for (let n = 0; n < 2; n++) {
+      const updated = f.run({ update: true });
+      assert.equal(updated.status, 0, updated.stdout + updated.stderr);
+      assert.match(fs.readFileSync(path.join(f.home, 'plugins/dsh-purge/lib/index.js'), 'utf8'), /updated plugin/);
+      assert.equal(seedPromptInjectAtBoot(f.home).action, 'kept_user_custom');
+      assert.equal(fs.readFileSync(path.join(f.home, 'prompt-inject.md'), 'utf8'), persona);
+      for (const [file, text] of Object.entries(protectedFiles)) assert.equal(fs.readFileSync(path.join(f.home, file), 'utf8'), text);
+      const pkg = JSON.parse(fs.readFileSync(f.profile, 'utf8'));
+      assert.equal(pkg.dsh.profile.bundles.filter(id => id === 'dsh-purge').length, 1);
+    }
+  });
+
+  test(shell + ' update rejects an uninstalled home before writes', t => {
+    const f = fixture(t, shell);
+    const updated = f.run({ update: true });
+    assert.notEqual(updated.status, 0);
+    assert.equal(fs.readFileSync(f.profile, 'utf8'), f.original);
+    assert.equal(fs.existsSync(path.join(f.home, 'plugins')), false);
+  });
+
+  test(shell + ' update rejects uninstall mode and reports dependency failures', t => {
+    const f = fixture(t, shell);
+    assert.equal(f.run().status, 0);
+    const before = fs.readFileSync(f.profile, 'utf8');
+    assert.notEqual(f.run({ update: true, uninstall: true }).status, 0);
+    assert.equal(fs.readFileSync(f.profile, 'utf8'), before);
+    write(path.join(f.home, 'prompt-inject.md'), 'preserve on failure');
+    const failed = f.run({ update: true }, { TEST_PNPM_FAIL: '17' });
+    assert.notEqual(failed.status, 0);
+    assert.equal(fs.readFileSync(path.join(f.home, 'prompt-inject.md'), 'utf8'), 'preserve on failure');
+  });
+
   test(shell + ' rejects a missing explicit home instead of using another profile', (t) => {
     const f = fixture(t, shell);
     const result = f.run({ 'dsh-home': path.join(f.temp, 'missing'), 'no-pnpm': true });

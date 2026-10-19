@@ -163,3 +163,12 @@ mv "$APP_ROOT/resources/app.asar.sealed.bak" "$APP_ROOT/resources/app.asar"
 | Windows 桌面版 | ✅ | ✅ | 需要 `taskkill` 或托盘退出才能挪 asar |
 | macOS 桌面版 | ✅ | ✅ | 路径在 `DeepSeek Harness.app/Contents/Resources` |
 | `dsh web`（任意平台） | ❌ | 视安装方式 | 直接 `--apply`，不需要挪 asar |
+
+
+## 一键更新（1.0.5 起）
+
+Windows：`irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 | iex`。
+
+Bash：`curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh | bash`。
+
+先结束任务并完全退出 Harness；更新成功后重新打开，按输出检查 Apply。每次下载最新 main，保留已保存提示词和用户数据，更新内置规则与技能。自定义 DSH 主目录、profile 或安装目录可下载 update.ps1 后使用 `-DshHome` / `-Profile` / `-AppRoot`，或在 Bash 管道后使用 `bash -s -- --dsh-home 路径 --profile desktop`。`install.ps1 -Update` / `install.sh --update` 则只使用当前本地源码。

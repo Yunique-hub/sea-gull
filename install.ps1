@@ -12,11 +12,13 @@ param(
   [switch]$NoPnpm,
   [switch]$DryRun,
   [switch]$Uninstall,
+  [switch]$Update,
   [switch]$Quiet
 )
 
 $ErrorActionPreference = "Stop"
-$VERSION = "1.0.4"
+if ($Update -and $Uninstall) { throw "-Update 和 -Uninstall 不能同时使用" }
+$VERSION = "1.0.5"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -91,6 +93,9 @@ if ($AppRoot) {
 
 $PlugDir = Join-Path $DH "plugins\$PluginId"
 $SrcPlugin = Join-Path $Here "vendor\$PluginId"
+if ($Update -and -not (Test-Path -LiteralPath (Join-Path $PlugDir 'package.json') -PathType Leaf)) {
+  Die "尚未安装海鸥，请先运行 install.ps1"
+}
 
 if ($DryRun) {
   Say ""
@@ -193,8 +198,14 @@ if (-not $NoPnpm -and $Node -and $Pnpm) {
 Step "落地提示词 / 规则集 / 技能"
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $pi = Join-Path $DH "prompt-inject.md"
-if (Test-Path $pi) { Copy-Item $pi "$pi.bak-$stamp" -Force }
-Copy-Item (Join-Path $Here "src\prompt\prompt-inject.md") $pi -Force
+if ($Update -and (Test-Path -LiteralPath $pi) -and (Get-Item -LiteralPath $pi).Length -gt 0) {
+  & $Py (Join-Path $Here "src\tools\patch_profile.py") --protect-prompt $DH
+  if ($LASTEXITCODE -ne 0) { Die "提示词保护失败，已停止更新" }
+  Ok "已保留现有提示词"
+} else {
+  if (Test-Path $pi) { Copy-Item $pi "$pi.bak-$stamp" -Force }
+  Copy-Item (Join-Path $Here "src\prompt\prompt-inject.md") $pi -Force
+}
 New-Item -ItemType Directory -Force -Path (Join-Path $DH "rules") | Out-Null
 Copy-Item (Join-Path $Here "src\rules\seagull-fullbreak.md")   (Join-Path $DH "rules\seagull-fullbreak.md")   -Force
 Copy-Item (Join-Path $Here "src\rules\seagull-fullbreak.json") (Join-Path $DH "rules\seagull-fullbreak.json") -Force

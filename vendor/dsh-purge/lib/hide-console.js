@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { isAsarSealedPath } from "./desktop.js";
+import { isAsarSealedPath, isInsideDesktopInstall } from "./desktop.js";
 import { diskFs, fsFor } from "./extract-asar.js";
 
 const MARK = "__dshPurgeHideConsole";
@@ -232,11 +232,26 @@ export function resolveDshBinRoot(hint, { fs, path: nodePath } = {}) {
 
 const IMPORT_LINE = `import "./${IMPORT_MARK}.js"; // [dsh-purge] hide-console`;
 
+function isPackagedDesktopDshRoot(root) {
+  if (!root) return false;
+  const n = String(root).replace(/\\/g, "/").toLowerCase();
+  if (n.includes("/resources/app/dsh")) return true;
+  if (n.includes("deepseekharnessdesktop")) return true;
+  try {
+    return isInsideDesktopInstall(root);
+  } catch {
+    return false;
+  }
+}
+
 export function installHideConsoleIntoBin(aiBase, { fs, path: nodePath } = {}) {
   if (process.platform !== "win32") return "skipped_not_win32";
+  if (isElectronHost()) return "skipped_electron";
   const p = nodePath ?? requirePath();
   const root = resolveDshBinRoot(aiBase, { fs, path: p });
   if (!root) return "missing_bin";
+  // 官方 / 社区桌面：改 bin.js 会让重启直接打不开。
+  if (isPackagedDesktopDshRoot(root)) return "skipped_desktop";
   // 源码部署的 apps/cli/lib 是 tsdown 产物：只准读、不准写 sidecar / 改 bin.js（#41）。
   if (looksLikeSourceCliRoot(root, { fs, path: p })) return "skipped_source_cli";
   const nodeFs = ioFor(fs, root);
