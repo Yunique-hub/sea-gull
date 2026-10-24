@@ -267,7 +267,7 @@ export function inboxBusy(agent) {
 
 export function sendContinue(agent, text) {
   if (!agent || typeof agent.followup !== "function") {
-    return { ok: false, error: "当前会话没有可续跑的 agent" };
+    return { ok: false, error: "No agent in this session to continue" };
   }
   try {
     agent.followup(makeContinueMessage(text));

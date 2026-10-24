@@ -1,12 +1,14 @@
 # 🦅 Seagull — Full-Break Harness for DeepSeek Harness
 
-**Strip the host-side policy layer off DeepSeek Harness, swap in the Seagull persona + 28 skills.**
+**Strip the host-side policy layer off DeepSeek Harness, swap in the Seagull persona and native skills.**
 
 One-line install · idempotent · uninstallable · backed by evidence
 
-**v1.0.5 targets DeepSeek Harness 0.2.1-rc.2** and upgrades the engine to **dsh-purge 1.1.72**, using verified upstream master snapshot [`ec691667`](https://github.com/YuJunZhiXue/dsh-purge/tree/ec69166706bed95efb6c35e225b01588f3cd9b72). At review time the latest Release is still 1.1.71; the fixed commit declares package version 1.1.72. All 118 upstream Git blobs were verified.
+**v1.0.6 targets the official Windows Harness 0.2.1-rc.3** and upgrades to **dsh-purge 1.1.77**, pinned to upstream release commit [ac58b3e](https://github.com/YuJunZhiXue/dsh-purge/tree/ac58b3e35509da23bd75b6250f01007590524102). All 98 upstream Git blobs, the official installer SHA-512, and its signature were verified.
 
-The Seagull persona, **28 skills**, installer and update protections, red-team presets, immediate steering, and separate Queue delivery are retained. There are **86 patch definitions**. The drill console supports creating further projects, reports errors, blocks duplicate submissions, serializes project changes, and isolates each project's page state. Legacy prompt migration, custom-persona ownership, native system-message retention, and uninstall preset cleanup are fixed. Five Seagull skills gain the metadata required for native discovery, preserving their bodies. See the [upgrade verification record](docs/VERIFICATION.md#i-dsh-purge-1172-升级与演练台项目修复2026-10-19).
+The saved **Seagull persona**, five Seagull skills, project fixes, immediate steering, separate queue delivery, and installer/update protections are retained. The upstream local-lab and tool pre-execution checks remain active, with engineering additions including the evidence ledger. Upstream no longer ships the skill/knowledge library entry points; existing local data is preserved and the 23 earlier skills remain source archives without automatic deployment.
+
+Current upstream code is Apache-2.0, with its LICENSE, NOTICE and attribution retained. Local code and historical assets keep their respective licenses. There are 86 local patch definitions, including retained native-message compatibility patches #89–#92. See the [verification record](docs/VERIFICATION.md#j-harness-021-rc3--dsh-purge-1177-合并2026-10-24).
 
 Existing users should use the one-click updater below to preserve their saved prompt. Finish the official Harness update before reapplying the plugin; copying the old extracted `resources/app` into the new installation would load the old host again. A failed silent Windows update now offers the visible installer and reports its exit code after restoring the old extracted app.
 
@@ -34,7 +36,7 @@ it removes the host-side policy gates one by one and replaces the persona layer.
 
 | Component | Provides |
 |---|---|
-| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.72 | Host-layer engine: **86 patch definitions** + red-team console + 23 skills |
+| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.77 | Host compatibility, console, evidence ledger and local-lab checks; 86 local patch definitions |
 | [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | Seagull persona + 5 domain skills |
 
 This is not a stack of two tarballs: `SOUL.md` cannot be used as a DSH prompt as-is
@@ -125,6 +127,6 @@ bash install.sh --uninstall   # restores the profile, removes plugin + inject fi
 
 - This project: **MIT**
 - Host engine derived from [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)
-  (MIT © 2026 小杨). Our entire diff is listed in [NOTICE](NOTICE).
+  (Apache-2.0 © 2026 YuJunZhiXue). Our entire diff is listed in [NOTICE](NOTICE).
 - Persona & skills from [Yunique-hub/hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) (MIT)
 - No affiliation with DeepSeek.

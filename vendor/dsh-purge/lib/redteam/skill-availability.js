@@ -251,7 +251,7 @@ function safeFix(issue) {
  */
 export function checkSkill(skill, options = {}) {
   const env = options.env || process.env
-  const name = skill && skill.name ? String(skill.name) : '(未命名)'
+  const name = skill && skill.name ? String(skill.name) : "(unnamed)"
   const content = skill && typeof skill.content === 'string' ? skill.content : ''
   const file = skill && typeof skill.path === 'string' ? skill.path : null
   const root = skill && typeof skill.root === 'string' ? skill.root : null
@@ -270,8 +270,8 @@ export function checkSkill(skill, options = {}) {
        其余（只有元数据 / 远端技能源 / 宿主没给正文 → 判不了 → unknown）。 */
     const gone = file !== null && !existsSync(file)
     const detail = gone
-      ? '技能文件在本机不存在，正文也读不到：' + file
-      : '技能正文读不到（只有元数据）：无法判断可用性，需要时用 `skill` 工具实际加载一次'
+      ? "The skill file does not exist on this machine, so the body cannot be read: " + file
+      : "The skill body cannot be read (metadata only): availability cannot be judged; load it once with the `skill` tool when needed"
     const kind = gone ? 'file-missing' : 'content-missing'
     return {
       name,
@@ -285,20 +285,20 @@ export function checkSkill(skill, options = {}) {
   /* 正文在手 = 技能能加载。这里的路径只作提示：它是上一次在某台机器上解析出来的绝对路径，
      换机器必然指空 —— 记一条非阻塞的 file-stale，不把整条技能标成不可用。 */
   if (file !== null && !existsSync(file)) {
-    addIssue('file-stale', '技能记录的文件路径在本机不存在（技能正文仍可加载）：' + file, { file })
+    addIssue('file-stale', "The file path recorded for this skill does not exist on this machine (the body can still be loaded): " + file, { file })
   }
 
   const envNames = requiredEnvOf(content)
   const missingEnv = envNames.filter((n) => !env[n])
   for (const n of missingEnv) {
-    addIssue('env-missing', '缺环境变量 ' + n, { env: n })
+    addIssue('env-missing', "Missing environment variable " + n, { env: n })
   }
 
   const paths = referencedPathsOf(content)
   const missingPaths = paths.filter((p) => !existsUnderAnyHome(p, env))
   if (missingPaths.length > 0) {
-    addIssue('path-missing', '引用的本机路径不存在：' + missingPaths.slice(0, 6).join('、')
-      + (missingPaths.length > 6 ? ' 等 ' + missingPaths.length + ' 处' : ''), { paths: missingPaths })
+    addIssue('path-missing', "Referenced local path does not exist: " + missingPaths.slice(0, 6).join(', ')
+      + (missingPaths.length > 6 ? " (+" + missingPaths.length + " more)" : ''), { paths: missingPaths })
   }
 
   /* 外部基础设施占位符：技能里出现 `<你的VPS_IP>` 这类说明还没配。
@@ -309,14 +309,14 @@ export function checkSkill(skill, options = {}) {
   const vpsConfigured = typeof env.REDTEAM_VPS_HOST === 'string' && env.REDTEAM_VPS_HOST.trim() !== ''
   const placeholders = []
   if (!vpsConfigured) {
-    if (content.includes('<你的VPS_IP>') || content.includes('<VPS_IP>')) placeholders.push('VPS 地址')
-    if (content.includes('<你的VPS_主机名>') || content.includes('<VPS 主机名>')) placeholders.push('VPS 主机名')
+    if (content.includes('<你的VPS_IP>') || content.includes('<VPS_IP>')) placeholders.push("VPS address")
+    if (content.includes('<你的VPS_主机名>') || content.includes('<VPS 主机名>')) placeholders.push("VPS hostname")
   }
   for (const p of placeholders) {
-    addIssue('placeholder', p + '还是占位符（技能里写的是占位符，说明本机/本环境还没配）', { placeholder: p })
+    addIssue('placeholder', p + " is still a placeholder (the skill uses a placeholder, which means this machine/environment is not configured yet)", { placeholder: p })
     needsUser.push(p)
   }
-  for (const n of missingEnv) needsUser.push('环境变量 ' + n)
+  for (const n of missingEnv) needsUser.push("environment variable " + n)
 
   /* 兜底：同名技能在别的根里有一份"问题更少"的版本（通常是用户自己配过的那份，
      但被排在前面的随包占位符版本盖住了）。这时如实说明，而不是让用户以为环境没配。 */
@@ -328,8 +328,8 @@ export function checkSkill(skill, options = {}) {
     const verdict = checkSkill({ name, content: alt.content, path: alt.path }, { env })
     if (verdict.status === 'available' || verdict.problems.length < issues.length) {
       shadowed = { root: other, path: alt.path, status: verdict.status }
-      addIssue('shadowed', '`' + other + '` 里还有一份同名技能（' + verdict.status + '），'
-        + '但按技能根顺序当前加载的是这一份（上面这些不可用原因来自这一份）', { other_root: other })
+      addIssue('shadowed', '`' + other + "` also contains a skill with the same name (" + verdict.status + ')'
+        + ", but the one currently loaded according to skill-root order is this copy (the unavailable reasons above come from this copy)", { other_root: other })
       break
     }
   }

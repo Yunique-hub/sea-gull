@@ -25,9 +25,9 @@ export function normalizeShellType(value) {
   if (/godzilla|哥斯拉/.test(lower)) return 'godzilla'
   if (/antsword|蚁剑/.test(lower)) return 'antSword'
   if (lower === 'custom' || lower === 'custom-shell' || /自定义|自研/.test(raw)) return 'custom'
-  throw new Error("webshell shell_type 非法：" + JSON.stringify(value)
-    + '。交付要求是**冰蝎马（behinder）/ 哥斯拉马（godzilla）**（用户要能自己连上）；'
-    + '其它类型请填 custom（只作临时中转，面板会标"用户连不上"）。')
+  throw new Error("Invalid webshell shell_type: " + JSON.stringify(value)
+    + ". The deliverable must be a **Behinder / Godzilla webshell** (the user must be able to connect to it themselves); "
+    + "for any other type use custom (temporary relay only; the panel will flag it as \"user cannot connect\").")
 }
 
 /** 规范化马状态（界面按 online/offline/unknown 三态显示）。 */
@@ -37,7 +37,7 @@ export function normalizeShellStatus(value) {
   const normalized = aliases[raw] || raw
   if (normalized === '') return 'online'
   if (!WEBSHELL_STATUSES.includes(normalized)) {
-    throw new Error("webshell status 非法：" + JSON.stringify(value) + "。合法值只有 " + WEBSHELL_STATUSES.join(" / ") + "。")
+    throw new Error("Invalid webshell status: " + JSON.stringify(value) + ". Valid values are " + WEBSHELL_STATUSES.join(" / ") + ".")
   }
   return normalized
 }
@@ -61,7 +61,7 @@ export function assertPathWithin(target, allowedRoots) {
   const okFlag = roots.some((root) => abs === root || abs.startsWith(root + sep))
   if (!okFlag) {
     throw new Error("path outside allowed roots: " + abs
-      + "（允许的根：" + roots.join(", ") + "）。这条记录的文件路径不在本靶标目录内，已拒绝读取。")
+      + " (allowed roots: " + roots.join(", ") + "). This record's file path is outside the target directory; read refused.")
   }
   return abs
 }

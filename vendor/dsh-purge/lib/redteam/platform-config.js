@@ -39,8 +39,8 @@ export const TOOL_CATALOG = [
   { id: 'fscan', label: 'fscan', names: ['fscan.exe', 'fscan'] },
   { id: 'gogo', label: 'gogo', names: ['gogo.exe', 'gogo'] },
   { id: 'suo5', label: 'suo5', names: ['suo5.exe', 'suo5-windows-amd64.exe', 'suo5-linux-amd64', 'suo5'] },
-  { id: 'frpc', label: 'frp 客户端', names: ['frpc.exe', 'frpc'] },
-  { id: 'frps', label: 'frp 服务端', names: ['frps.exe', 'frps'] },
+  { id: 'frpc', label: "frp client", names: ['frpc.exe', 'frpc'] },
+  { id: 'frps', label: "frp server", names: ['frps.exe', 'frps'] },
   { id: 'chisel', label: 'chisel', names: ['chisel.exe', 'chisel'] },
   { id: 'ffuf', label: 'ffuf', names: ['ffuf.exe', 'ffuf'] },
   /* names 是候选文件名，不是某台机器的绝对路径。adapt 是发行版常见别名，目录里碰见才用。 */
@@ -48,7 +48,7 @@ export const TOOL_CATALOG = [
   { id: 'dnsx', label: 'dnsx', names: ['dnsx.exe', 'dnsx'] },
   { id: 'subfinder', label: 'subfinder', names: ['subfinder.exe', 'subfinder'] },
   { id: 'ksubdomain', label: 'ksubdomain', names: ['ksubdomain.exe', 'ksubdomain'] },
-  { id: 'impacket', label: 'impacket（目录或入口）', names: ['impacket-secretsdump', 'impacket-secretsdump.exe', 'secretsdump.py', 'impacket'], adapt: [/^impacket-secretsdump$/, /^secretsdump\.py$/] },
+  { id: 'impacket', label: "impacket (folder or entrypoint)", names: ['impacket-secretsdump', 'impacket-secretsdump.exe', 'secretsdump.py', 'impacket'], adapt: [/^impacket-secretsdump$/, /^secretsdump\.py$/] },
 ]
 
 const EMPTY = () => ({
@@ -271,7 +271,7 @@ export function resolveTool(id, options = {}) {
     if (existsSync(abs)) {
       return { id, label: def.label, path: abs, source: 'config', names: def.names }
     }
-    return { id, label: def.label, path: null, source: 'missing', names: def.names, configured: abs, note: 'config 路径不存在：' + abs }
+    return { id, label: def.label, path: null, source: 'missing', names: def.names, configured: abs, note: "Configured path not found: " + abs }
   }
   const findOpts = { rejectPython: !!def.rejectPython, adapt: def.adapt }
   const toolkit = toolkitDirOf(cfg, root)
@@ -348,16 +348,16 @@ export function platformSummary(root) {
     },
     adapt,
     hint: adapt.kali
-      ? '已检测到 Kali。系统包按发行版文件名认：impacket-secretsdump、httpx-toolkit（不把 Python 的 /usr/bin/httpx 当成扫描器）。fscan、gogo、suo5、frp、chisel、dnsx、subfinder、ksubdomain 不是 Kali 自带命令，没放进 /usr/bin 或 ~/go/bin 就会显示未找到。'
+      ? "Kali detected. System packages are recognized by their distro filenames: impacket-secretsdump, httpx-toolkit (the Python /usr/bin/httpx is not treated as a scanner). fscan, gogo, suo5, frp, chisel, dnsx, subfinder and ksubdomain are not shipped with Kali, so they show as not found unless they are in /usr/bin or ~/go/bin."
       : (win
-        ? '当前按 Windows 适配：建议在 Kali 虚拟机里跑，或在本页填工具路径/整包文件夹自动分配。出网代理看下方「出网状态」。'
-        : '当前按 Linux 适配：可用 setup.sh 装工具箱，也可在本页手填或整包文件夹自动分配。出网代理看下方「出网状态」。'),
+        ? "Currently adapted for Windows: run in a Kali VM, or fill in tool paths / auto-assign a whole-folder toolkit on this page. For the egress proxy see \"Egress status\" below."
+        : "Currently adapted for Linux: use setup.sh to install the toolkit, or fill paths in manually / auto-assign a whole-folder toolkit on this page. For the egress proxy see \"Egress status\" below."),
     egress: {
       http_proxy: process.env.HTTP_PROXY || process.env.http_proxy || '',
       https_proxy: process.env.HTTPS_PROXY || process.env.https_proxy || '',
       all_proxy: process.env.ALL_PROXY || process.env.all_proxy || '',
       no_proxy: process.env.NO_PROXY || process.env.no_proxy || '',
-      note: '只读进程环境；改系统/终端代理后需重启宿主。命令级代理请用技能 cn-proxy-pool，不改本机网络配置。',
+      note: "Read-only view of the process environment; changing the system/terminal proxy requires a host restart. For per-command proxies use the cn-proxy-pool skill — it does not change this machine's network config.",
     },
   }
 }
@@ -365,12 +365,12 @@ export function platformSummary(root) {
 /** 探测本机是否 Kali / 同系演练发行版。 */
 export function detectKali() {
   if (osPlatform() !== 'linux') {
-    return { kali: false, source: null, detail: '非 Linux 宿主' }
+    return { kali: false, source: null, detail: "Not a Linux host" }
   }
   try {
     const text = readFileSync('/etc/os-release', 'utf8')
     if (/ID\s*=\s*"?kali"?/i.test(text) || /ID_LIKE\s*=[^\n]*kali/i.test(text) || /NAME\s*=\s*".*Kali/i.test(text)) {
-      return { kali: true, source: 'os-release', detail: 'os-release 标明 Kali' }
+      return { kali: true, source: 'os-release', detail: "os-release identifies Kali" }
     }
   } catch { /* ignore */ }
   const markers = [
@@ -406,14 +406,14 @@ export function scanFolderForTools(dir, options = {}) {
   const assigned = {}
   const hits = []
   if (!root || !existsSync(root)) {
-    return { ok: false, error: '目录不存在：' + root, assigned, hits }
+    return { ok: false, error: "Folder not found: " + root, assigned, hits }
   }
   let st
   try { st = statSync(root) } catch {
-    return { ok: false, error: '无法读取目录：' + root, assigned, hits }
+    return { ok: false, error: "Cannot read folder: " + root, assigned, hits }
   }
   if (!st.isDirectory()) {
-    return { ok: false, error: '不是文件夹：' + root, assigned, hits }
+    return { ok: false, error: "Not a folder: " + root, assigned, hits }
   }
 
   let scanned = 0
@@ -549,23 +549,23 @@ export function envAdaptStatus(root) {
   if (kaliInfo.kali) {
     ready = true
     reason = 'kali'
-    message = '已检测到 Kali，默认直接使用本机工具（PATH / 默认查找）。'
+    message = "Kali detected; by default the local tools are used directly (PATH / default lookup)."
   } else if (skipped) {
     ready = true
     reason = 'skipped'
-    message = '你已确认暂不配置工具，可正常对话（扫描类技能可能不可用）。'
+    message = "You chose to skip tool setup for now; chat works normally (scanning skills may be unavailable)."
   } else if (savedPaths) {
     ready = true
     reason = 'configured'
-    message = '已保存的工具路径还在，更新插件不会要求重配。当前找到 ' + found + '/' + tools.length + ' 个工具。'
+    message = "Saved tool paths are still in place; updating the plugin will not ask you to reconfigure. Found " + found + '/' + tools.length + " tools so far."
   } else if (found >= 2) {
     ready = true
     reason = 'tools-found'
-    message = '本机已能找到 ' + found + ' 个工具，视为可用。'
+    message = "This machine already finds " + found + " tools, so it counts as ready."
   } else {
     ready = false
     reason = 'need-config'
-    message = '未检测到 Kali，且工具未配置。请打开 dsh-purge → 环境适配，填写路径或选整包文件夹自动分配；也可确认暂不配置后继续对话。'
+    message = "Kali not detected and tools are not configured. Open dsh-purge → Environment setup and fill in paths or pick a whole-folder toolkit to auto-assign; you can also confirm skip-setup for now and keep chatting."
   }
 
   return {

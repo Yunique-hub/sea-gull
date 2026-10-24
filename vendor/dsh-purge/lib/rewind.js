@@ -11,7 +11,7 @@ function ignoreSettled(value) {
 }
 
 function errorText(err) {
-  if (!err) return "回退失败";
+  if (!err) return "Undo failed";
   if (typeof err === "string") return err;
   return err.message || err.code || String(err);
 }
@@ -239,7 +239,7 @@ function planRewindStep(events) {
   const text = userTextFromRange(events, cutSeq);
   const atSeq = seqBefore(events, cutSeq);
   if (atSeq == null) {
-    if (!text) return { ok: false, error: "没有可回退的上一句" };
+    if (!text) return { ok: false, error: "Nothing to undo" };
     return { ok: true, mode: "blank", text, unit: "step", turn, step, fromSeq: cutSeq };
   }
   return { ok: true, mode: "fork", atSeq, text, unit: "step", turn, step, fromSeq: cutSeq };
@@ -255,7 +255,7 @@ function planRewindTurn(events) {
   }
   if (!turnStart) {
     const lastUser = [...list].reverse().find((event) => isRoundPromptEvent(event));
-    if (!lastUser) return { ok: false, error: "没有可回退的上一句" };
+    if (!lastUser) return { ok: false, error: "Nothing to undo" };
     const cutSeq = Number(lastUser.seq);
     const text = userTextFromEvent(lastUser);
     const atSeq = seqBefore(list, cutSeq);
@@ -265,7 +265,7 @@ function planRewindTurn(events) {
   const cutSeq = Number(turnStart.seq);
   const text = userTextFromRange(list, cutSeq);
   const atSeq = seqBefore(list, cutSeq);
-  if (!text && atSeq == null) return { ok: false, error: "没有可回退的上一句" };
+  if (!text && atSeq == null) return { ok: false, error: "Nothing to undo" };
   if (atSeq == null) return { ok: true, mode: "blank", text, unit: "turn", fromSeq: cutSeq };
   return { ok: true, mode: "fork", atSeq, text, unit: "turn", fromSeq: cutSeq };
 }
@@ -321,7 +321,7 @@ export function lastHumanUserText(events) {
 }
 
 export async function readLastUserText(ctx, sessionId) {
-  if (!sessionId) return { ok: false, text: "", error: "没有当前会话" };
+  if (!sessionId) return { ok: false, text: "", error: "No active session" };
   try {
     const log = await readSessionLog(ctx, sessionId);
     return { ok: true, text: lastHumanUserText(log.events) };
@@ -373,7 +373,7 @@ async function readSessionLog(ctx, sessionId) {
     }
   }
 
-  throw new Error("找不到当前会话");
+  throw new Error("Cannot find the current session");
 }
 
 async function waitTurnClosed(ctx, sessionId, timeoutMs = 8000) {
@@ -381,7 +381,7 @@ async function waitTurnClosed(ctx, sessionId, timeoutMs = 8000) {
   let last = await readSessionLog(ctx, sessionId);
   while (lastOpenTurn(last.events)) {
     if (Date.now() - started >= timeoutMs) {
-      throw new Error("回合还在进行，请先点停止再回退");
+      throw new Error("The turn is still running. Click Stop first, then undo.");
     }
     await sleep(80);
     last = await readSessionLog(ctx, sessionId);
@@ -532,7 +532,7 @@ function prepareForkedChild(ctx, childId) {
 
 async function doRewindOneSession(ctx, controller, sessionId, options = {}) {
   if (!controller || typeof controller.fork !== "function" || typeof controller.create !== "function") {
-    return { ok: false, error: "当前 dsh 没有会话回退接口" };
+    return { ok: false, error: "This dsh build has no session rewind API." };
   }
   let log = await readSessionLog(ctx, sessionId);
   if (lastOpenTurn(log.events)) {
@@ -545,13 +545,13 @@ async function doRewindOneSession(ctx, controller, sessionId, options = {}) {
   let created;
   if (plan.mode === "fork") {
     const atSeq = officialForkBoundary(log.events, plan.atSeq);
-    if (atSeq == null) return { ok: false, error: "没有可回退的上一句" };
+    if (atSeq == null) return { ok: false, error: "Nothing to undo" };
     created = await controller.fork({ sessionId, atSeq });
   } else {
     created = await createBlank(ctx, controller, sessionId, log.cwd);
   }
   const childId = created?.sessionId || (typeof created === "string" ? created : "");
-  if (!childId) return { ok: false, error: "回退会话创建失败" };
+  if (!childId) return { ok: false, error: "Failed to create the rewound session" };
 
   prepareForkedChild(ctx, childId);
   await disarmRewoundSession(ctx, childId, { cancel: false });
@@ -595,7 +595,7 @@ async function rewindOneSession(ctx, controller, sessionId, options = {}) {
 }
 
 export async function analyzeRewind(ctx, sessionId) {
-  if (!sessionId) return { ok: false, error: "没有当前会话" };
+  if (!sessionId) return { ok: false, error: "No active session" };
   try {
     const log = await readSessionLog(ctx, sessionId);
     const kind = isSubagentHeader(log.header) ? "subagent" : "main";
@@ -613,7 +613,7 @@ export async function analyzeRewind(ctx, sessionId) {
 }
 
 export async function applyRewind(ctx, sessionId, mode) {
-  if (!sessionId) return { ok: false, error: "没有当前会话" };
+  if (!sessionId) return { ok: false, error: "No active session" };
   const controller = service(ctx, "sessionController");
 
   const action = mode === "round" ? "round" : "once";

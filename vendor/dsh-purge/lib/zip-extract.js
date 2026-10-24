@@ -19,9 +19,9 @@ export function unzipTools(platform = process.platform) {
 function safeZipName(name) {
   const rel = String(name || "").replace(/\\/g, "/").replace(/^\.?\//, "").replace(/\/+$/, "");
   if (!rel) return "";
-  if (rel.startsWith("/") || /^[A-Za-z]:/.test(rel)) throw new Error("zip 路径不合法");
+  if (rel.startsWith("/") || /^[A-Za-z]:/.test(rel)) throw new Error("Invalid zip path");
   const parts = rel.split("/");
-  if (parts.some((part) => part === ".." || part === "")) throw new Error("zip 路径不合法");
+  if (parts.some((part) => part === ".." || part === "")) throw new Error("Invalid zip path");
   return parts.join("/");
 }
 
@@ -30,18 +30,18 @@ function findEocd(buf) {
   for (let i = buf.length - 22; i >= min; i -= 1) {
     if (buf.readUInt32LE(i) === 0x06054b50) return i;
   }
-  throw new Error("不是 zip");
+  throw new Error("Not a zip file");
 }
 
 function readZipEntries(buf) {
-  if (!Buffer.isBuffer(buf) || buf.length < 22) throw new Error("不是 zip");
+  if (!Buffer.isBuffer(buf) || buf.length < 22) throw new Error("Not a zip file");
   const eocd = findEocd(buf);
   const total = buf.readUInt16LE(eocd + 10);
   let cursor = buf.readUInt32LE(eocd + 16);
   const entries = [];
   for (let n = 0; n < total; n += 1) {
     if (cursor + 46 > buf.length || buf.readUInt32LE(cursor) !== 0x02014b50) {
-      throw new Error("zip 目录损坏");
+      throw new Error("Corrupt zip central directory");
     }
     const method = buf.readUInt16LE(cursor + 10);
     const compSize = buf.readUInt32LE(cursor + 20);
@@ -66,7 +66,7 @@ export function listZipFile(zipPath) {
 
 function localDataOffset(buf, localOffset) {
   if (localOffset + 30 > buf.length || buf.readUInt32LE(localOffset) !== 0x04034b50) {
-    throw new Error("zip 本地头损坏");
+    throw new Error("Corrupt zip local header");
   }
   const nameLen = buf.readUInt16LE(localOffset + 26);
   const extraLen = buf.readUInt16LE(localOffset + 28);
@@ -80,19 +80,19 @@ export function extractZipBuffer(buf, dest) {
     const rel = safeZipName(entry.name);
     if (!rel) continue;
     if (entry.compSize === 0xffffffff || entry.localOffset === 0xffffffff) {
-      throw new Error("不支持 zip64");
+      throw new Error("zip64 is not supported");
     }
     if (entry.method !== 0 && entry.method !== 8) {
-      throw new Error(`不支持的 zip 压缩方式 ${entry.method}`);
+      throw new Error(`Unsupported zip compression method ${entry.method}`);
     }
     const start = localDataOffset(buf, entry.localOffset);
     const end = start + entry.compSize;
-    if (end > buf.length) throw new Error("zip 数据被截断");
+    if (end > buf.length) throw new Error("Truncated zip data");
     const compressed = buf.subarray(start, end);
     const body = entry.method === 0 ? compressed : zlib.inflateRawSync(compressed);
     const out = path.resolve(root, rel);
     const prefix = root.endsWith(path.sep) ? root : root + path.sep;
-    if (out !== root && !out.startsWith(prefix)) throw new Error("zip 路径不合法");
+    if (out !== root && !out.startsWith(prefix)) throw new Error("Invalid zip path");
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, body);
   }
@@ -157,5 +157,5 @@ export function extractZipArchive(zipPath, dest, tools = unzipTools()) {
       notes.push(note);
     }
   }
-  throw new Error(`解压失败：${notes.join(" | ") || "没有可用的解压工具"}`);
+  throw new Error(`Extraction failed: ${notes.join(" | ") || "no extractor available"}`);
 }

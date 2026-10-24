@@ -1,3 +1,81 @@
+# 1.1.77
+
+## 中文
+
+- 版本 **1.1.77**。修复 bug，修复稳定性。
+- 修长红队任务仍打公网：`渗透测试` / `红队` / `打点` / `拿站` 纳入门禁；正文按窗扫到 256KB，目标写在后半段也能拦。
+- 修后续步骤漏拦：每一步看工具参数，`tools/pre-execute` 遇到公网 IP/域名直接停轮。
+- 长文正则按窗扫，避免整篇回溯把事件循环卡死。
+
+## English
+
+- **1.1.77**. Bug fixes and stability.
+- Long red-team tasks no longer reach the public internet: `渗透测试` / red-team / 打点 / 拿站 are gated; the body is scanned in windows up to 256KB.
+- Later steps are gated too: tool arguments are checked, and `tools/pre-execute` stops on a public IP or name.
+- Long-text regex runs in windows so a huge paste cannot stall the event loop.
+
+# 1.1.76
+
+## 中文
+
+- 版本 **1.1.76**。适配只走 pnpm 的机器：在 profile 目录 `pnpm add` codeload 压缩包即可，`postinstall` 自动把 `dsh-purge` 写进 `bundles`。
+- 安装地址改成 `codeload.github.com`，避开 `github.com/archive` 的 302（pnpm 会 `fetch failed`）。不要 `pnpm add dsh-purge`（npm 仓库没有这个名字）。
+
+## English
+
+- **1.1.76**. pnpm-only hosts: `pnpm add` the codeload tarball inside the profile; `postinstall` writes `dsh-purge` into `bundles`.
+- Install URL is `codeload.github.com` so pnpm does not die on the `github.com/archive` 302. Do not `pnpm add dsh-purge` — that name is not on the npm registry.
+
+# 1.1.75
+
+## 中文
+
+- 版本 **1.1.75**。修 Hub 市场一键安装报 `already queued: dsh-purge`：`cordis.patch.yml` 不再把已经在 bundles 里的本体再 insert 一遍。
+- README 把安装写成三步：只用 GitHub 压缩包命令，不走插件市场 / `github:` / npm。
+
+## English
+
+- **1.1.75**. Fix Hub one-click `already queued: dsh-purge`: the bundle patch no longer inserts the plugin that is already in `bundles`.
+- README install is three steps: GitHub tarball only; skip the plugin market / `github:` / npm.
+
+# 1.1.74
+
+## 中文
+
+- 版本 **1.1.74**，优化若干拦截与加载 bug。适配 DSH **0.2.1-rc.2**（0.2.0 仍可用）。
+- 修靶场门禁：域名先解析再判 IP，不再靠 `.lab` / `.htb` 后缀放行；`hosts` 指到公网、解析失败、混有公网，一律拦。
+- 修身份绕过：`169.254` 云元数据不再当靶场；`::ffff:公网` 拆开再判；攻击句不写目标不再放行。
+- 修 DSH 0.2.1 预设加载：对象 schema 补 `additionalProperties`，装过的 redteam 预设清掉残留 `toolFilter`。
+- 修演练台被改成英文：中文页签收回。
+- 禁止制作外挂：会话门口硬拦，提示词 Rule 1 改为禁止。
+
+## English
+
+- **1.1.74**, bug-fix release. Target DSH **0.2.1-rc.2** (0.2.0 still works).
+- Lab gate: resolve first, then allow only private IPs. Suffixes are not an allow list.
+- Close identity holes: drop link-local metadata, unwrap IPv4-mapped IPv6, deny unnamed attack tasks.
+- DSH 0.2.1 preset load: seal object schemas; strip leftover `toolFilter`.
+- Restore Chinese drill-console tabs.
+- Game cheats are forbidden at the session gate.
+
+# 1.1.73
+
+## 中文
+
+- 版本 **1.1.73**，适配 DSH **0.2.1-rc.2**（0.2.0 仍可用）。
+- 0.2.1 兼容已落地：`{{cwd}}` 静态回退、补丁 #40、`toolFilter` 删除、`dsh-tools` 解析、hostFs fd 直通、桌面换包不自杀、`file:` 归档更新、Ctrl+Enter steer。
+- 界面操作文案补齐英文（演练台、清洗面板、补丁表、计分/技能指引）；`zh` 语言包与模型提示词保持中文。靶场默认拦截的 `own.hint` 仍按本仓库策略。
+- 随包技能 `paper-autopilot` + `npm run install:skill`。
+- 红队证据账本：`claimed → observed` 核实链、`ResidualUnknown`、8 个 `redteam_evidence_*` / `redteam_unknown_*` 工具。
+
+## English
+
+- **1.1.73**, target DSH **0.2.1-rc.2** (0.2.0 still works).
+- 0.2.1 compatibility in-tree: `{{cwd}}` fallback, patch #40, drop `toolFilter`, host `dsh-tools` resolve, hostFs fd pass-through, desktop helper self-kill fix, `file:` archive update, Ctrl+Enter steer.
+- Operator-facing UI copy is English; `zh` locale and model prompts stay Chinese. Lab default-deny `own.hint` is unchanged.
+- Bundled `paper-autopilot` skill + `npm run install:skill`.
+- Red-team evidence ledger: claimed→observed verification, ResidualUnknown, eight `redteam_evidence_*` / `redteam_unknown_*` tools.
+
 # 1.1.71
 
 ## 中文

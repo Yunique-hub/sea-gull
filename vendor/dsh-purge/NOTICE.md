@@ -1,10 +1,11 @@
 # 上游署名 / Upstream attribution
 
-本目录基于 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)，作者：小杨（YuJunZhiXue）。
+基于 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)，作者 YuJunZhiXue。
 
-- 包版本：1.1.72，目标 Harness：0.2.1-rc.2。
-- 固定 master 提交：[`ec691667`](https://github.com/YuJunZhiXue/dsh-purge/tree/ec69166706bed95efb6c35e225b01588f3cd9b72)。
-- 2026-10-19 核验快照的 118 个 Git blob。核对时最新 Release 仍为 1.1.71。
-- 原许可和署名见同目录 LICENSE，原文保留。
+- 发布版本 1.1.77，固定提交 ac58b3e35509da23bd75b6250f01007590524102。
+- 2026-10-24 核验上游 98 个 Git blob；目标 Harness 0.2.1-rc.3。
+- Apache-2.0 原文见 LICENSE；原始 NOTICE 与 LICENSE-COMMERCIAL.md 保留。
 
-海鸥的人格、配置、即时插话、更新保护及兼容性修复继续保留。本地新增、修改及省略附属文件的完整清单见根目录 [NOTICE](../../NOTICE)；验证范围见 [VERIFICATION](../../docs/VERIFICATION.md)。升级时按实际差异复核并运行回归。
+海鸥保留自定义人格、项目操作与宿主兼容修复，并保留上游新版的本地靶场限制。上游移除的技能库不重新分发；本机用户已有数据不删除。
+
+完整差异见根 [NOTICE](../../NOTICE)，验证见 [VERIFICATION](../../docs/VERIFICATION.md)。

@@ -172,3 +172,8 @@ Windows：`irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/updat
 Bash：`curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh | bash`。
 
 先结束任务并完全退出 Harness；更新成功后重新打开，按输出检查 Apply。每次下载最新 main，保留已保存提示词和用户数据，更新内置规则与技能。自定义 DSH 主目录、profile 或安装目录可下载 update.ps1 后使用 `-DshHome` / `-Profile` / `-AppRoot`，或在 Bash 管道后使用 `bash -s -- --dsh-home 路径 --profile desktop`。`install.ps1 -Update` / `install.sh --update` 则只使用当前本地源码。
+
+
+## 1.0.6 / purge 1.1.77
+
+推荐先完成官方 Harness 0.2.1-rc.3 更新，再运行海鸥一键更新。海鸥保留保存的人格、项目数据和偏好，当前包不启用重复 postinstall，bundle 由安装器显式管理。新版保留上游本地靶场限制；旧 23 个技能仅源码存档，不重新复制到运行目录，现有本地数据保留。

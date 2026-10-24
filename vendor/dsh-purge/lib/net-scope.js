@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import dns from "node:dns/promises";
 import { findDshHome } from "./core.js";
 
 const SUFFIXES = [
@@ -183,17 +184,76 @@ function bankHit(name) {
   return false;
 }
 
+const LOOKUP_MS = 2000;
+const LOOKUP_TTL_MS = 5000;
+const lookupCache = new Map();
+
+function isLocalLabV4(value) {
+  const a = value >>> 24;
+  const b = (value >>> 16) & 255;
+  if (a === 10 || a === 127) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
+
+function isLocalLabAddress(addr) {
+  const name = hostOf(addr);
+  if (!name) return false;
+  if (name.includes(":")) {
+    const value = parseIpv6(name);
+    if (value == null) return false;
+    if ((value >> 32n) === 0xffffn) return isLocalLabV4(Number(value & 0xffffffffn) >>> 0);
+    if (value === 0n || value === 1n) return true;
+    if ((value >> 118n) === 0x3fan) return true;
+    if ((value >> 121n) === 0x7en) return true;
+    return false;
+  }
+  const value = ipv4ToInt(name);
+  return value != null && isLocalLabV4(value);
+}
+
+async function lookupIps(name) {
+  const key = String(name || "").toLowerCase();
+  const cached = lookupCache.get(key);
+  if (cached && cached.at > Date.now() - LOOKUP_TTL_MS) return cached.ips;
+  let ips = [];
+  try {
+    const rows = await Promise.race([
+      dns.lookup(key, { all: true, verbatim: true }),
+      new Promise((_, reject) => {
+        const timer = setTimeout(() => reject(new Error("lookup-timeout")), LOOKUP_MS);
+        if (typeof timer.unref === "function") timer.unref();
+      }),
+    ]);
+    ips = [...new Set((Array.isArray(rows) ? rows : [rows]).map((row) => row && row.address).filter(Boolean))];
+  } catch {
+    ips = [];
+  }
+  lookupCache.set(key, { at: Date.now(), ips });
+  if (lookupCache.size > 256) lookupCache.delete(lookupCache.keys().next().value);
+  return ips;
+}
+
 const DENIAL = "不行，这是严令禁止的";
 
 // 渗透(?!测试)：「渗透测试 / IP 与渗透测试」不是攻击任务（#73）。
 // exploit(?!-)：exploit-db.com 等资料站不算 exploit 关键词。
 // (?<!防御)攻击：「防御攻击手法」不误触。
 const ATTACK =
-  /渗透(?!测试)|打穿|打下|打站|入侵|拿壳|拿权限|爆破|提权|webshell|getshell|端口扫描|pentest|\bexploit\b(?![-a-z0-9])|\bbreach\b|\bpwn\b|(?<!防御)攻击(?!面)|(?<!surface\s)\battack\b(?!\s+surface)/i;
+  /渗透测试|红队|打点|拿站|渗透(?!测试)|打穿|打下|打站|入侵|拿壳|拿权限|爆破|提权|webshell|getshell|端口扫描|pentest|\bexploit\b(?![-a-z0-9])|\bbreach\b|\bpwn\b|(?<!防御)攻击(?!面)|(?<!surface\s)\battack\b(?!\s+surface)/i;
 
-// ReDoS 保险:ATTACK 含零宽环视,整段消息(贴代码/日志)超过 100KB 时正则回溯会把事件循环卡死。
-// 真实攻击意图通常在前几千字符,100KB cap 不会误放过。
-const ATTACK_SCAN_CAP = 100 * 1024;
+// 外挂硬拦。单字「辅助 / 透视」太容易误伤辅助函数、透视投影，必须带游戏或挂本身。
+const CHEAT_STRONG =
+  /外挂|游戏辅助|自瞄|自动瞄准|无后座|无限弹药|人物透视|物品透视|透视挂|开透视|加速挂|飞天挂|瞬移挂|锁头|压枪挂|改血|过反作弊|注入游戏|aimbot|wallhack|triggerbot|spinbot|silent\s*aim|game\s*cheat|anti-?cheat|cheat\s*engine/i;
+const CHEAT_GAME =
+  /游戏|网游|端游|手游|\bgame\b|steam|csgo|\bcs2\b|pubg|valorant|和平精英|王者荣耀|原神/i;
+const CHEAT_WEAK =
+  /内存修改|读内存|写内存|dll注入/i;
+
+// ReDoS 保险:ATTACK 含零宽环视,整段消息(贴代码/日志)超过上限时按窗扫，不一次喂整篇。
+const ATTACK_SCAN_CAP = 256 * 1024;
+const ATTACK_WINDOW = 8192;
 
 const NET_TOPIC =
   /(?:代理|\bproxy\b|socks|vpn|frp|clash|v2ray|小飞机|机场|出口\s*ip|本机\s*ip|内网\s*ip|公网\s*ip|ip\s*地址|ip\s*归属|ip\s*查询|ip\s*相关|dns|域名解析|网卡|隧道|反向代理|正向代理|http[s]?\s*代理)/i;
@@ -209,17 +269,6 @@ function ipv4ToInt(ip) {
     value = value * 256 + number;
   }
   return value >>> 0;
-}
-
-function isSkippedV4(value) {
-  const a = value >>> 24;
-  const b = (value >>> 16) & 255;
-  if (a === 0 || a === 10 || a === 127) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  if (a >= 224) return true;
-  return false;
 }
 
 function parseIpv6(input) {
@@ -298,14 +347,24 @@ function collectFromText(text, hosts) {
   const sample = String(text || "").slice(0, 32768);
   const url = /\b(?:[a-z][a-z0-9+.-]*:\/\/)([^/?#\s]+)/gi;
   for (const match of sample.matchAll(url)) addHost(match[1], hosts);
+  const mapped = [];
+  const mappedRe = /(?:[0-9a-f]{0,4}:){1,6}ffff:(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)/gi;
+  for (const match of sample.matchAll(mappedRe)) {
+    const value = match[0].toLowerCase();
+    hosts.add(value);
+    mapped.push({ start: match.index, end: match.index + match[0].length });
+  }
+  const covered = (index, length) => mapped.some((span) => index >= span.start && index + length <= span.end);
   const ipv4 = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
-  for (const match of sample.matchAll(ipv4)) hosts.add(match[0]);
-  // 加 lookbehind/lookahead 排除 HH:MM:SS 之类纯十进制时间串，避免误报为 IPv6。
+  for (const match of sample.matchAll(ipv4)) {
+    if (covered(match.index, match[0].length)) continue;
+    hosts.add(match[0]);
+  }
   const ipv6 = /(?<![\d:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![\d])/gi;
   for (const match of sample.matchAll(ipv6)) {
     const value = match[0];
-    // 二次兜底：若整段只有十进制 + 冒号（无 a-f），拒绝
     if (/^[\d:]+$/.test(value)) continue;
+    if (covered(match.index, value.length)) continue;
     hosts.add(value);
   }
   const domain = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\b/gi;
@@ -314,6 +373,7 @@ function collectFromText(text, hosts) {
     if (!keepBareDomain(sample, match.index, name)) continue;
     hosts.add(name);
   }
+  if (/\blocalhost\b/i.test(sample)) hosts.add("localhost");
 }
 
 const HOST_NAME = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
@@ -378,13 +438,9 @@ export function readAllowText(dshHome = findDshHome()) {
   }
 }
 
-export async function writeAllowText(dshHome, text) {
-  const normalized = normalizeAllowText(text);
-  const fp = allowFilePath(dshHome);
-  await fs.promises.mkdir(path.dirname(fp), { recursive: true });
-  await fs.promises.writeFile(fp, normalized.text, "utf8");
+export async function writeAllowText() {
   allowCache = { path: "", mtime: -1, exact: new Set(), ips: null, at: 0 };
-  return normalized;
+  return { text: "", dropped: 0, hosts: [] };
 }
 
 let allowCache = { path: "", mtime: -1, exact: new Set(), ips: null, at: 0 };
@@ -407,24 +463,19 @@ function allowDecision(dshHome) {
   return readAllowExact(dshHome);
 }
 
-function permittedHost(host, allow) {
-  return allow.exact.has(host);
+export function ownServerNote() {
+  return "";
+}
+
+function permittedHost() {
+  return false;
 }
 
 function isOwnNetwork(host) {
   const name = hostOf(host);
   if (!name) return false;
-  if (name === "localhost" || name.endsWith(".localhost") || name.endsWith(".local")) return true;
-  if (name.includes(":")) {
-    const value = parseIpv6(name);
-    if (value == null) return false;
-    if (value === 0n || value === 1n) return true;
-    if ((value >> 118n) === 0x3fan) return true;
-    if ((value >> 121n) === 0x7en) return true;
-    return false;
-  }
-  const value = ipv4ToInt(name);
-  return value != null && isSkippedV4(value);
+  if (name === "localhost" || name.endsWith(".localhost")) return true;
+  return isLocalLabAddress(name);
 }
 
 function isIp(host) {
@@ -439,38 +490,148 @@ function taskHit(label, kind) {
 export function isBenignNetworkTopic(text) {
   const t = String(text || "").trim();
   if (!t || !NET_TOPIC.test(t)) return false;
-  return !ATTACK.test(t.length > ATTACK_SCAN_CAP ? t.slice(0, ATTACK_SCAN_CAP) : t);
+  return !scanHas(ATTACK, t);
+}
+
+function scanHas(re, text) {
+  const sample = String(text || "");
+  const cap = Math.min(sample.length, ATTACK_SCAN_CAP);
+  if (!cap) return false;
+  if (cap <= ATTACK_WINDOW) return re.test(sample.slice(0, cap));
+  const hop = ATTACK_WINDOW - 256;
+  for (let i = 0; i < cap; i += hop) {
+    if (re.test(sample.slice(i, i + ATTACK_WINDOW))) return true;
+  }
+  return false;
 }
 
 export function isAttackTask(text) {
   const sample = String(text || "");
   if (isBenignNetworkTopic(sample)) return false;
-  return ATTACK.test(sample.length > ATTACK_SCAN_CAP ? sample.slice(0, ATTACK_SCAN_CAP) : sample);
+  return scanHas(ATTACK, sample);
+}
+
+export function isCheatTask(text) {
+  const sample = String(text || "");
+  const cap = sample.length > ATTACK_SCAN_CAP ? sample.slice(0, ATTACK_SCAN_CAP) : sample;
+  if (CHEAT_STRONG.test(cap)) return true;
+  return CHEAT_GAME.test(cap) && CHEAT_WEAK.test(cap);
 }
 
 function hostsInTask(text) {
   const hosts = new Set();
-  const sample = String(text || "").slice(0, 32768);
-  collectFromText(sample, hosts);
+  const sample = String(text || "");
+  const cap = Math.min(sample.length, ATTACK_SCAN_CAP);
+  const win = 32768;
+  const hop = 28672;
   const labeled = /(?:[a-z0-9\u00a1-\uffff](?:[a-z0-9\u00a1-\uffff-]{0,61}[a-z0-9\u00a1-\uffff])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{2,59}|[\u4e00-\u9fff]{2,12})/giu;
-  for (const match of sample.matchAll(labeled)) {
-    const name = match[0].toLowerCase().replace(/\.$/, "");
-    if (!keepBareDomain(sample, match.index, name)) continue;
-    addHost(name, hosts);
+  for (let i = 0; i < cap; i += hop) {
+    const chunk = sample.slice(i, i + win);
+    collectFromText(chunk, hosts);
+    for (const match of chunk.matchAll(labeled)) {
+      const name = match[0].toLowerCase().replace(/\.$/, "");
+      if (!keepBareDomain(chunk, match.index, name)) continue;
+      addHost(name, hosts);
+    }
   }
   return hosts;
 }
 
-export async function taskTargetHit(text, dshHome = findDshHome()) {
-  if (!isAttackTask(text)) return null;
-  const allow = allowDecision(dshHome);
+/**
+ * 本地靶场只认解析结果。后缀（.lab / .htb）本身不放行。
+ * 走系统解析（含 hosts）：所有 A/AAAA 都必须是本机/私网，有一条公网或解析失败就拦。
+ */
+async function isRangeTarget(name) {
+  if (!name) return false;
+  if (name === "localhost" || name.endsWith(".localhost")) return true;
+  if (isIp(name)) return isLocalLabAddress(name);
+  const ips = await lookupIps(name);
+  if (!ips.length) return false;
+  return ips.every((ip) => isLocalLabAddress(ip));
+}
+
+export async function publicHostHit(text) {
+  const names = [];
   for (const host of hostsInTask(text)) {
     const name = hostOf(host);
-    if (!name || permittedHost(name, allow) || isOwnNetwork(name) || isIp(name)) continue;
-    if (regionOfSuffix(name)) return taskHit(name, "domain");
-    if (bankHit(name)) return taskHit(name, "bank");
+    if (name) names.push(name);
+  }
+  if (!names.length) return null;
+  for (const name of names) {
+    if (await isRangeTarget(name)) continue;
+    return taskHit(name, isIp(name) ? "ip" : bankHit(name) ? "bank" : "domain");
   }
   return null;
+}
+
+export async function taskTargetHit(text) {
+  if (!isAttackTask(text)) return null;
+  let found = false;
+  for (const host of hostsInTask(text)) {
+    if (hostOf(host)) found = true;
+  }
+  if (!found) return taskHit("unspecified", "domain");
+  return publicHostHit(text);
+}
+
+function blobOf(value, depth = 0) {
+  if (value == null || depth > 3) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map((item) => blobOf(item, depth + 1)).join("\n");
+  if (typeof value !== "object") return "";
+  const skip = new Set(["agent", "session", "ctx", "next", "signal", "context"]);
+  return Object.entries(value)
+    .filter(([key]) => !skip.has(key))
+    .map(([, item]) => blobOf(item, depth + 1))
+    .join("\n")
+    .slice(0, 32768);
+}
+
+function toolArgText(message) {
+  const parts = [];
+  const calls = message?.toolCalls || message?.tool_calls || [];
+  for (const call of Array.isArray(calls) ? calls : []) {
+    parts.push(blobOf(call.arguments ?? call.input ?? call.params ?? call));
+  }
+  if (Array.isArray(message?.content)) {
+    for (const block of message.content) {
+      if (!block || typeof block !== "object") continue;
+      if (block.type === "tool_use" || block.type === "tool-call" || block.type === "tool-call-start") {
+        parts.push(blobOf(block.input ?? block.arguments ?? block));
+      }
+    }
+  }
+  if (message?.toolName || message?.name) parts.push(String(message.toolName || message.name));
+  return parts.join("\n");
+}
+
+export function latestToolText(messages) {
+  const list = Array.isArray(messages) ? messages : [];
+  const parts = [];
+  for (let i = list.length - 1; i >= 0 && parts.length < 6; i -= 1) {
+    const role = list[i]?.role;
+    if (role !== "assistant" && role !== "model") continue;
+    const blob = toolArgText(list[i]);
+    if (blob.trim()) parts.push(blob);
+  }
+  return parts.join("\n");
+}
+
+export function execArgText(exec) {
+  if (!exec || typeof exec !== "object") return "";
+  return blobOf({
+    name: exec.tool?.name || exec.name || exec.toolName,
+    args: exec.args ?? exec.input ?? exec.parameters ?? exec.params,
+    command: exec.command,
+    call: exec.toolCall ?? exec.call,
+  });
+}
+
+function isRedteamPayload(payload) {
+  const session = payload?.agent?.session || payload?.session;
+  const raw = session?.agentPreset || session?.header?.agentPreset || session?.projectionValues?.agentPreset || payload?.agent?.preset;
+  const id = String(raw?.id || raw?.name || raw || "").toLowerCase();
+  return id.includes("redteam");
 }
 
 function messageBody(message) {
@@ -590,13 +751,15 @@ async function parkDenial(payload) {
   const session = sessionOf(payload);
   const turn = Number(payload?.turn);
   const step = Number(payload?.step);
-  if (!session || !Number.isSafeInteger(turn) || step !== 1) return false;
+  if (!session || !Number.isSafeInteger(turn) || !Number.isSafeInteger(step) || step < 1) return false;
   const messages = Array.isArray(payload?.messages) ? payload.messages : [];
   let outerOpened = false;
   let innerOpened = false;
   try {
-    for (const message of messages) {
-      session.append("user/message", message, { surfaceOp: "append" });
+    if (step === 1) {
+      for (const message of messages) {
+        session.append("user/message", message, { surfaceOp: "append" });
+      }
     }
     session.append("step/start", { turn, step });
     outerOpened = true;
@@ -622,16 +785,37 @@ async function parkDenial(payload) {
   }
 }
 
+function denyToolResult() {
+  return { isError: true, content: DENIAL, output: DENIAL, text: DENIAL };
+}
+
 export function installRegionGate(ctx) {
   if (!ctx || typeof ctx.on !== "function") return;
+  const scoped = new WeakMap();
   const hook = async (payload, next) => {
     const forward = () => (typeof next === "function" ? next() : { kind: "enter", messages: payload?.messages || [] });
-    if (Number(payload?.step) !== 1) return forward();
+    const step = Number(payload?.step);
+    const turn = Number(payload?.turn);
+    const session = sessionOf(payload) || payload?.agent?.session;
     let hit = null;
     try {
       const task = currentTaskText(payload?.messages);
-      if (!task || !isAttackTask(task)) return forward();
-      hit = await taskTargetHit(task);
+      const redteam = isRedteamPayload(payload);
+      const marked = session ? scoped.get(session) === turn : false;
+      if (step === 1) {
+        if (!task && !redteam) return forward();
+        if (task && isCheatTask(task)) hit = taskHit("cheat", "cheat");
+        else if (task && isAttackTask(task)) {
+          if (session && Number.isSafeInteger(turn)) scoped.set(session, turn);
+          hit = await taskTargetHit(task);
+        } else if (redteam) {
+          if (session && Number.isSafeInteger(turn)) scoped.set(session, turn);
+          hit = task ? await publicHostHit(task) : null;
+        } else return forward();
+      } else if (redteam || marked || isAttackTask(task)) {
+        if (isCheatTask(task)) hit = taskHit("cheat", "cheat");
+        else hit = await publicHostHit(latestToolText(payload?.messages));
+      } else return forward();
     } catch {
       return forward();
     }
@@ -644,10 +828,27 @@ export function installRegionGate(ctx) {
     }
     return forward();
   };
+  const toolHook = async (exec, next) => {
+    const forward = () => (typeof next === "function" ? next() : denyToolResult());
+    try {
+      const blob = execArgText(exec);
+      if (!blob.trim()) return forward();
+      const hit = await publicHostHit(blob);
+      if (!hit) return forward();
+    } catch {
+      return forward();
+    }
+    if (exec && typeof exec === "object") {
+      exec.blocked = true;
+      exec.error = DENIAL;
+    }
+    return denyToolResult();
+  };
   const arm = () => {
     if (ctx.__dshPurgeRegionGate) return true;
     try {
       ctx.on("agent/pre-step", hook, { global: true, prepend: true });
+      try { ctx.on("tools/pre-execute", toolHook, { global: true, prepend: true }); } catch { /* 旧宿主没有工具钩。 */ }
       ctx.__dshPurgeRegionGate = true;
       return true;
     } catch {

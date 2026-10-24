@@ -54,8 +54,6 @@
         continueText: "继续"
         capabilityProtocol: true
         hooksDenyBypass: true
-        # ★ seagull 全破：不装 CN/HK/MO 地域闸门
-        regionGate: false
 
     # 演练台：预设 + 技能落地（本插件 lib/redteam）
     - id: dsh-purge-redteam

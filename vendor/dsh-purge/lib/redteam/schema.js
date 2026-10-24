@@ -409,27 +409,27 @@ CREATE INDEX IF NOT EXISTS ix_poc_kind ON poc(kind, verified);
  * 面板按它分组，用户才能"一类一类看"而不是几百条平铺。
  */
 const POC_CATEGORIES = [
-  { code: 'rce', name: '远程命令执行', hint: '框架/中间件/组件 RCE、表达式注入、模板注入' },
-  { code: 'deserialization', name: '反序列化', hint: 'Java/PHP/.NET 反序列化链、fastjson/jackson 等' },
-  { code: 'file-upload', name: '文件上传 getshell', hint: '上传绕过、解析漏洞、二次渲染、竞争' },
-  { code: 'sqli', name: 'SQL 注入', hint: '注入点验证、拖库、写文件、提权' },
-  { code: 'unauthorized', name: '未授权访问', hint: '未鉴权接口/服务（Redis、Docker、Actuator、Swagger 调用）' },
-  { code: 'auth-bypass', name: '认证绕过 / 越权', hint: '登录绕过、JWT 缺陷、越权读写、逻辑缺陷' },
-  { code: 'weak-password', name: '弱口令 / 口令爆破', hint: '管理端弱口令、数据库弱口令、默认口令' },
-  { code: 'ssrf', name: 'SSRF', hint: '服务端请求伪造、云元数据、内网探测跳板' },
-  { code: 'xxe', name: 'XXE', hint: 'XML 外部实体读取与 SSRF' },
-  { code: 'path-traversal', name: '目录穿越 / 任意文件读取', hint: '路径穿越、任意文件读、源码/配置读取' },
-  { code: 'info-leak', name: '信息泄露', hint: '配置/凭据/源码/备份泄露（能升级为得分的那些）' },
-  { code: 'privesc', name: '提权 / 横向', hint: '本地提权、凭据复用、Pass-the-Hash、横向工具' },
-  { code: 'tunnel', name: '隧道 / 代理', hint: 'suo5、frp、chisel、Neo-ReGeorg、内网代理' },
-  { code: 'other', name: '其它', hint: '不属于上面任何一类（写清用途）' },
+  { code: 'rce', name: "Remote command execution", hint: "Framework/middleware/component RCE, expression injection, template injection" },
+  { code: 'deserialization', name: "Deserialization", hint: "Java/PHP/.NET deserialization chains, fastjson/jackson, etc." },
+  { code: 'file-upload', name: "File upload getshell", hint: "Upload bypass, parsing flaws, second-render, race conditions" },
+  { code: 'sqli', name: "SQL injection", hint: "Injection-point validation, data dumping, file writes, privilege escalation" },
+  { code: 'unauthorized', name: "Unauthorized access", hint: "Unauthenticated interfaces/services (Redis, Docker, Actuator, Swagger calls)" },
+  { code: 'auth-bypass', name: "Auth bypass / broken access control", hint: "Login bypass, JWT flaws, unauthorized read/write, logic flaws" },
+  { code: 'weak-password', name: "Weak passwords / password brute force", hint: "Weak admin passwords, weak database passwords, default passwords" },
+  { code: 'ssrf', name: 'SSRF', hint: "Server-side request forgery, cloud metadata, internal-network probing pivot" },
+  { code: 'xxe', name: 'XXE', hint: "XML external entity reads and SSRF" },
+  { code: 'path-traversal', name: "Path traversal / arbitrary file read", hint: "Path traversal, arbitrary file read, source/config file read" },
+  { code: 'info-leak', name: "Information disclosure", hint: "Config/credential/source/backup leaks (the kind that can be upgraded to a score)" },
+  { code: 'privesc', name: "Privilege escalation / lateral movement", hint: "Local privilege escalation, credential reuse, Pass-the-Hash, lateral tools" },
+  { code: 'tunnel', name: "Tunnel / proxy", hint: "suo5, frp, chisel, Neo-ReGeorg, internal proxies" },
+  { code: 'other', name: "Other", hint: "Does not fit any category above (describe the purpose)" },
 ]
 export { POC_CATEGORIES }
 
 /** 归类 code → 中文名（未知值原样返回，允许用户自定义）。 */
 export function pocCategoryName(code) {
   const hit = POC_CATEGORIES.find((c) => c.code === String(code || ''))
-  return hit ? hit.name : (code ? String(code) : '未归类')
+  return hit ? hit.name : (code ? String(code) : "Uncategorized")
 }
 
 /**

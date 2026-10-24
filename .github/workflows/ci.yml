@@ -60,7 +60,8 @@ jobs:
           set -e
           for p in VERSION LICENSE NOTICE README.md install.sh install.ps1 update.sh update.ps1 verify.sh verify.ps1 \
                    src/prompt/prompt-inject.md src/rules/seagull-fullbreak.md src/rules/seagull-fullbreak.json \
-                   src/tools/patch_profile.py src/skills/redteam vendor/dsh-purge/lib/index.js; do
+                   src/tools/patch_profile.py src/skills/redteam vendor/dsh-purge/lib/index.js \
+                   vendor/dsh-purge/LICENSE vendor/dsh-purge/NOTICE vendor/dsh-purge/LICENSE-COMMERCIAL.md; do
             [ -e "$p" ] || { echo "缺: $p"; exit 1; }
           done
           echo "产物完整"
@@ -85,6 +86,8 @@ jobs:
                    vendor/dsh-purge/lib/redteam/index.js \
                    vendor/dsh-purge/lib/redteam/preset-composition.js \
                    vendor/dsh-purge/lib/redteam/store-core.js \
+                   vendor/dsh-purge/lib/redteam/evidence-ledger.mjs \
+                   vendor/dsh-purge/scripts/ensure-profile-bundle.mjs \
                    vendor/dsh-purge/lib/preset-default.js \
                    vendor/dsh-purge/lib/mnemon-settings.js \
                    vendor/dsh-purge/lib/reapply.js \

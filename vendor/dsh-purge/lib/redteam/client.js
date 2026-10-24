@@ -4009,8 +4009,6 @@ window.__ModuleLoader__.load({
         ['assets', '资产测绘'], ['env', '环境适配'], ['agents', '智能体'], ['sessions', '会话隧道'],
         ['findings', '漏洞战果'],
         ['chain', '攻击链'], ['scores', '得分目标'], ['report', '报告'],
-        ['knowledge', '知识库'],
-        ['skills', '技能库'],
       ]
       const full = isFullWindow()
       const openFull = () => {
@@ -4035,10 +4033,8 @@ window.__ModuleLoader__.load({
 
       let body
       if (err) body = h('div', { className: 'rt-err' }, err)
-      /* 全局页：没有靶标也能看（知识库 / 环境适配 / 技能库 / 智能体概览） */
-      else if (st.tab === 'knowledge') body = h(KnowledgeTab, { refreshKey: refreshKey })
-      else if (st.tab === 'env') body = h(EnvTab, { refreshKey: refreshKey })
-      else if (st.tab === 'skills') body = h(SkillsTab, { refreshKey: refreshKey })
+      /* 全局页：没有靶标也能看（环境适配 / 智能体概览）。开源版下架知识库和技能库。 */
+      else if (st.tab === 'env' || st.tab === 'knowledge' || st.tab === 'skills') body = h(EnvTab, { refreshKey: refreshKey })
       else if (st.tab === 'agents' || st.tab === 'prompts') body = h(AgentsTab, { engagement: eng, refreshKey: refreshKey })
       else if (!eng) {
         body = h('div', { className: 'rt-pane' },

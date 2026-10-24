@@ -27,7 +27,6 @@ const COPY_NAMES = [
   "package.json",
   "README.md",
   "README.zh-CN.md",
-  "README.en.md",
   "LICENSE",
 ];
 
@@ -270,6 +269,16 @@ export function resolveLinkDir(profileDir, spec) {
   return path.resolve(profileDir, raw);
 }
 
+function isArchiveFile(fp) {
+  if (!fp) return false;
+  try {
+    if (fs.existsSync(fp) && fs.statSync(fp).isFile()) return true;
+  } catch {
+    /* 路径不存在时仍按后缀认 tar/zip，避免把 file:xxx.tgz 当目录扫 */
+  }
+  return /\.(?:tgz|tar\.gz|tar|zip)$/i.test(String(fp));
+}
+
 export function findPurgeProfiles() {
   const root = path.join(findDshHome(), "profiles");
   if (!fs.existsSync(root)) return [];
@@ -335,9 +344,16 @@ function planUpdates() {
 
   for (const p of profiles) {
     if (isLinkSpec(p.spec)) {
-      const dir = resolveLinkDir(p.dir, p.spec);
-      if (!remember(dir)) continue;
-      jobs.push(canGit(dir) ? { kind: "git", dir, profile: p.name } : { kind: "zip", dir, profile: p.name });
+      const resolved = resolveLinkDir(p.dir, p.spec);
+      // file:<本地 tar> 是归档不是目录。当目录扫会 ENOTDIR lstat '.../lib'（#118）。
+      if (isArchiveFile(resolved)) {
+        const dir = profilePluginDir(p.dir) || PLUGIN_ROOT;
+        if (!remember(dir)) continue;
+        jobs.push({ kind: "dsh", profile: p.name, spec: p.spec, dir, profileDir: p.dir });
+        continue;
+      }
+      if (!remember(resolved)) continue;
+      jobs.push(canGit(resolved) ? { kind: "git", dir: resolved, profile: p.name } : { kind: "zip", dir: resolved, profile: p.name });
       continue;
     }
     const dir = profilePluginDir(p.dir) || PLUGIN_ROOT;

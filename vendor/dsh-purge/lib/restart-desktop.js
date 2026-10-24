@@ -193,7 +193,8 @@ function listDesktopPids(exe = info.execPath) {
       // 该进程名不存在
     }
   }
-  return pids;
+  // 助手自己若仍是 Electron 映像，绝不能进待杀名单（#133）。
+  return pids.filter((pid) => pid !== process.pid);
 }
 
 function signalPids(pids, signal) {

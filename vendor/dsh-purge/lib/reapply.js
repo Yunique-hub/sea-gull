@@ -342,7 +342,7 @@ export async function reapplyInstalled(options = {}) {
     const restored = core.restoreSealedExtract(freshExtract.appDir, freshExtract.prev);
     return {
       ok: false,
-      error: restored ? "清洗没有完成，已放回上一份解开目录" : "清洗没有完成",
+      error: restored ? "Clean did not complete; the previous unpacked directory was restored" : "Clean did not complete",
       restored,
       version: pluginVersion(),
       reverted: 0,
@@ -376,7 +376,7 @@ export async function reapplyInstalled(options = {}) {
   // 否则每次打开面板都会再要一次重启。
   return {
     ok: clean,
-    error: clean ? "" : "清洗没有完成",
+    error: clean ? "" : "Clean did not complete",
     version: pluginVersion(),
     reverted: reverted.reverted?.length || 0,
     applied: summary.applied || 0,

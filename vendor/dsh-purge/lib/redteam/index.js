@@ -368,6 +368,7 @@ export function installPreset(options = {}) {
     }
     const rendered = renderSkillsDir(text)
     const tools = renderToolsPackage(rendered.text)
+    // Legacy filters migrate in preparePresetDefinitions; preserve user YAML.
     const delegation = repairDelegation(tools.text)
     const next = delegation.text
     if (rendered.changed || tools.changed || delegation.changed) {

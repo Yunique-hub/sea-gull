@@ -8,7 +8,7 @@
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.0.5"
+VERSION="1.0.6"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
@@ -287,9 +287,7 @@ for d in "$ROOT"/src/skills/*/; do
   [ "$id" = "redteam" ] && continue
   mkdir -p "$DSH_HOME/skills/$id"; cp "$d/SKILL.md" "$DSH_HOME/skills/$id/SKILL.md"
 done
-if [ -d "$ROOT/src/skills/redteam" ]; then
-  mkdir -p "$DSH_HOME/skills/redteam"; cp "$ROOT"/src/skills/redteam/*.md "$DSH_HOME/skills/redteam/" 2>/dev/null || true
-fi
+# Historical redteam skills remain in source; preserve existing local copies.
 ok "资产已落地"
 
 # ── 5. 可选 Apply ──────────────────────────────────────────────────

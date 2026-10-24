@@ -27,10 +27,10 @@ import { isIpv6 } from './ip-utils.js'
  * 不算的：self-only —— 只在自己 VPS / 自建服务器上开的代理或服务端，没碰到目标。
  */
 const TUNNEL_ENTRY_KINDS = {
-  'target-outbound': '目标主动连出（反弹 shell / 目标上跑 frp 客户端）',
-  'target-http': '经目标 WebShell/HTTP 通道（suo5 / Neo-ReGeorg）',
-  'target-agent': '经目标已控进程/会话转发（SSH -R 等）',
-  'self-only': '只在自己 VPS/自建服务器上（不算突破）',
+  'target-outbound': "Target-initiated outbound (reverse shell / frp client running on the target)",
+  'target-http': "Target WebShell/HTTP channel (suo5 / Neo-ReGeorg)",
+  'target-agent': "Forwarding through a compromised process/session on the target (SSH -R, etc.)",
+  'self-only': "Own VPS/self-hosted server only (does not count as a breach)",
 }
 export { TUNNEL_ENTRY_KINDS }
 
@@ -135,7 +135,7 @@ export function serviceLabel(hit = {}, assetIp) {
   /* 没有资产 id 时用 target 的 host[:port]（去掉路径与参数，别把整条 URL 当服务名）；
      端口来自库列而 target 里没写时补上，便于一眼看出是哪个服务。 */
   const authority = targetAuthority(hit.target)
-  if (authority === null) return hit.target ? String(hit.target) : '(未标注服务)'
+  if (authority === null) return hit.target ? String(hit.target) : "(service not specified)"
   if (port !== null && !/:\d{1,5}$/.test(authority)) return authority + ':' + port
   return authority
 }
@@ -412,10 +412,10 @@ function scoreMultiplierOf(hit = {}) {
     /* 裸写 IPv6 兜底的正则必须含 ≥2 个冒号：dc01:389 / ad01:8080 这类内网主机名:端口
        只有一个冒号，旧正则会把它们误判成 IPv6 让成果静默 ×3 */
     || /(^|\/\/)(?:\[[0-9a-f:]+\]|[0-9a-f]*(?::[0-9a-f]*){2,})/i.test(target)
-  if (ipv6) { multiplier *= 3; reasons.push("G6 IPv6 成果 ×3") }
+  if (ipv6) { multiplier *= 3; reasons.push("G6 IPv6 result ×3") }
   const scale = String(hit.data_scale || "").trim().toLowerCase()
-  if (scale === "large") { multiplier *= 2; reasons.push("G5 数据规模超 1 亿条 / 10TB ×2") }
-  else if (scale === "knowledge-base" || scale === "kb") { multiplier *= 2; reasons.push("G5 控制知识库相关系统 ×2") }
+  if (scale === "large") { multiplier *= 2; reasons.push("G5 data volume over 100 million rows / 10 TB ×2") }
+  else if (scale === "knowledge-base" || scale === "kb") { multiplier *= 2; reasons.push("G5 controls a knowledge-base-related system ×2") }
   return { multiplier, reasons }
 }
 
@@ -471,14 +471,14 @@ function evaluateScoreBoard(db, rows = [], options = {}) {
 export function scoreCapReasonText(hit = {}, bestPoints) {
   const label = serviceLabel(hit)
   if (hit.capped_reason_kind === 'cap') {
-    return '「' + label + '」这条不计分：'
-      + (hit.rule === null || hit.rule === undefined ? '' : '规则 ' + hit.rule + ' ')
-      + '的**累计得分已达该规则上限（' + (Number(hit.rule_cap) || 0) + ' 分）**——同一规则超出上限的部分不再累加。'
-      + '把精力换到别的规则或别的资产上，不要在已达上限的规则里继续刷。'
+    return '"' + label + "\" is not scored: "
+      + (hit.rule === null || hit.rule === undefined ? '' : "rule " + hit.rule + ' ')
+      + "**has cumulatively reached its cap (" + (Number(hit.rule_cap) || 0) + " pts)** — anything above that cap for the same rule is not accumulated. "
+      + "Spend your effort on other rules or other assets instead of farming results in a rule that has already reached its cap."
   }
-  return '「' + label + '」这个目标上的权限已经拿满（计分口径：同一目标只算分值最高的那条'
-    + (bestPoints === undefined || bestPoints === null ? '' : '，+' + bestPoints + ' 分')
-    + '）——这条按规则不再计分，只作过程留痕；**换目标或换规则推进，不要在同一个目标上刷同类成果**。'
+  return '"' + label + "\" target access is already maxed out (scoring rule: only the highest-scoring hit per target counts"
+    + (bestPoints === undefined || bestPoints === null ? '' : ', +' + bestPoints + " pts")
+    + ") — this hit does not score under the rule and is kept only as a process trace; **move on to another target or another rule — do not farm similar results on the same target**."
 }
 
 /** 兼容旧名（v0.10 及以前叫 serviceCapReason）。 */
@@ -546,153 +546,153 @@ export function formatRows(n) {
  */
 export const SCORE_CONFIRM = {
   'domain-control': {
-    need: '目标域名解析记录被改为我方可控（NS/A 记录生效），或域名管理后台可操作',
-    proof: '管理后台截图 + 改记录前后的 dig/nslookup 对比',
-    replay: 'nslookup <域名> <我方 NS>；或后台操作请求原文',
-    script: 'dig NS <域名> @8.8.8.8\ndig <域名> @<我方NS>',
+    need: "The target domain's DNS records are changed to something we control (NS/A records live), or the domain admin console can be operated",
+    proof: "Admin console screenshot + dig/nslookup comparison before and after the record change",
+    replay: "nslookup <host> <our-ns>; or the raw request of the console action",
+    script: "dig NS <host> @8.8.8.8\ndig <host> @<our-ns>",
   },
   'terminal-access': {
-    need: '能对终端下发指令并取回执行结果（不是"发现了一台设备"）',
-    proof: '被控终端执行 id/hostname 的回显 + 与目标单位的关系证明（G7）',
-    replay: '远控会话里执行 id；或木马/远控的 agent 上线记录',
+    need: "Can push a command to the endpoint and get the execution result back (not just 'a device was found')",
+    proof: "Echo of id/hostname run on the compromised endpoint + proof of its relation to the target organization (G7)",
+    replay: "Run id in the remote-control session; or the agent check-in record of the trojan/RAT",
     script: 'id; whoami; hostname',
   },
   'server-host': {
-    need: '在主机上执行了命令并拿到回显（WebShell / 反弹 Shell / 远控均可）',
-    proof: '命令回显（id / hostname）+ WebShell 连接要素或会话记录',
-    replay: 'WebShell 请求原文（可直接重放）；或反弹 Shell 的监听记录',
+    need: "A command was executed on the host and its output returned (WebShell / reverse shell / RAT all count)",
+    proof: "Command output (id / hostname) + WebShell connection details or the session record",
+    replay: "Raw WebShell request (directly replayable); or the listener record of the reverse shell",
     script: 'id; uname -a; cat /etc/passwd | head',
   },
   'db-credential': {
-    need: '用账号成功连上数据库并执行了查询（未授权访问也算：能连上即成立）',
-    proof: '登录成功后的查询回显（select user(), version()）+ 账号权限级别',
+    need: "Connected to the database with an account and ran a query (unauthorized access counts too: being able to connect is enough)",
+    proof: "Query output after a successful login (select user(), version()) + the account's privilege level",
     replay: 'mysql -h <host> -P <port> -u <user> -p\'<pass>\' -e "select user(),version()"',
     script: 'mysql -h <host> -u <user> -p -e "select user(),version(),current_user()"',
   },
   'web-app': {
-    need: '以目标已有账号登录进系统（普通或管理员），并访问了受保护页面',
-    proof: '登录后的页面内容/回显 + 会话 Cookie 或 Token（证明不是只拿到口令）',
-    replay: '登录请求原文（含见证 Cookie/Token）+ 一次带会话的受保护页面请求',
-    script: 'curl -i -s -X POST <登录URL> -d "username=<u>&password=<p>" -c cookie.txt\ncurl -s -b cookie.txt <受保护页面>',
+    need: "Logged into the system with an account that already existed on the target (ordinary or admin) and reached a protected page",
+    proof: "Page content/output after login + the session Cookie or Token (proof that it is not just the password)",
+    replay: "Raw login request (with the Cookie/Token that proves it) + one request to a protected page carrying that session",
+    script: "curl -i -s -X POST <url> -d \"username=<u>&password=<p>\" -c cookie.txt\ncurl -s -b cookie.txt <protected-page>",
   },
   'central-system': {
-    need: '登录进堡垒机/域控/SSO/终端管理后台等集权系统并取得管理权限',
-    proof: '管理后台页面截图 + 能体现"可管控下属节点"的操作（登录 20% 托管节点或 20 台）',
-    replay: '登录请求原文 + 一次管控操作（如列举托管主机）的请求与响应',
-    script: 'curl -s -b cookie.txt "<管控列表接口>"',
+    need: "Logged into a centralized system (jump server / domain controller / SSO / endpoint management console) and obtained admin privileges",
+    proof: "Admin console page screenshot + an action showing control over subordinate nodes (log in to 20% of managed nodes, or 20 nodes)",
+    replay: "Raw login request + the request and response of one management action (e.g. listing managed hosts)",
+    script: "curl -s -b cookie.txt \"<console-api>\"",
   },
   'bigdata-system': {
-    need: '获得大数据平台（Hadoop/Spark/ES 等）管理或普通权限',
-    proof: '平台管理页/接口回显 + 可访问的数据规模（条数或容量）',
-    replay: '平台接口请求原文（如 ES _cat/indices、YARN /ws/v1/cluster/apps）',
-    script: 'curl -s "<平台接口>" | head -50',
+    need: "Obtained admin or ordinary privileges on a big-data platform (Hadoop/Spark/ES, etc.)",
+    proof: "Platform admin page/API output + the volume of data accessible (row count or capacity)",
+    replay: "Raw platform API request (e.g. ES _cat/indices, YARN /ws/v1/cluster/apps)",
+    script: "curl -s \"<platform-api>\" | head -50",
   },
   netdev: {
-    need: '登录网络设备（防火墙/路由器/交换机/VPN/网闸）并取得权限',
-    proof: '设备管理页截图 + 路由表或连接量截图（G7 明确要求）',
-    replay: '设备登录请求原文 + 读取路由表的命令回显',
-    script: 'show ip route    # 或 display ip routing-table',
+    need: "Logged into a network device (firewall/router/switch/VPN/gap device) and obtained privileges",
+    proof: "Device admin page screenshot + routing table or connection-count screenshot (explicitly required by G7)",
+    replay: "Raw device login request + the command output that reads the routing table",
+    script: "show ip route    # or display ip routing-table",
   },
   'netdev-redirect': {
-    need: '借助该设备实际改变了流量走向（策略/路由/DNS 改动生效）',
-    proof: '改动前后的路由表或策略对比 + 我方节点收到流量的证据',
-    replay: '策略配置请求原文 + 我方可控节点上的抓包/访问日志',
-    script: 'tcpdump -ni any port <端口> -c 10',
+    need: "The device was actually used to change traffic flow (policy/routing/DNS change took effect)",
+    proof: "Routing table or policy comparison before and after the change + evidence that our node received the traffic",
+    replay: "Raw policy-configuration request + packet capture/access logs on our controlled node",
+    script: "tcpdump -ni any port <port> -c 10",
   },
   'netdev-implant': {
-    need: '设备上植入了可执行的远控/持久化，**并且**借助它完成了后续攻击',
-    proof: '远控进程或持久化项的证据 + 经该设备发起的后续成果记录',
-    replay: '植入动作的请求/命令原文 + 后续经由该设备的访问日志',
+    need: "A runnable remote-control/persistence implant was placed on the device, **and** it was used to carry out follow-up attacks",
+    proof: "Evidence of the RAT process or persistence item + records of the follow-up results obtained through that device",
+    replay: "Raw request/command of the implant action + access logs of the follow-up traffic through that device",
     script: '',
   },
   iiot: {
-    need: '获得工业互联网系统管理权限，或批量控制其下的互联设备',
-    proof: '管理后台截图 + 被控设备清单与数量',
-    replay: '登录请求原文 + 设备列表接口响应',
+    need: "Obtained admin privileges on an industrial internet system, or batch-controlled its interconnected devices",
+    proof: "Admin console screenshot + list and count of controlled devices",
+    replay: "Raw login request + response of the device-list API",
     script: '',
   },
   'cloud-platform': {
-    need: '云管理平台管理员权限；或通过 ak/sk 批量控制云上节点（≥100 个才计节点分）',
-    proof: '平台管理页截图；ak/sk 场景需给出被控节点清单与数量、或管理员证明（新增节点/改权限）',
-    replay: '平台接口请求原文（列举实例、创建用户等）',
-    script: 'curl -s -H "Authorization: Bearer <token>" "<平台/实例列表接口>"',
+    need: "Cloud management platform admin privileges; or batch control of cloud nodes via AK/SK (node points only count for ≥100 nodes)",
+    proof: "Platform admin page screenshot; for AK/SK, list and count of controlled nodes, or proof of admin rights (creating nodes/changing permissions)",
+    replay: "Raw platform API request (list instances, create users, etc.)",
+    script: "curl -s -H \"Authorization: Bearer <token>\" \"<instance-list-api>\"",
   },
   'iot-platform': {
-    need: '获得物联网管控平台权限，或按其连接点批量控制设备',
-    proof: '平台管理页截图 + 连接点/设备数量',
-    replay: '平台登录与设备列表接口原文',
+    need: "Obtained privileges on an IoT management platform, or batch-controlled devices through its connection points",
+    proof: "Platform admin page screenshot + connection point/device count",
+    replay: "Raw platform login and device-list API requests",
     script: '',
   },
   'iot-corenet': {
-    need: '从物联网端点设备横向进入核心网，并控制了业务生产等重要系统',
-    proof: '路径说明（哪个端点→核心网→哪个系统）+ 该系统的控制证据',
-    replay: '从端点发起的横向动作命令 + 核心网系统的登录/操作请求',
+    need: "Moved laterally from an IoT endpoint device into the core network and took control of important systems such as business production",
+    proof: "Path description (which endpoint → core network → which system) + control evidence for that system",
+    replay: "Lateral-movement command issued from the endpoint + login/operation requests against the core-network system",
     script: '',
   },
   secdev: {
-    need: '获得非集权类安全设备（IPS/IDS/审计/WAF）管理员权限',
-    proof: '设备管理页截图 + 能体现策略可控的操作',
-    replay: '登录请求原文 + 一条策略读取接口响应',
+    need: "Obtained admin privileges on a non-centralized security device (IPS/IDS/audit appliance/WAF)",
+    proof: "Device admin page screenshot + an action showing policy control",
+    replay: "Raw login request + response of one policy-read API",
     script: '',
   },
   'file-storage': {
-    need: '获得文件存储系统后台权限（FTP/NAS/网盘/对象存储），或拿到其普通账号',
-    proof: '目录列举截图 + 可读文件清单（数据成果另有计分，见 G2）',
-    replay: '列举目录的请求原文（FTP LIST / S3 ListObjects / WebDAV PROPFIND）',
-    script: 'curl -s "<存储接口>" | head -50',
+    need: "Obtained backend privileges on a file storage system (FTP/NAS/cloud drive/object storage), or an ordinary account on it",
+    proof: "Directory-listing screenshot + list of readable files (data results score separately, see G2)",
+    replay: "Raw directory-listing request (FTP LIST / S3 ListObjects / WebDAV PROPFIND)",
+    script: "curl -s \"<storage-api>\" | head -50",
   },
   'ai-agent': {
-    need: '控制模型智能体/skill 等 agent 工具，并**实际驱动它执行了动作**',
-    proof: '对话或调用记录 + 被驱动执行的动作与其结果（区间分按控制深度研判）',
-    replay: '驱动 agent 的请求原文 + 它执行动作的回显',
+    need: "Controlled a model agent, skill, or other agent tool, and **actually drove it to perform actions**",
+    proof: "Conversation or invocation record + the actions it was driven to perform and their results (graded by control depth for the range score)",
+    replay: "Raw request that drives the agent + the output of the action it performed",
     script: '',
   },
   'model-compute': {
-    need: '获得算力管理平台/训练数据与知识库系统的系统管理权限',
-    proof: '管理后台截图 + 能体现算力调度或数据可读写的操作',
-    replay: '平台登录与调度/数据接口原文',
+    need: "Obtained system admin privileges on a compute management platform, training-data system, or knowledge-base system",
+    proof: "Admin console screenshot + an action showing compute scheduling or data read/write",
+    replay: "Raw platform login and scheduling/data API requests",
     script: '',
   },
   'model-data': {
-    need: '获得模型相关数据系统管理员权限（可影响训练/推理/运营或窃取篡改权重）',
-    proof: '管理后台截图 + 可读写的模型/数据集清单',
-    replay: '平台接口原文（列举模型、下载权重）',
+    need: "Obtained admin privileges on a model-related data system (able to affect training/inference/operations, or steal or tamper with weights)",
+    proof: "Admin console screenshot + list of models/datasets that can be read/written",
+    replay: "Raw platform API requests (list models, download weights)",
     script: '',
   },
   'computepower-admin': {
-    need: '获得算力基础设施管理员权限',
-    proof: '管理后台截图 + 可调度资源证明',
-    replay: '平台登录与资源列表接口原文',
+    need: "Obtained admin privileges on compute infrastructure",
+    proof: "Admin console screenshot + proof of resources that can be scheduled",
+    replay: "Raw platform login and resource-list API requests",
     script: '',
   },
   'computepower-cards': {
-    need: '实际取得算力卡资源（10 分/卡）或卡池化平台控制权',
-    proof: '卡资源清单（数量）+ 能提交任务或独占卡的证据',
-    replay: 'nvidia-smi 回显 / 平台卡列表接口',
+    need: "Actually obtained compute card resources (10 pts/card) or control of a card-pooling platform",
+    proof: "Card resource list (with counts) + evidence of submitting jobs or exclusive card use",
+    replay: "nvidia-smi output / platform card-list API",
     script: 'nvidia-smi -L',
   },
   'boundary-logical': {
-    need: '从靶标侧建立了通往内网的通道，并能**实际访问内网目标**',
-    proof: '隧道登记（入口必须是目标侧）+ 经隧道访问内网目标的回显/截图（G7）',
-    replay: '经隧道访问内网目标的那条命令与回显；隧道搭建命令',
-    script: 'curl --socks5-hostname 127.0.0.1:<端口> http://<内网IP>/ -i',
+    need: "Established a channel from the target side into the intranet and can **actually reach intranet targets through it**",
+    proof: "Tunnel registration (the entry must be on the target side) + output/screenshot of reaching an intranet target through the tunnel (G7)",
+    replay: "The command that reached the intranet target through the tunnel and its output; the tunnel setup command",
+    script: "curl --socks5-hostname 127.0.0.1:<port> http://<host>/ -i",
   },
   'boundary-strong': {
-    need: '突破网闸类强隔离，进入强隔离业务内网并实际访问到内网目标',
-    proof: '网闸类隔离设备的控制截图 + 能访问内网的截图证明（G7）',
-    replay: '经强隔离通道访问内网目标的命令与回显',
+    need: "Broke through gap-type strong isolation into the strongly isolated business intranet and actually reached an intranet target",
+    proof: "Control screenshot of the gap-type isolation device + screenshot proving intranet access (G7)",
+    replay: "Command and output of reaching the intranet target through the strong-isolation channel",
     script: '',
   },
   'boundary-physical': {
-    need: '突破物理隔离/进入核心生产网并实际访问到目标',
-    proof: '防火墙/VPN/多网卡主机/网闸的控制截图 + 能访问内网的截图（G7）',
-    replay: '进入核心网后访问目标的命令与回显',
+    need: "Broke through physical isolation / entered the core production network and actually reached the target",
+    proof: "Control screenshots of the firewall/VPN/multi-NIC host/gap device + screenshot proving intranet access (G7)",
+    replay: "Command and output of reaching the target after entering the core network",
     script: '',
   },
   'boundary-supply': {
-    need: '借助供应链运维通道或云服务进入主防单位内网（按情形分别计分）',
-    proof: '供应链/云侧的控制证据 + 进入主防单位内网的证明；写明属于哪种情形',
-    replay: '从供应链通道进入内网的命令与回显',
+    need: "Entered a primary defending unit's intranet through a supply-chain O&M channel or a cloud service (scored by scenario)",
+    proof: "Control evidence on the supply-chain/cloud side + proof of entering the primary defending unit's intranet; state which scenario applies",
+    replay: "Command and output of entering the intranet through the supply-chain channel",
     script: '',
   },
 }
@@ -728,14 +728,14 @@ const sp = (src, rule, tier, code, name, category, points, cap, dedup_scope, des
    G7 证明材料要求 ｜ G8 兜底：其他系统由专项组研判后给分。
    完整原文见 docs/得分规则-合并版.md。 */
 export const SCORE_GENERAL_RULES = [
-  { code: 'G1', name: '权限取高、只计一次', detail: '同一系统、同一主机、同一数据库上取得多种权限时，只按最高权限计一次分（既获取管理员又获取普通权限的，只给管理员权限分）。' },
-  { code: 'G2', name: '数据成果另行计分', detail: '邮件数据、业务数据、数据资产等成果按数据重要程度单独计分，不与权限分混算。' },
-  { code: 'G3', name: '上限口径', detail: '各项分值上限针对单个防守单位及其所有下属机构，达到上限后不再累计。' },
-  { code: 'G4', name: '设备/终端按台（个）计分', detail: '打印机、wifi 路由器 5 分/台；PC、Pad、手机、摄像头、电子大屏 10 分/台；云上主机、容器、托管互联设备、物联网连接点等按 10 分/台（个）。批量控制按"被控节点"折算。' },
-  { code: 'G5', name: '数据规模翻倍', detail: '含大量数据系统（重要数据量超 1 亿条或 10TB）得分翻倍；控制知识库相关系统得分翻倍。不含系统产生的普通日志数据。' },
-  { code: 'G6', name: 'IPv6 倍数', detail: '利用 IPv6 取得的成果分数 ×3，但上限仍按对应系统类型的原上限计算，不因倍数突破上限。' },
-  { code: 'G7', name: '证明材料', detail: '突破网络边界须提供隔离设备控制截图、能访问内网的截图证明等；控制的手机、Pad 等终端设备应能证明与目标单位的关系；网络设备权限需提供路由表等证据或连接量截图。' },
-  { code: 'G8', name: '兜底条款', detail: '其他系统、服务器、设备等权限不预设分值，由专项组研判后给分。' },
+  { code: 'G1', name: "Highest privilege only, counted once", detail: "When multiple privileges are obtained on the same system, host, or database, only the highest privilege scores once (if you get both admin and ordinary access, only the admin points are awarded)." },
+  { code: 'G2', name: "Data results score separately", detail: "Mail data, business data, data assets, and similar results score separately by data importance and are not mixed with privilege points." },
+  { code: 'G3', name: "Cap basis", detail: "Each item's cap applies to a single defending unit and all its subordinate organizations; once the cap is reached, nothing more accumulates." },
+  { code: 'G4', name: "Devices/endpoints score per unit", detail: "Printers and wifi routers score 5 pts per unit; PCs, tablets, phones, cameras, and electronic displays score 10 pts per unit; cloud hosts, containers, hosted interconnected devices, and IoT connection points score 10 pts per unit. Batch control is converted per \"controlled node\"." },
+  { code: 'G5', name: "Data-volume doubling", detail: "Systems containing large data volumes (important data over 100 million rows or 10 TB) score double; control of a knowledge-base-related system scores double. Ordinary log data generated by the system does not count." },
+  { code: 'G6', name: "IPv6 multiplier", detail: "Results obtained over IPv6 score ×3, but the cap is still the original cap for that system type; the multiplier does not raise the cap." },
+  { code: 'G7', name: "Proof material", detail: "A boundary breach requires control screenshots of the isolation device and a screenshot proving intranet access; controlled phones, tablets, and other endpoints must prove their relation to the target organization; network-device privileges require routing-table evidence or connection-count screenshots." },
+  { code: 'G8', name: "Catch-all clause", detail: "Privileges on other systems, servers, devices, etc. have no preset points; the special review group determines the score." },
 ]
 
 /**
@@ -756,171 +756,171 @@ export const SCORE_GENERAL_RULES = [
  *   · cap    该条上限（0 = 不设上限）；dedup_scope 计分口径。
  */
 export const SCORE_GROUPS = [
-  { code: 'GENERAL', name: '控制一般系统' },
-  { code: 'WEB', name: '控制 Web 应用系统' },
-  { code: 'CENTRAL', name: '控制集权系统' },
-  { code: 'BIGDATA', name: '控制大数据系统' },
-  { code: 'NETINFRA', name: '控制网络基础设施' },
-  { code: 'STORAGE', name: '文件存储类系统' },
-  { code: 'MODEL', name: '控制模型相关系统' },
-  { code: 'BOUNDARY', name: '突破网络边界' },
+  { code: 'GENERAL', name: "General systems" },
+  { code: 'WEB', name: "Web application systems" },
+  { code: 'CENTRAL', name: "Centralized systems" },
+  { code: 'BIGDATA', name: "Big-data systems" },
+  { code: 'NETINFRA', name: "Network infrastructure" },
+  { code: 'STORAGE', name: "File storage systems" },
+  { code: 'MODEL', name: "Model-related systems" },
+  { code: 'BOUNDARY', name: "Boundary breach" },
 ]
 
 export const DEFAULT_SCORE_POINTS = [
   /* ══ 一、获取权限（18 条）══════════════════════════════════════════════ */
 
   /* 1 域名控制权限 */
-  sp(1, 1, '一级 50 / 二级 20 分/个', 'domain-control', '域名控制权限', 'GENERAL', 50, 400, 'system',
-    '**一级域名 50 分/个，二级域名 20 分/个**，按域名类型给分；本项上限 400 分（G3）。\n'
-    + '记分时在 evidence 里写明域名与其类型；拿到二级域名时把单次分值调整为 20。'),
+  sp(1, 1, "50 pts per primary domain / 20 pts per secondary domain", 'domain-control', "Domain control privilege", 'GENERAL', 50, 400, 'system',
+    "**Primary domains score 50 pts each, secondary domains 20 pts each**, graded by domain type; this item is capped at 400 pts (G3).\n"
+    + "When recording, state the domain and its type in `evidence`; for a secondary domain set the per-hit points to 20."),
 
   /* 2 终端权限 */
-  sp(2, 2, '5 / 10 分/台', 'terminal-access', '终端权限（手机、Pad、PC、打印机、摄像头、wifi 路由器等）', 'GENERAL', 10, 600, 'system',
-    '**打印机、wifi 路由器 5 分/台；PC、Pad、手机、摄像头、电子大屏 10 分/台**（G4），按台累加；本项上限 600 分（G3）。\n'
-    + '控制的终端设备需能证明与目标单位的关系（G7）；拿到 5 分档设备时把单次分值调整为 5。\n'
-    + '钓鱼获取的终端同样按本项计分，在 evidence 里写明目标人员角色（普通办公 / IT 运维 / 业务运营）。'),
+  sp(2, 2, "5 / 10 pts per unit", 'terminal-access', "Endpoint privilege (phones, tablets, PCs, printers, cameras, wifi routers, etc.)", 'GENERAL', 10, 600, 'system',
+    "**Printers and wifi routers score 5 pts per unit; PCs, tablets, phones, cameras, and electronic displays score 10 pts per unit** (G4), accumulating per unit; this item is capped at 600 pts (G3).\n"
+    + "Controlled endpoint devices must prove their relation to the target organization (G7); for a 5-pt device set the per-hit points to 5.\n"
+    + "Endpoints obtained via phishing also score under this item; state the target person role in `evidence` (general office / IT operations / business operations)."),
 
   /* 3 服务器主机权限 */
-  sp(3, 3, '普通 10 / 管理员 50 分/个', 'server-host', '服务器主机权限（含 webshell 权限）', 'GENERAL', 50, 600, 'system',
-    '**普通权限 10 分/个，管理员权限 50 分/个**；本项上限 600 分（G3）。\n'
-    + '同一主机只按最高权限计一次（G1）——拿到 root/SYSTEM 后同主机不再累加普通权限。\n'
-    + '获取 1 台服务器主机不扣分；拿到普通权限时把单次分值调整为 10。'),
+  sp(3, 3, "10 pts per ordinary privilege / 50 pts per admin privilege", 'server-host', "Server host privilege (including WebShell access)", 'GENERAL', 50, 600, 'system',
+    "**Ordinary privileges score 10 pts each, admin privileges 50 pts each**; this item is capped at 600 pts (G3).\n"
+    + "The same host counts only once at its highest privilege (G1) — after root/SYSTEM, ordinary privileges on that host no longer accumulate.\n"
+    + "Taking one server host does not deduct points; for an ordinary privilege set the per-hit points to 10."),
 
   /* 4 数据库连接账号密码 */
-  sp(4, 4, '普通 10 / 管理员 50 / 未授权 10 分/个', 'db-credential', '数据库连接账号密码（含 SQL 注入）', 'GENERAL', 50, 400, 'system',
-    '**普通用户权限 10 分/个，管理员权限 50 分/个；redis 和其他空密码、未授权访问成果统一 10 分/个**；本项上限 400 分（G3）。\n'
-    + '同一数据库的同等权限（含管理员）只得一次分；同一主机上的系统权限、应用权限、数据库权限按最高权限只得一次分（G1）。\n'
-    + '数据成果单独计分（G2）；拿到普通权限/未授权时把单次分值调整为 10。'),
+  sp(4, 4, "10 pts ordinary / 50 pts admin / 10 pts unauthorized, each", 'db-credential', "Database account credentials (including SQL injection)", 'GENERAL', 50, 400, 'system',
+    "**Ordinary user privileges score 10 pts each, admin privileges 50 pts each; redis and other empty-password or unauthorized-access results score a flat 10 pts each**; this item is capped at 400 pts (G3).\n"
+    + "Equivalent privileges on the same database (including admin) score only once; system, application, and database privileges on the same host score only once at the highest privilege (G1).\n"
+    + "Data results score separately (G2); for an ordinary privilege or unauthorized access set the per-hit points to 10."),
 
   /* 5、6 邮箱与业务生产系统（原表两项共用规则与上限） */
-  sp(5, 5, '管理员 100 / 普通 50 分/个', 'web-app', '邮箱系统 / 办公自动化与业务生产系统 / 其他 Web 应用系统权限', 'WEB', 100, 2000, 'system',
-    '**管理员权限 100 分/个，普通用户权限 50 分/个；同一个系统只计算一次最高权限分**（G1）；本项上限 2000 分（G3）。\n'
-    + '本项合并原表第 5、6 项（规则与上限完全相同），**即"控制 Web 应用系统"这一类**；记分时在 evidence 里写明是哪类系统：\n'
-    + '· **邮箱系统**；\n'
-    + '· **办公自动化与业务生产系统**（办公 OA、ERP、直报即时通讯、财务系统、业务生产系统、数据仓库等被控或瘫痪后影响行业或单位业务生产、运行管理、日常办公的系统）；\n'
-    + '· **其他 Web 应用系统（兜底归类）**：用凭据清单里的账号**实测能登录**的 HTTP/HTTPS 站点，'
-    + '凡不归入其他更具体的得分点类别（集权系统走第 7 项、大数据系统走第 8 项、云管理平台走第 11 项、物联网管控平台走第 12 项、安全设备走第 13 项等），'
-    + '统一按本项计分（管理员 100 / 普通 50）。**凭据里只登记了 `host:port`、没写系统名或业务归属的 Web 登录（后台、管理端、运营平台、自研业务系统等）也走这一条**——'
-    + '先判是否有更贴切的类别，没有就归入"控制 Web 应用系统"，不因"看不出是不是邮箱/OA"而漏记。'
-    + '记分时 `target` 写实际登录 URL（带端口），evidence 写清"什么站点 + 什么账号 + 管理员/普通档"，并按红线一先实测登录。\n'
-    + '邮件数据按重要程度再单独计分（G2）；拿到普通用户权限时把单次分值调整为 50。'),
+  sp(5, 5, "100 pts per admin privilege / 50 pts per ordinary privilege", 'web-app', "Mail system / office-automation and business-production systems / other web application privileges", 'WEB', 100, 2000, 'system',
+    "**Admin privileges score 100 pts each, ordinary user privileges 50 pts each; each system counts only once at its highest privilege** (G1); this item is capped at 2000 pts (G3).\n"
+    + "This item merges items 5 and 6 of the original table (identical rules and caps), **i.e. the \"web application systems\" category**; when recording, state in `evidence` which kind of system it is:\n"
+    + "· **Mail system**;\n"
+    + "· **Office-automation and business-production systems** (office OA, ERP, direct-report instant messaging, finance systems, business-production systems, data warehouses — systems whose compromise or outage affects industry or unit production, operations management, or daily office work);\n"
+    + "· **Other web application systems (catch-all)**: HTTP/HTTPS sites you have **actually verified you can log in to** with an account from the credential list, "
+    + "that do not fall into a more specific score point category (centralized systems go to item 7, big-data systems to item 8, cloud management platforms to item 11, IoT management platforms to item 12, security devices to item 13, etc.); "
+    + "all of them score under this item (admin 100 / ordinary 50). **Web logins where the credential list only records `host:port` with no system name or business owner (back offices, admin consoles, operations platforms, in-house business systems, etc.) also fall here** — "
+    + "first check whether a more fitting category applies; if not, file it under \"web application systems\" rather than skipping it because you cannot tell whether it is mail/OA. "
+    + "When recording, put the actual login URL (with port) in `target` and state \"which site + which account + admin/ordinary tier\" in `evidence`; verify the login live first per red line 1.\n"
+    + "Mail data additionally scores separately by importance (G2); for an ordinary user privilege set the per-hit points to 50."),
 
   /* 7 集权系统 */
-  sp(7, 6, '管理员 500 / 普通 50 分/个', 'central-system', '集权系统权限（运维 / 身份 / 组网 / 终端管理后台）', 'CENTRAL', 500, 4000, 'system',
-    '**系统管理员权限 500 分/个，普通权限 50 分/个**；同一权限只给一次分，即获取管理员和普通权限只给管理员权限分（G1）；本项上限 4000 分（G3）。\n'
-    + '集权系统包括四类：\n'
-    + '· **运维集权类**：堡垒机、集中监控、统一资源发布等；\n'
-    + '· **身份权限管理类**：SSO、4A、IAM 等；\n'
-    + '· **组网集权类**：域控、证书认证、SDWAN 统一控制器等；\n'
-    + '· **终端主机管理后台类**：终端管理软件后台、零信任控制中心等。\n'
-    + '⚠️ 集权系统**托管的主机、终端等设备跨类引用"控制一般系统"的分值**（如 PC、移动终端 10 分/台，G4）——'
-    + '**不要按集权系统最高档 500 分算**，那会严重偏高；批量控制需提供证明：至少登录托管节点数量的 20%，最多登录 20 台即可。'),
+  sp(7, 6, "500 pts per admin privilege / 50 pts per ordinary privilege", 'central-system', "Centralized system privilege (O&M / identity / networking / endpoint management consoles)", 'CENTRAL', 500, 4000, 'system',
+    "**System admin privileges score 500 pts each, ordinary privileges 50 pts each**; each privilege scores only once, so holding both admin and ordinary access awards only the admin points (G1); this item is capped at 4000 pts (G3).\n"
+    + "Centralized systems cover four kinds:\n"
+    + "· **O&M centralization**: jump servers, centralized monitoring, unified resource publishing, etc.;\n"
+    + "· **Identity and privilege management**: SSO, 4A, IAM, etc.;\n"
+    + "· **Network centralization**: domain controllers, certificate authorities, SD-WAN unified controllers, etc.;\n"
+    + "· **Endpoint/host management consoles**: endpoint management software backends, zero-trust control centers, etc.\n"
+    + "⚠️ **Hosts and endpoints managed by a centralized system are scored under the \"general systems\" points instead** (e.g. PCs and mobile endpoints at 10 pts per unit, G4) —"
+    + "**do not apply the centralized system's top tier of 500 pts**, which would grossly overstate it; batch control must be proven with logins to at least 20% of the managed nodes, and 20 nodes at most is enough."),
 
   /* 8 大数据系统 */
-  sp(8, 7, '管理员 1000 / 普通 100 分/个', 'bigdata-system', '大数据系统权限', 'BIGDATA', 1000, 4000, 'system',
-    '**管理员权限 1000 分，普通权限 100 分/个**；同一权限只给一次分，既获取管理员和普通权限只给管理员权限分（G1）；本项上限 4000 分（G3）。\n'
-    + '数据单独计分（G2）；**有效数据量小于 5 亿条或 1TB 的按普通数据库计算**（即改用第 4 项分值）。'),
+  sp(8, 7, "1000 pts per admin privilege / 100 pts per ordinary privilege", 'bigdata-system', "Big-data system privilege", 'BIGDATA', 1000, 4000, 'system',
+    "**Admin privileges are worth 1000 pts, ordinary privileges 100 pts each**; each privilege scores only once, so holding both admin and ordinary access awards only the admin points (G1); this item is capped at 4000 pts (G3).\n"
+    + "Data scores separately (G2); **systems with effective data volume below 500 million rows or 1 TB are treated as ordinary databases** (i.e. use the item 4 points)."),
 
   /* 9 网络设备权限 */
-  sp(9, 8, '普通 100 / 管理员 200 / 加成 200·1000 分', 'netdev', '网络设备权限（防火墙、路由器、交换机、网闸、光闸、摆渡机、VPN 等）', 'NETINFRA', 200, 2000, 'service',
-    '**普通用户权限 100 分，管理员权限 200 分**；本项上限 2000 分（G3）。需提供路由表等证据或连接量截图（G7）。\n'
-    + '在同一台设备上做到下列动作**再加分**（按做到的那一档记分）：\n'
-    + '· 借助该设备进行**网络重定向或业务劫持**：+200 分；\n'
-    + '· 在该设备上**植入远控程序并成功进行后续攻击**：1000 分。\n'
-    + '拿到普通权限或加成分时，把单次分值按实际档位调整。'),
+  sp(9, 8, "100 pts ordinary / 200 pts admin / +200 or +1000 pts bonus", 'netdev', "Network device privilege (firewalls, routers, switches, gap devices, optical gap devices, ferry machines, VPNs, etc.)", 'NETINFRA', 200, 2000, 'service',
+    "**Ordinary user privileges are worth 100 pts, admin privileges 200 pts**; this item is capped at 2000 pts (G3). Routing-table evidence or connection-count screenshots are required (G7).\n"
+    + "Achieving the following on the same device **earns bonus points** (scored at the tier achieved):\n"
+    + "· **Network redirection or service hijacking** through the device: +200 pts;\n"
+    + "· **Implanting a remote-control program on the device and successfully carrying out follow-up attacks**: 1000 pts.\n"
+    + "For an ordinary privilege or a bonus tier, set the per-hit points to the actual tier."),
 
   /* 10 工业互联网系统 */
-  sp(10, 9, '管理员 200 / 设备 10 分/个', 'iiot', '工业互联网系统权限', 'NETINFRA', 200, 2000, 'system',
-    '**管理后台管理员权限 200 分；托管的互联设备 10 分/个**（G4）；本项上限 2000 分（G3）。\n'
-    + '含车联网、智能制造、远程诊断、智能交通等。设备按个累加时用另起的命中记录（分值调为 10）。'),
+  sp(10, 9, "200 pts admin / 10 pts per device", 'iiot', "Industrial internet system privilege", 'NETINFRA', 200, 2000, 'system',
+    "**Admin privileges on the management console are worth 200 pts; hosted interconnected devices score 10 pts each** (G4); this item is capped at 2000 pts (G3).\n"
+    + "Covers connected vehicles, smart manufacturing, remote diagnostics, intelligent transport, etc. To accumulate devices per unit, use separate score hits (with points set to 10)."),
 
   /* 11 云管理平台 */
-  sp(11, 10, '管理员 500 / 节点 10 分/台', 'cloud-platform', '云管理平台控制权（含 PaaS 云平台，如 K8S、红帽 OpenShift 等）', 'NETINFRA', 500, 2000, 'system',
-    '**管理员权限 500 分；云上主机、容器 10 分/台**（G4）；本项上限 2000 分（G3）。云上业务系统按重要系统规则单独计分。\n'
-    + '通过 ak/sk 批量控制默认**只计算被控节点分数、不计算管理员分数**，除非提供证明具有管理员权限（如新增云上节点、用户权限管理等）。\n'
-    + '⚠️ **节点数量小于 100 的按普通 Web 应用给分，节点不给分**（即走第 5、6 项口径）。'),
+  sp(11, 10, "500 pts admin / 10 pts per node", 'cloud-platform', "Cloud management platform control (including PaaS platforms such as Kubernetes, Red Hat OpenShift, etc.)", 'NETINFRA', 500, 2000, 'system',
+    "**Admin privileges are worth 500 pts; cloud hosts and containers score 10 pts per unit** (G4); this item is capped at 2000 pts (G3). Cloud business systems score separately under the important-system rules.\n"
+    + "Batch control via AK/SK by default **scores only the controlled nodes, not the admin privilege**, unless admin rights are proven (e.g. creating cloud nodes, managing user permissions).\n"
+    + "⚠️ **With fewer than 100 nodes, score it as an ordinary web application and give no node points** (i.e. use the item 5/6 basis)."),
 
   /* 12 物联网设备管控平台 */
-  sp(12, 11, '平台 200 / 连接点 10 / 核心网 +5000 分', 'iot-platform', '物联网设备管控平台权限', 'NETINFRA', 200, 2000, 'system',
-    '**带控制功能的物联网平台 200 分；按平台上连接点数计算 10 分/台**（G4）；本项上限 2000 分（G3）。\n'
-    + '**通过物联网端点设备打入核心网并控制业务生产等重要系统的，单独加 5000 分**（不受本项 2000 分上限约束，单独记一条命中）。'),
+  sp(12, 11, "200 pts platform / 10 pts per connection point / +5000 pts core network", 'iot-platform', "IoT device management platform privilege", 'NETINFRA', 200, 2000, 'system',
+    "**An IoT platform with control capability is worth 200 pts; connection points on the platform score 10 pts per unit** (G4); this item is capped at 2000 pts (G3).\n"
+    + "**Entering the core network through an IoT endpoint device and controlling important systems such as business production earns a separate +5000 pts** (not bound by this item's 2000-pt cap; record it as a separate hit)."),
 
   /* 13 安全设备 */
-  sp(13, 12, '管理员 200 分', 'secdev', '安全设备权限（IPS、IDS、审计设备、WAF 等非集权类安全设备）', 'NETINFRA', 200, 1000, 'service',
-    '**管理员权限 200 分**；本项上限 1000 分（G3）。仅限非集权类安全设备（集权类走第 7 项）。'),
+  sp(13, 12, "200 pts admin", 'secdev', "Security device privilege (IPS, IDS, audit appliances, WAF, and other non-centralized security devices)", 'NETINFRA', 200, 1000, 'service',
+    "**Admin privileges are worth 200 pts**; this item is capped at 1000 pts (G3). Limited to non-centralized security devices (centralized ones go to item 7)."),
 
   /* 14 文件存储类系统 */
-  sp(14, 13, '管理员 50 / 普通 10 分/个', 'file-storage', '文件存储类系统权限（FTP、对象存储、企业 NAS、企业网盘等）', 'STORAGE', 50, 500, 'system',
-    '**管理员权限 50 分/个；普通用户权限、空系统或只含有测试数据的系统 10 分/个**；本项上限 500 分（G3）。\n'
-    + '含 FTP、对象存储（按系统计分）、企业 NAS、企业网盘等；数据单独计分（G2）。拿到普通权限时把单次分值调整为 10。'),
+  sp(14, 13, "50 pts admin / 10 pts per ordinary privilege", 'file-storage', "File storage system privilege (FTP, object storage, enterprise NAS, enterprise cloud drives, etc.)", 'STORAGE', 50, 500, 'system',
+    "**Admin privileges score 50 pts each; ordinary user privileges, empty systems, or systems holding only test data score 10 pts each**; this item is capped at 500 pts (G3).\n"
+    + "Covers FTP, object storage (scored per system), enterprise NAS, enterprise cloud drives, etc.; data scores separately (G2). For an ordinary privilege set the per-hit points to 10."),
 
   /* 15 模型智能体 / agent 工具 */
-  sp(15, 14, '100–500 分/个', 'ai-agent', '模型智能体、skill 等 agent 工具（并能操作 agent 进行攻击）', 'MODEL', 100, 4000, 'service',
-    '**100–500 分/个**，区间分，按控制与操作深度研判；本项上限 4000 分（G3）。\n'
-    + '含模型智能体、skill 等 agent 工具；记分时在 evidence 里写明控制/操作深度，并按研判档位调整单次分值。'),
+  sp(15, 14, "100–500 pts each", 'ai-agent', "Model agents, skills, and other agent tools (with the ability to drive an agent to attack)", 'MODEL', 100, 4000, 'service',
+    "**100–500 pts each**, a range graded by control and operation depth; this item is capped at 4000 pts (G3).\n"
+    + "Covers model agents, skills, and other agent tools; when recording, state the control/operation depth in `evidence` and set the per-hit points to the assessed tier."),
 
   /* 16、17 算力管理平台 + 训练数据/知识库系统（原表两项规则逐字相同） */
-  sp(16, 15, '系统管理权限 500 分/个', 'model-compute', '算力管理平台权限 / 训练数据与知识库系统权限', 'MODEL', 500, 4000, 'system',
-    '**获取系统管理权限 500 分/个**；本项上限 4000 分（G3）。\n'
-    + '本项合并原表第 16、17 项（规则逐字相同），记分时在 evidence 里写明是哪类系统：\n'
-    + '· **算力管理平台**（可管控调度算力资源等）；\n'
-    + '· **训练数据、知识库等相关系统**（可窃取篡改训练数据或知识库、实施数据投毒等）。\n'
-    + '含大量数据系统（超 1 亿条或 10TB）**得分翻倍**、控制知识库相关系统**得分翻倍**（G5）。'),
+  sp(16, 15, "500 pts per system admin privilege", 'model-compute', "Compute management platform privilege / training-data and knowledge-base system privilege", 'MODEL', 500, 4000, 'system',
+    "**Obtaining system admin privileges scores 500 pts each**; this item is capped at 4000 pts (G3).\n"
+    + "This item merges items 16 and 17 of the original table (identical wording); when recording, state in `evidence` which kind of system it is:\n"
+    + "· **Compute management platform** (able to manage and schedule compute resources, etc.);\n"
+    + "· **Training-data, knowledge-base, and related systems** (able to steal or tamper with training data or knowledge bases, plant poisoned data, etc.).\n"
+    + "Systems with large data volumes (over 100 million rows or 10 TB) **score double**; controlling a knowledge-base-related system **scores double** (G5)."),
 
   /* 18 模型相关数据系统 */
-  sp(18, 16, '系统管理员权限 500 分/个', 'model-data', '模型相关数据系统权限', 'MODEL', 500, 4000, 'system',
-    '**获取系统管理员权限 500 分/个**；本项上限 4000 分（G3）。\n'
-    + '可干扰模型训练、推理、运营服务，窃取篡改模型权重文件等。\n'
-    + '⚠️ 与第 16、17 项的差异**不可抹平**：本项**没有"控制知识库相关系统得分翻倍"**，但有"数据资产成果参照数据评分"（G2）；'
-    + '超大数据规模系统（超 1 亿条或超 10TB）得分翻倍（G5）。'),
+  sp(18, 16, "500 pts per system admin privilege", 'model-data', "Model-related data system privilege", 'MODEL', 500, 4000, 'system',
+    "**Obtaining system admin privileges scores 500 pts each**; this item is capped at 4000 pts (G3).\n"
+    + "Allows interference with model training, inference, and operations services, and theft or tampering with model weight files, etc.\n"
+    + "⚠️ The difference from items 16 and 17 **must not be flattened**: this item **does not include \"controlling a knowledge-base-related system doubles the score\"**, but it does include \"data-asset results are scored by the data rules\" (G2); "
+    + "Systems with very large data volumes (over 100 million rows or over 10 TB) score double (G5)."),
 
   /* 19 算力基础设施（权限与算力卡两种计费单位，保留两条） */
-  sp(19, 17, '管理员 500 分/个', 'computepower-admin', '算力基础设施 · 管理员权限', 'MODEL', 500, 2000, 'system',
-    '**管理员权限 500 分/个**；本项上限 2000 分（含路径分，G3）。\n'
-    + '本项与「算力基础设施 · 算力卡资源」同属第 19 项、共用 2000 分上限，三项（管理员权限 / 大量算力卡资源 / 算力卡池化平台）可分别得分但受本条总上限约束。'),
-  sp(19, 18, '10 分/卡', 'computepower-cards', '算力基础设施 · 算力卡资源 / 算力卡池化平台', 'MODEL', 10, 2000, 'none',
-    '**10 分/卡**，按卡累加（G4）；获取大量算力卡资源得分、获取算力卡池化平台直接得分，各上限 2000 分，且与「管理员权限」共用第 19 项总上限 2000 分。\n'
-    + '记分时在 evidence 里写明卡数或平台名称。'),
+  sp(19, 17, "500 pts per admin privilege", 'computepower-admin', "Compute infrastructure · admin privilege", 'MODEL', 500, 2000, 'system',
+    "**Admin privileges score 500 pts each**; this item is capped at 2000 pts (including path points, G3).\n"
+    + "This item and \"Compute infrastructure · compute card resources\" both belong to item 19 and share the 2000-pt cap; the three (admin privilege / large compute-card resources / compute-card pooling platform) can each score but are subject to this item's overall cap."),
+  sp(19, 18, "10 pts per card", 'computepower-cards', "Compute infrastructure · compute card resources / compute-card pooling platform", 'MODEL', 10, 2000, 'none',
+    "**10 pts per card**, accumulating per card (G4); obtaining large compute-card resources and obtaining a compute-card pooling platform each score directly, each capped at 2000 pts, and sharing item 19's overall 2000-pt cap with \"admin privilege\".\n"
+    + "When recording, state the card count or platform name in `evidence`."),
 
   /* ══ 二、突破网络边界（4 项，整个目标单位同一类边界只给一次分）══════════ */
 
-  sp(22, 19, '1000 分', 'boundary-logical', '进入逻辑隔离业务内网', 'BOUNDARY', 1000, 0, 'target',
-    '**1000 分**。适用范围：整个目标单位突破同一类网络边界只给一次分。\n'
-    + '证明材料（G7）：防火墙隔离设备的控制截图、能访问内网的截图证明等。'),
-  sp(23, 20, '10000 分', 'boundary-strong', '进入逻辑强隔离业务内网', 'BOUNDARY', 10000, 0, 'target',
-    '**10000 分**。适用范围：整个目标单位突破同一类网络边界只给一次分。\n'
-    + '证明材料（G7）：网闸类隔离设备的控制截图、能访问内网的截图证明等。'),
-  sp(24, 21, '30000 分', 'boundary-physical', '进入物理隔离内网、核心生产网', 'BOUNDARY', 30000, 0, 'target',
-    '**30000 分**。适用范围：整个目标单位突破同一类网络边界只给一次分。\n'
-    + '证明材料（G7）：防火墙、VPN、多网卡主机、网络设备、网闸类隔离设备的控制截图，能访问内网的截图证明等。\n'
-    + '如铁路调度专网、银行核心账务网、电力生产控制大区、运营商信令网、能源生产物联网等。'),
-  sp(25, 22, '1000 分（最多 3000）', 'boundary-supply', '借助供应链运维通道或云服务进入内网', 'BOUNDARY', 1000, 3000, 'service',
-    '按三种情形计分：\n'
-    + '· 进入**同一主防单位内网**：1000 分；\n'
-    + '· 借助**一家**供应链单位或云服务进入**多家**主防单位内网：1000 分/每家主防单位；\n'
-    + '· 借助**多家**供应链单位或云服务进入**一家**主防单位内网不同网络区域：1000 分/个，最多 3000 分。\n'
-    + '记分时在 evidence 里写明属于哪种情形、涉及哪家主防单位/哪个网络区域。'),
+  sp(22, 19, "1000 pts", 'boundary-logical', "Enter a logically isolated business intranet", 'BOUNDARY', 1000, 0, 'target',
+    "**1000 pts**. Scope: breaking the same kind of network boundary scores only once for the entire target unit.\n"
+    + "Proof material (G7): control screenshots of the firewall isolation device, a screenshot proving intranet access, etc."),
+  sp(23, 20, "10000 pts", 'boundary-strong', "Enter a logically strongly isolated business intranet", 'BOUNDARY', 10000, 0, 'target',
+    "**10000 pts**. Scope: breaking the same kind of network boundary scores only once for the entire target unit.\n"
+    + "Proof material (G7): control screenshots of the gap-type isolation device, a screenshot proving intranet access, etc."),
+  sp(24, 21, "30000 pts", 'boundary-physical', "Enter a physically isolated intranet / core production network", 'BOUNDARY', 30000, 0, 'target',
+    "**30000 pts**. Scope: breaking the same kind of network boundary scores only once for the entire target unit.\n"
+    + "Proof material (G7): control screenshots of firewalls, VPNs, multi-NIC hosts, network devices, and gap-type isolation devices, plus a screenshot proving intranet access, etc.\n"
+    + "Examples: railway dispatch private networks, bank core accounting networks, power production control zones, carrier signaling networks, energy production IoT networks, etc."),
+  sp(25, 22, "1000 pts (max 3000)", 'boundary-supply', "Enter an intranet via a supply-chain O&M channel or cloud service", 'BOUNDARY', 1000, 3000, 'service',
+    "Scored under three scenarios:\n"
+    + "· Entering **the same primary defending unit's intranet**: 1000 pts;\n"
+    + "· Using **one** supply-chain entity or cloud service to enter **multiple** primary defending units' intranets: 1000 pts per primary defending unit;\n"
+    + "· Using **multiple** supply-chain entities or cloud services to enter different network zones of **one** primary defending unit's intranet: 1000 pts per zone, up to 3000 pts.\n"
+    + "When recording, state in `evidence` which scenario applies and which primary defending unit / network zone is involved."),
 
   /* ══ 附加成果加成（依附于上面某条权限，但**独立计分、独立上限**）══════════
      这些条目不是「再拿一个系统权限」，而是「在已拿到的权限上又做到了某件事」（文档里的 +N 分）。
      压在基础条目里会共用它的 rule 上限、被基础分吃掉，所以拆成独立得分点。 */
 
   /* 9 网络设备加成：能够借助该设备进行网络重定向或业务劫持 +200 分 */
-  sp(9, 23, '重定向 / 业务劫持 +200 分', 'netdev-redirect', '网络设备 · 借助该设备进行网络重定向或业务劫持', 'NETINFRA', 200, 2000, 'none',
-    '**在原「网络设备权限」分之上另加 200 分**（文档第 9 项）。\n'
-    + '适用：改路由/策略把流量引向我方可控节点、DNS 劫持、业务流量劫持等实际生效的重定向。\n'
-    + '需要提供证据（G7）：路由表、策略配置或连接量截图；evidence 里写清重定向方向与验证方式。'),
+  sp(9, 23, "Redirection / service hijacking +200 pts", 'netdev-redirect', "Network device · Network redirection or service hijacking via the device", 'NETINFRA', 200, 2000, 'none',
+    "**Adds 200 pts on top of the \"network device privilege\" score** (item 9 of the rules document).\n"
+    + "Applies to: changing routes/policies to steer traffic to our controlled node, DNS hijacking, business-traffic hijacking — redirection that actually took effect.\n"
+    + "Evidence required (G7): routing table, policy configuration, or connection-count screenshot; state the redirection direction and how it was verified in `evidence`."),
 
   /* 9 网络设备加成：能在设备上植入远控程序并成功进行后续攻击 1000 分 */
-  sp(9, 24, '植入远控 + 后续攻击 1000 分', 'netdev-implant', '网络设备 · 植入远控程序并成功进行后续攻击', 'NETINFRA', 1000, 2000, 'none',
-    '**在原「网络设备权限」分之上另加 1000 分**（文档第 9 项）。\n'
-    + '需要证明「植入成功 **且** 借它完成了后续攻击」两件事：远控进程/持久化证据 + 经该设备发起的后续成果。'),
+  sp(9, 24, "Remote-control implant + follow-up attack 1000 pts", 'netdev-implant', "Network device · Implant a remote-control program and successfully carry out follow-up attacks", 'NETINFRA', 1000, 2000, 'none',
+    "**Adds 1000 pts on top of the \"network device privilege\" score** (item 9 of the rules document).\n"
+    + "Both must be proven: \"the implant succeeded **and** was used to complete follow-up attacks\" — evidence of the remote-control process/persistence plus follow-up results obtained through that device."),
 
   /* 12 物联网：通过端点设备打入核心网并控制业务生产等重要系统，单独加 5000 分 */
-  sp(12, 25, '核心网 +5000 分', 'iot-corenet', '物联网 · 经端点设备打入核心网并控制重要系统', 'NETINFRA', 5000, 5000, 'none',
-    '**文档第 12 项明确「单独加 5000 分」**，不占该条 2000 分的上限。\n'
-    + '适用：从物联网端点设备横向进入核心网，并控制业务生产等重要系统；\n'
-    + 'evidence 里写清：从哪个端点进、核心网里控了什么系统、拿到了什么权限。'),
+  sp(12, 25, "Core network +5000 pts", 'iot-corenet', "IoT · Enter the core network via an endpoint device and control important systems", 'NETINFRA', 5000, 5000, 'none',
+    "**Item 12 of the rules document explicitly says \"add 5000 pts separately\"**, which does not count against that item's 2000-pt cap.\n"
+    + "Applies to: moving laterally from an IoT endpoint device into the core network and controlling important systems such as business production;\n"
+    + "in `evidence`, state: which endpoint was used, which core-network systems were controlled, and what privileges were obtained."),
 ]
 
 /* ------------------------------------------------------------------ 内部辅助的导出 */

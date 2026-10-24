@@ -18,7 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 if ($Update -and $Uninstall) { throw "-Update 和 -Uninstall 不能同时使用" }
-$VERSION = "1.0.5"
+$VERSION = "1.0.6"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -215,10 +215,8 @@ Get-ChildItem (Join-Path $Here "src\skills") -Directory | ForEach-Object {
   New-Item -ItemType Directory -Force -Path $dst | Out-Null
   Copy-Item (Join-Path $_.FullName "SKILL.md") (Join-Path $dst "SKILL.md") -Force
 }
-if (Test-Path (Join-Path $Here "src\skills\redteam")) {
-  $rd = Join-Path $DH "skills\redteam"; New-Item -ItemType Directory -Force -Path $rd | Out-Null
-  Copy-Item (Join-Path $Here "src\skills\redteam\*.md") $rd -Force
-}
+# Historical redteam skills remain in source for attribution; 1.1.77 no longer
+# distributes that library. Existing user skill directories stay untouched.
 Ok "资产已落地"
 
 # ── 5. Apply ────────────────────────────────────────────────────

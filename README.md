@@ -2,13 +2,13 @@
 
 # 🦅 海鸥 · DeepSeek Harness 全破 harness
 
-**把 DeepSeek Harness 的宿主策略层摘干净，换成海鸥人格 + 28 个领域技能。**
+**保留海鸥人格，适配新版 Harness，提供本地演练与工程管理功能。**
 
 一行装 · 幂等 · 可卸载 · 有证据
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.5-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.6-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,9 +17,11 @@
 
 ---
 
-当前 **v1.0.5** 适配 DeepSeek Harness **0.2.1-rc.2**，引擎升级为 dsh-purge **1.1.72**，采用已核验的上游 master 固定提交 [`ec691667`](https://github.com/YuJunZhiXue/dsh-purge/tree/ec69166706bed95efb6c35e225b01588f3cd9b72)。核对时最新 Release 仍为 1.1.71；本次使用 package.json 已声明 1.1.72 的源码快照，118 个上游 Git blob 全部核验一致。
+当前 **v1.0.6** 已适配官方 Windows Harness **0.2.1-rc.3**，引擎升级为 dsh-purge **1.1.77**（上游发布提交 [ac58b3e](https://github.com/YuJunZhiXue/dsh-purge/tree/ac58b3e35509da23bd75b6250f01007590524102)）。98 个上游 Git blob 已核验；官方安装包 SHA-512 和签名已验证。
 
-保留海鸥人格、**28 个技能**、原有安装与更新保护、红队预设，以及运行中立即插话和普通排队的区别；补丁定义从 82 增至 **86 条**。演练台补齐新建项目入口、错误反馈和重复提交保护，修复切换竞争与项目页面状态混用；同时修复旧提示词补丁迁移、定制人格保存标记、原生系统消息保留及卸载时的预设清理。5 个海鸥技能补齐官方发现所需的元数据，正文保持原样。验证范围见[升级与验证记录](docs/VERIFICATION.md#i-dsh-purge-1172-升级与演练台项目修复2026-10-19)。
+保留用户保存的**海鸥人格**、5 个海鸥技能、项目创建与切换修复、立即插话、独立排队、安装/更新和回退保护。新版保留上游的本地靶场限制及工具执行前检查，并纳入证据账本等工程功能。上游已下架随包技能库与知识库入口；本机已有数据保留，旧 23 个技能仅在源码中作历史存档，不再自动分发。
+
+上游主体代码现为 **Apache-2.0**；原始 LICENSE、NOTICE 与来源均保留，海鸥自身及历史资产分别按原有许可标注。当前本地仍维护 86 条补丁定义，其中 #89–#92 为保留原生消息路径等海鸥兼容修复。验证范围见[本次验证记录](docs/VERIFICATION.md#j-harness-021-rc3--dsh-purge-1177-合并2026-10-24)。
 
 已安装用户请使用下方“一键更新”命令，更新模式会保留现有提示词。先完成 Harness 官方版本更新，再重新应用插件；仅替换版本号或把旧 `resources/app` 整目录复制到新版会重新加载旧宿主。Windows 更新若静默失败，会改为显示安装界面；取消或失败时恢复旧解包目录并提示退出码。
 
@@ -41,7 +43,7 @@
 
 | 来源 | 提供什么 |
 |---|---|
-| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.72 | 宿主层引擎：**86 条补丁定义** + 红队演练台 + 23 个红队技能 |
+| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.77 | 宿主兼容、演练台、证据账本与本地靶场限制；保留 86 条本地补丁定义 |
 | [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | 海鸥人格（00a–00r 规则体系）+ 5 个领域技能 |
 
 合并不是拼盘——`SOUL.md` 不能直接当 DSH 提示词（插值白名单、ChatML 信封、技能目录协议
@@ -129,7 +131,7 @@ curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh
 | 审批门 `user-approval` / `permission-presets` | 中和 |
 | 沙箱 `sandbox` / `sandbox-policy` / `fs-sandbox` / `fs-observation-policy` | 中和 |
 | hooks（Claude Code / Codex）的 `deny` / `ask` | 改放行 |
-| `agent/pre-step` 预检拦截（地域闸门） | 整段不挂（`regionGate: false`） |
+| 本地靶场检查 | 保留新版上游限制，按解析结果检查目标，并在工具执行前检查 |
 | 官方身份段 | 剥掉（全树 0 处） |
 | 工具面裁剪（minimal / standard / ptc） | 放宽 |
 | 提示词组装顺序（inject 被吞） | 保留注入 |
@@ -254,13 +256,12 @@ mv "$APP_ROOT/resources/app.asar.sealed.bak" "$APP_ROOT/resources/app.asar"
 ## 许可与署名
 
 - 本项目自身代码：**MIT**（[LICENSE](LICENSE)）
-- 宿主层引擎派生自 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)（MIT © 2026 小杨），
+- 宿主层引擎派生自 [YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)（Apache-2.0 © 2026 YuJunZhiXue），
   本项目对其的全部改动在 [NOTICE](NOTICE) 中逐条列出
 - 人格与技能来自 [Yunique-hub/hermes-seagull](https://github.com/Yunique-hub/hermes-seagull)（MIT）
 - 与 DeepSeek 无雇佣 / 商业 / 授权 / 背书关系
 
-> 上游 README 声明「非营利 / 禁商用 / 需署名」。MIT 许可本身允许商用，本项目尊重上游意愿
-> 按非营利分发并保留全部署名。若要商业使用 `vendor/dsh-purge/` 部分，请先取得上游作者同意。
+> 上游主体许可与补充说明分别见 `vendor/dsh-purge/LICENSE`、`LICENSE-COMMERCIAL.md` 和 `NOTICE`；本地差异见根 NOTICE。
 
 ---
 

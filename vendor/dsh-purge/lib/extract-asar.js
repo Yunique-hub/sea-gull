@@ -152,6 +152,12 @@ const HOST_SYNC = [
   "existsSync", "statSync", "lstatSync", "readFileSync", "writeFileSync",
   "readdirSync", "mkdirSync", "realpathSync", "chmodSync", "unlinkSync",
   "rmSync", "renameSync", "appendFileSync", "openSync", "symlinkSync",
+  "accessSync", "truncateSync", "utimesSync",
+];
+
+// 这些吃的是 fd，不是路径。走 route() 会把数字 fd 当路径做 asar 探测（#150）。
+const HOST_FD = [
+  "closeSync", "readSync", "writeSync", "fsyncSync", "fstatSync", "futimesSync",
 ];
 
 /** 按路径自动选择 node:fs 或真实磁盘。补丁、探测、状态都走这一个。 */
@@ -168,6 +174,7 @@ export const hostFs = {
   },
 };
 for (const method of HOST_SYNC) hostFs[method] = route(method, false);
+for (const method of HOST_FD) hostFs[method] = (fd, ...args) => nodeFs[method](fd, ...args);
 
 /** Electron 会把 app.asar 伪装成目录。读归档必须走 original-fs，否则 isFile 为假、解不开。 */
 function archiveFs() {

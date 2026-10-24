@@ -6,7 +6,6 @@ import * as hostctl from "./host.js";
 import * as rules from "./rules.js";
 import * as updater from "./update.js";
 import { clearDrillGrant } from "./drill-grant.js";
-import { clearOwnedSelectedDefault, removeStaleAgentPresetDir } from "./preset-default.js";
 
 export function wasApplied(state) {
   if (!state) return false;
@@ -35,18 +34,6 @@ export function shouldDeletePluginTree(dir, dshHome = core.findDshHome()) {
   return n.startsWith(`${homeN}/profiles/`);
 }
 
-function isPurgeBundleItem(item) {
-  if (typeof item === "string") return item === "dsh-purge" || item.startsWith("dsh-purge@");
-  const id = item && (item.id || item.name || item.package);
-  return id === "dsh-purge";
-}
-
-function stripPurgeFromList(list) {
-  if (!Array.isArray(list)) return { list, changed: false };
-  const next = list.filter((item) => !isPurgeBundleItem(item));
-  return { list: next, changed: next.length !== list.length };
-}
-
 export function stripPluginFromPackage(pkg) {
   if (!pkg || typeof pkg !== "object") return false;
   let changed = false;
@@ -57,20 +44,15 @@ export function stripPluginFromPackage(pkg) {
     }
   }
   for (const key of ["bundles", "plugins"]) {
-    const { list, changed: c } = stripPurgeFromList(pkg[key]);
-    if (c) {
-      pkg[key] = list;
+    if (!Array.isArray(pkg[key])) continue;
+    const next = pkg[key].filter((item) => {
+      if (typeof item === "string") return item !== "dsh-purge" && !item.startsWith("dsh-purge@");
+      const id = item && (item.id || item.name);
+      return id !== "dsh-purge";
+    });
+    if (next.length !== pkg[key].length) {
+      pkg[key] = next;
       changed = true;
-    }
-  }
-  const profile = pkg.dsh && pkg.dsh.profile;
-  if (profile && typeof profile === "object") {
-    for (const key of ["bundles", "plugins"]) {
-      const { list, changed: c } = stripPurgeFromList(profile[key]);
-      if (c) {
-        profile[key] = list;
-        changed = true;
-      }
     }
   }
   return changed;
@@ -90,17 +72,13 @@ function writeJson(fp, value) {
 
 function pkgMentionsPurge(pkg) {
   if (!pkg) return false;
-  for (const key of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"]) {
-    if (pkg[key] && Object.prototype.hasOwnProperty.call(pkg[key], "dsh-purge")) return true;
-  }
+  if (pkg.dependencies?.["dsh-purge"] || pkg.devDependencies?.["dsh-purge"]) return true;
   for (const key of ["bundles", "plugins"]) {
-    if (Array.isArray(pkg[key]) && pkg[key].some(isPurgeBundleItem)) return true;
-  }
-  const profile = pkg.dsh && pkg.dsh.profile;
-  if (profile && typeof profile === "object") {
-    for (const key of ["bundles", "plugins"]) {
-      if (Array.isArray(profile[key]) && profile[key].some(isPurgeBundleItem)) return true;
-    }
+    if (!Array.isArray(pkg[key])) continue;
+    if (pkg[key].some((item) => {
+      if (typeof item === "string") return item === "dsh-purge" || item.startsWith("dsh-purge@");
+      return item && (item.id === "dsh-purge" || item.name === "dsh-purge");
+    })) return true;
   }
   return false;
 }
@@ -235,8 +213,10 @@ export async function uninstallPurge() {
   };
 
   try {
-    report.patches = await core.revertAllHosts();
-    if (applied || (report.patches?.reverted?.length || 0) > 0) report.reverted = true;
+    if (state.ai_base) {
+      report.patches = await core.revertAll(state.ai_base);
+      if (applied) report.reverted = true;
+    }
   } catch (e) {
     report.errors.push(`revert patches: ${e.message || e}`);
   }
@@ -272,13 +252,6 @@ export async function uninstallPurge() {
     report.rules = await resetRules(dshHome);
   } catch (e) {
     report.errors.push(`reset rules: ${e.message || e}`);
-  }
-
-  try {
-    report.presetDefault = clearOwnedSelectedDefault({ dshHome });
-    report.stalePresetDir = removeStaleAgentPresetDir(dshHome, "redteam");
-  } catch (e) {
-    report.errors.push(`clear selectedDefault: ${e.message || e}`);
   }
 
   const profiles = listInstalledProfiles(dshHome);

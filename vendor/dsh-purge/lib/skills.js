@@ -91,7 +91,7 @@ function pathsOverlap(a, b) {
 function assertImportSourceOutsideSkills(dshHome, srcPath) {
   const root = skillsDir(dshHome);
   if (!pathsOverlap(srcPath, root)) return;
-  throw new Error("不能从 $DSH_HOME/skills 自身（或其子目录）导入，请换一个源目录");
+  throw new Error("Cannot import from $DSH_HOME/skills itself (or a subdirectory); choose a different source directory");
 }
 
 function yamlScalar(value) {
@@ -213,15 +213,15 @@ function yamlBoolField(head, key) {
 
 export function parseSkillDocument(raw) {
   const parts = splitFrontmatter(raw);
-  if (!parts) return { ok: false, error: "缺少 YAML frontmatter（须以 --- 包围）" };
+  if (!parts) return { ok: false, error: "Missing YAML frontmatter (must be wrapped in ---)" };
   const name = yamlLineField(parts.head, "name");
   const description = yamlLineField(parts.head, "description");
-  if (!validSkillName(name)) return { ok: false, error: "frontmatter.name 必须是 kebab-case，例如 code-review" };
-  if (!description) return { ok: false, error: "frontmatter.description 必填（单行）" };
+  if (!validSkillName(name)) return { ok: false, error: "frontmatter.name must be kebab-case, e.g. code-review" };
+  if (!description) return { ok: false, error: "frontmatter.description is required (single line)" };
   const disableModel = yamlBoolField(parts.head, "disable-model-invocation");
   const userInvocable = yamlBoolField(parts.head, "user-invocable");
-  if (disableModel.invalid) return { ok: false, error: "disable-model-invocation 必须是布尔值（true/false）" };
-  if (userInvocable.invalid) return { ok: false, error: "user-invocable 必须是布尔值（true/false）" };
+  if (disableModel.invalid) return { ok: false, error: "disable-model-invocation must be a boolean (true/false)" };
+  if (userInvocable.invalid) return { ok: false, error: "user-invocable must be a boolean (true/false)" };
   return {
     ok: true,
     name,
@@ -500,10 +500,10 @@ function listArchiveEntries(archivePath) {
 function extractArchive(archivePath, dest) {
   const entries = listArchiveEntries(archivePath);
   if (entries && entries.some(isUnsafeArchiveEntry)) {
-    throw new Error("压缩包路径不合法");
+    throw new Error("Invalid archive path");
   }
   if (entries && entries.length > MAX_IMPORT_FILES) {
-    throw new Error("压缩包里文件太多");
+    throw new Error("Too many files in the archive");
   }
   if (/\.zip$/i.test(archivePath)) {
     try {
@@ -520,7 +520,7 @@ function extractArchive(archivePath, dest) {
   });
   if (result.status === 0) return;
   const detail = String(result.stderr || result.stdout || "").trim();
-  throw new Error(detail || "无法解压，请改用文件夹导入");
+  throw new Error(detail || "Cannot unpack the archive; import a folder instead");
 }
 
 async function walkFiles(root, onFile, depth = 0) {
@@ -603,18 +603,18 @@ async function installBundleDir(dshHome, srcDir, fallbackId) {
   const raw = await fsp.readFile(mdPath, "utf8");
   const parsed = parseSkillDocument(raw);
   const id = parsed.ok ? parsed.name : kebabFromLabel(fallbackId || path.basename(srcDir));
-  if (!validSkillName(id)) throw new Error("压缩包/文件夹里没有合法的 Skill 名称");
+  if (!validSkillName(id)) throw new Error("No valid skill name in the archive or folder");
   const dest = skillBundleDir(dshHome, id);
   assertInside(skillsDir(dshHome), dest);
   if (pathsOverlap(srcDir, dest)) {
-    throw new Error("不能从目标技能目录自身导入，请换一个源目录");
+    throw new Error("Cannot import from the target skill directory itself; choose a different source directory");
   }
   const backup = await backupExisting(dshHome, id);
   await removeOfficialSkill(dshHome, id);
   try {
     await copyDir(srcDir, dest);
     const destMd = path.join(dest, "SKILL.md");
-    if (!(await pathExists(destMd))) throw new Error("导入后缺少 SKILL.md");
+    if (!(await pathExists(destMd))) throw new Error("SKILL.md is missing after import");
     if (parsed.ok && parsed.name !== id) {
       await fsp.writeFile(destMd, mergeSkillDocument(id, parsed.description, raw), "utf8");
     } else if (!parsed.ok && !String(raw).replace(/^\uFEFF/, "").startsWith("---")) {
@@ -649,14 +649,14 @@ async function installFoundSkills(dshHome, root, fallbackId) {
       imported.push(await installFlatFile(dshHome, file, fallbackId));
     }
   }
-  if (!imported.length) throw new Error("未找到 SKILL.md 或合法的 Skill 文件");
+  if (!imported.length) throw new Error("No SKILL.md or valid skill file found");
   return imported;
 }
 
 export async function importArchive(dshHome, buffer, filename = "skill.zip") {
   const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
-  if (!bytes.length) throw new Error("压缩包是空的");
-  if (bytes.length > MAX_ARCHIVE_BYTES) throw new Error("压缩包太大（最大 12MB）");
+  if (!bytes.length) throw new Error("The archive is empty");
+  if (bytes.length > MAX_ARCHIVE_BYTES) throw new Error("The archive is too large (max 12MB)");
   const temp = await fsp.mkdtemp(path.join(os.tmpdir(), "dshp-skill-"));
   const archive = path.join(temp, path.basename(filename) || "skill.zip");
   const unpacked = path.join(temp, "unpacked");
@@ -676,7 +676,7 @@ export async function importArchive(dshHome, buffer, filename = "skill.zip") {
       }
       total += st.size;
       if (total > MAX_UNPACKED_BYTES) {
-        throw new Error(`压缩包解压后超过 ${Math.floor(MAX_UNPACKED_BYTES / 1024 / 1024)}MB`);
+        throw new Error(`The unpacked archive exceeds ${Math.floor(MAX_UNPACKED_BYTES / 1024 / 1024)}MB`);
       }
     });
     const imported = await installFoundSkills(dshHome, unpacked, kebabFromLabel(filename));
@@ -687,15 +687,15 @@ export async function importArchive(dshHome, buffer, filename = "skill.zip") {
 }
 
 export async function importFileTree(dshHome, files, fallbackId = "") {
-  if (!Array.isArray(files) || !files.length) throw new Error("文件夹是空的");
-  if (files.length > MAX_IMPORT_FILES) throw new Error("文件夹里文件太多");
+  if (!Array.isArray(files) || !files.length) throw new Error("The folder is empty");
+  if (files.length > MAX_IMPORT_FILES) throw new Error("Too many files in the folder");
   const temp = await fsp.mkdtemp(path.join(os.tmpdir(), "dshp-skill-"));
   try {
     let total = 0;
     for (const file of files) {
       const rel = String(file?.path || file?.name || "").replace(/\\/g, "/").replace(/^\/+/, "");
       if (!rel || rel.includes("..") || path.isAbsolute(rel) || isUnsafeArchiveEntry(rel)) {
-        throw new Error("文件夹路径不合法");
+        throw new Error("Invalid folder path");
       }
       const dest = path.join(temp, rel);
       assertInside(temp, dest);
@@ -703,7 +703,7 @@ export async function importFileTree(dshHome, files, fallbackId = "") {
       const text = typeof file.content === "string" ? file.content : "";
       const raw = file.encoding === "base64" ? Buffer.from(text, "base64") : Buffer.from(text, "utf8");
       total += raw.length;
-      if (raw.length > MAX_ARCHIVE_BYTES || total > MAX_ARCHIVE_BYTES) throw new Error("文件太大");
+      if (raw.length > MAX_ARCHIVE_BYTES || total > MAX_ARCHIVE_BYTES) throw new Error("File is too large");
       await fsp.writeFile(dest, raw);
     }
     const imported = await installFoundSkills(dshHome, temp, fallbackId);
@@ -727,7 +727,7 @@ export async function importFromPath(dshHome, sourcePath) {
     }
     return { imported: [toPublicSkill(dshHome, await installFlatFile(dshHome, src, kebabFromLabel(name)))] };
   }
-  throw new Error("只能导入压缩包或文件夹");
+  throw new Error("Only an archive or a folder can be imported");
 }
 
 export async function skillsStatus(dshHome) {

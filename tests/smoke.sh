@@ -38,7 +38,7 @@ bash "$ROOT/install.sh" --dsh-home "$TMP/dsh" --app-root "$TMP/not-installed" --
 [ -f "$TMP/dsh/plugins/dsh-purge/package.json" ] || fail "插件未就位"
 [ -f "$TMP/dsh/prompt-inject.md" ]               || fail "prompt-inject.md 未落地"
 [ -f "$TMP/dsh/rules/seagull-fullbreak.md" ]     || fail "规则集未落地"
-[ -d "$TMP/dsh/skills/redteam" ]                 || fail "红队技能未落地"
+[ ! -d "$TMP/dsh/skills/redteam" ]              || fail "新版不应重新分发已下架的旧技能库"
 [ -d "$TMP/dsh/skills/seagull-reverse" ]         || fail "海鸥技能未落地"
 pass "文件全部落地"
 
@@ -64,11 +64,11 @@ print("   bundles =", b)
 PY
 pass "幂等"
 
-echo "── 5. 全破开关在位 ──"
-grep -q "regionGate: *false" "$TMP/dsh/plugins/dsh-purge/cordis.patch.yml" || fail "regionGate 未关"
+echo "── 5. 上游靶场限制与启动配置在位 ──"
+grep -q "autoApplyOnStart: *true" "$TMP/dsh/plugins/dsh-purge/cordis.patch.yml" || fail "自动应用未开"
 grep -q "hooksDenyBypass: *true" "$TMP/dsh/plugins/dsh-purge/cordis.patch.yml" || fail "hooksDenyBypass 未开"
-grep -q "cfg\.regionGate !== false" "$TMP/dsh/plugins/dsh-purge/lib/index.js" || fail "index.js 开关缺失"
-pass "regionGate=false / hooksDenyBypass=true / 代码开关在位"
+grep -q "installRegionGate(ctx);" "$TMP/dsh/plugins/dsh-purge/lib/index.js" || fail "靶场限制未挂载"
+pass "自动应用开启 / 上游靶场限制挂载 / hooks 配置在位"
 
 echo "── 6. 卸载闭环 ──"
 bash "$ROOT/install.sh" --dsh-home "$TMP/dsh" --app-root "$TMP/not-installed" --profile desktop --uninstall -q

@@ -11,10 +11,13 @@ import * as reapply from "./reapply.js";
 import * as officialUpdate from "./official-update.js";
 import {
   GLOBAL_PROMPT_ORDER,
+  adaptInjectForMinimalPreset,
   isMnemonPluginMessage,
-  isChildAgentContext,
   isRedteamSession,
   installAssembleGuard,
+  modePromptText,
+  peelChatmlEnvelope,
+  escapeDshInterpolation,
   rewritePromptAssembly,
 } from "./identity.js";
 import { capabilityProtocolText, CAPABILITY_SECTION } from "./capability-protocol.js";
@@ -59,8 +62,7 @@ const DEFAULTS = {
   // Codex 风格：教模型主动发现 skill / MCP；不改官方注册与工具面。
   capabilityProtocol: true,
   hooksDenyBypass: true,
-  // [seagull 全破] true = 保留上游的 CN/HK/MO 目标地域闸门；
-  // false = 完全不装 region gate（预检不拦、不发"拒绝"占位消息）。
+  // Legacy config key retained; the upstream local-lab gate is always installed.
   regionGate: true,
 };
 
@@ -153,10 +155,9 @@ function renderStatus(state) {
     const s = row.status || "n/a";
     const mark = s === "applied" ? "✓" : s === "pending" ? "✗" : "·";
     const patch = core.ALL_PATCHES.find((item) => item.id === row.id);
-    const label = row.title || (patch ? patch.desc?.split(" / ")[0] : "") || (patch ? patch.name : `patch-${row.id}`);
-    const idLabel = Array.isArray(row.ids) && row.ids.length > 1 ? row.ids.join("/") : String(row.id);
+    const label = patch ? patch.name : `patch-${row.id}`;
     const layer = patch ? `${patch.layer}/${patch.layer_en}` : row.layer || "";
-    out.push(`  ${mark} [#${String(idLabel).padEnd(6)}] ${label.padEnd(36)} ${layer} — ${s}`);
+    out.push(`  ${mark} [#${String(row.id).padEnd(2)}] ${label.padEnd(30)} ${layer} — ${s}`);
   }
   out.push("");
   out.push(`shim: dsh.cmd=${state.shim_cmd}  dsh.ps1=${state.shim_ps1}  dsh=${state.shim_bin}`);
@@ -167,7 +168,7 @@ function injectAllowedNow(config) {
   return config.enabled !== false;
 }
 
-/** prompt-inject.md（点保存覆盖）> 本进程未落盘的框 > 加密默认。 */
+/** 提示词框自改 > prompt-inject.md > 加密默认（见 rules.resolveInjectText）。 */
 // mtime 节流:400ms setInterval + 每 pre-step + 每 preset-selected + 每 readInjectFallback
 // 的高频触发下,disk sync + 3 次 hashOverride + 2 次模块级赋值一轮能点 20 次。
 // 短窗复用上次结果:home 没换 + 文件 mtime 没变 + 距上次 < 200ms,直接返回缓存。
@@ -195,7 +196,7 @@ function refreshHungOperator(dshHome = core.findDshHome()) {
   const resolved = rules.resolveInjectText(home);
   // 兜底顺序:resolved.text > 加密默认 > 永不空串(避免二轮 fallbackInject 为空走 purge[] 残留)。
   const fallback = core.normalizeOverride(core.defaultOverrideText()) || "";
-  // 框、磁盘、加密槽原样发给模型，不做 ChatML / 插值 / 按模式裁剪。
+  // 框、磁盘、加密槽保持原样。发给模型只整理 ChatML 单独成行，并补上缺失的闭合标签。
   const text = resolved.text || fallback;
   if (text) {
     core.hangOperatorPrompt(text);
@@ -208,16 +209,49 @@ function refreshHungOperator(dshHome = core.findDshHome()) {
   return out;
 }
 
-function uninstallHungPromptGlobal() {
-  try { delete globalThis.__dshPurgeHungPrompt; } catch { globalThis.__dshPurgeHungPrompt = undefined; }
+function installHungPromptGlobal() {
+  // host 侧 inject 兜底:正常 cordis assemble 钩子 (rewriteLiveAssembly) 跟这条路径互斥,
+  // 不会重复注入;插件首装 / 预设切换 / hung session / 新对话首轮钩子未就绪窗口,靠这里兜。
+  // [v10 四重 fallback] 新对话首轮 refreshHungOperator 若因 cache 未就绪 / sync disk 失败 /
+  // resolveInjectText 返空(极端情况)任一环节返空,host 这边读到的 inject 真空 → 模型自称
+  // "我是 Claude"。四重兜底确保任何路径都不会把空串交给 host:
+  //   1) refreshHungOperator — 完整路径(sync disk + resolve + pin)
+  //   2) hungOperatorPrompt   — 上次挂上的内存钉子(进程生命周期)
+  //   3) readPromptInjectFileSync — 直读磁盘 prompt-inject.md,绕过 sync/resolve
+  //   4) defaultOverrideText — 加密槽解包,除非插件安装残缺否则非空
+  const fn = () => {
+    const norm = (s) => peelChatmlEnvelope(String(s || "").replace(/\r\n/g, "\n"));
+    let home = "";
+    try { home = core.findDshHome(); } catch { home = ""; }
+    try {
+      const text = norm(refreshHungOperator(home).text);
+      if (text) { purgeLog("host.hungFn", { tier: "refresh", bytes: text.length }); return text; }
+    } catch (e) { purgeLog("host.hungFn", { tier: "refresh", err: String(e?.message || e) }); }
+    try {
+      const hung = norm(core.hungOperatorPrompt());
+      if (hung) { purgeLog("host.hungFn", { tier: "hung", bytes: hung.length }); return hung; }
+    } catch (e) { purgeLog("host.hungFn", { tier: "hung", err: String(e?.message || e) }); }
+    try {
+      const disk = norm(core.readPromptInjectFileSync(home));
+      if (disk) { purgeLog("host.hungFn", { tier: "disk", bytes: disk.length }); return disk; }
+    } catch (e) { purgeLog("host.hungFn", { tier: "disk", err: String(e?.message || e) }); }
+    try {
+      const sealed = norm(core.defaultOverrideText());
+      if (sealed) { purgeLog("host.hungFn", { tier: "sealed", bytes: sealed.length }); return sealed; }
+    } catch (e) { purgeLog("host.hungFn", { tier: "sealed", err: String(e?.message || e) }); }
+    purgeLog("host.hungFn", { tier: "empty", bytes: 0 });
+    return "";
+  };
+  globalThis.__dshPurgeHungPrompt = fn;
+  return fn;
 }
 
-// 三条路都全文注入。不读 inbox、不改 steer/followup，避免误唤醒。
+// 一律全文。工具步裁 6000 / .hung-disabled 两分法会切掉 HARD OUTPUT，第二轮任务必拒。
 function shouldInjectAssembly(context) {
   const decision = { mode: "full", taskKind: "general", lastRole: "full", isSubagent: false };
   try {
-    decision.isSubagent = isChildAgentContext(context);
-  } catch { /* ignore */ }
+    decision.isSubagent = context?.agent?.session?.header?.origin === "subagent";
+  } catch {}
   if (globalThis.__dshPurgeRetryPending) {
     globalThis.__dshPurgeRetryPending = false;
     decision.lastRole = "retry";
@@ -351,8 +385,10 @@ export function registerPromptSections(ctx, config) {
     interpolate: false,
     text: (context) => {
       if (!injectAllowedNow(config)) return "";
-      // 写的是什么样就原样进 system，不整理、不裁剪。
-      return readInjectFallback(context);
+      // 标准、极简都注入同一份正文。极简只改工具句，不决定注不注入。
+      return escapeDshInterpolation(
+        peelChatmlEnvelope(adaptInjectForMinimalPreset(readInjectFallback(context), context)),
+      );
     },
   });
 
@@ -366,7 +402,7 @@ export function registerPromptSections(ctx, config) {
         const redteam = isRedteamSession(context);
         return capabilityProtocolText({
           redteam,
-          redteamChild: redteam && isChildAgentContext(context),
+          redteamChild: redteam && context?.agent?.session?.header?.origin === "subagent",
           enabled: true,
         });
       },
@@ -406,16 +442,17 @@ function readInjectFallback(context) {
   let redteam = false;
   try { redteam = isRedteamSession(context); } catch { redteam = false; }
   let subagent = false;
-  try { subagent = isChildAgentContext(context); } catch { subagent = false; }
+  try { subagent = context?.agent?.session?.header?.origin === "subagent"; } catch {}
+  const out = modePromptText(text, redteam);
   purgeLog("inject.read", {
     source,
     srcTag: refreshed.source || "n/a",
     redteam,
     sub: subagent,
     rawBytes: text.length,
-    outBytes: text.length,
+    outBytes: out.length,
   });
-  return text;
+  return out;
 }
 
 function installMnemonMessageStrip(ctx, config = {}) {
@@ -490,18 +527,16 @@ function rewriteLiveAssembly(config, assembled, context, decision = { mode: "ful
   const rewritten = rewritePromptAssembly(assembled, {
     fallbackInject: inject,
     dropMnemon: config.stripMnemon !== false,
+    dropPurgeAfterFold: false,
     capabilityProtocol: config.capabilityProtocol !== false,
     context,
     roleText,
     dropWorkspaceBaseline,
   });
   const closerFollow = closerFollowBytes(rewritten?.sections);
-  let subagent = false;
-  try { subagent = isChildAgentContext(context); } catch { subagent = false; }
   purgeLog("assemble.rewrite", {
     enabled,
     redteam,
-    sub: subagent,
     mode: decision?.mode || "full",
     task: decision?.taskKind || "general",
     last: decision?.lastRole || "unknown",
@@ -514,23 +549,7 @@ function rewriteLiveAssembly(config, assembled, context, decision = { mode: "ful
     strip: config.stripMnemon !== false,
     policy,
     dropWorkspaceBaseline,
-    injectHead: Array.isArray(rewritten?.sections) && (() => {
-      const first = rewritten.sections[0];
-      const firstText = String(first?.text || "");
-      const name = String(first?.name || "");
-      if (name === "dsh-purge") return true;
-      if (!inject) return false;
-      return /persona-prefix$|^persona$|^deployment:persona$/.test(name) && firstText.includes(inject);
-    })(),
-    folded: Array.isArray(rewritten?.sections) && (() => {
-      const first = rewritten.sections[0];
-      const name = String(first?.name || "");
-      if (!inject) return false;
-      return /persona-prefix$|^persona$|^deployment:persona$/.test(name)
-        && String(first?.text || "").includes(inject);
-    })(),
-    injectTail: Array.isArray(rewritten?.sections) && rewritten.sections.length > 0
-      && rewritten.sections[rewritten.sections.length - 1]?.name === "dsh-purge",
+    injectHead: Array.isArray(rewritten?.sections) && rewritten.sections[0]?.name === "dsh-purge",
     chatml: Array.isArray(rewritten?.sections) && /<project_instructions>|<\|im_start\|>/i.test(String(rewritten.sections[0]?.text || "")),
     afterCloser: closerFollow,
     cwd,
@@ -582,6 +601,7 @@ function permissionPresetsOf(ctx) {
 }
 
 function shouldKeepFreshFullAccess(session, svc) {
+  if (session?.header?.origin === "subagent") return false;
   const state = typeof svc.permissionState === "function" ? svc.permissionState(session) : null;
   const preset = state?.preset;
   if (preset === "danger-full-access" || preset === "auto" || preset === "custom") return false;
@@ -648,6 +668,29 @@ function installCwdCapture(ctx) {
         try { if (typeof d === "function") d(); } catch { /* ignore */ }
       }
       delete ctx.__dshPurgeCwdCapture;
+    };
+  });
+}
+
+function installRewindDeriveFilter(ctx) {
+  if (!ctx || ctx.__dshPurgeRewindDerive) return;
+  ctx.__dshPurgeRewindDerive = true;
+  const wrapOne = (session) => {
+    try { rewind.wrapSessionDeriveMessages(session); } catch { /* ignore */ }
+  };
+  try {
+    const store = ctx.get?.("sessions");
+    const all = typeof store?.all === "function" ? store.all()
+      : typeof store?.list === "function" ? store.list()
+      : [];
+    for (const session of all || []) wrapOne(session);
+  } catch { /* ignore */ }
+  ctx.effect(() => {
+    let disposer = null;
+    try { disposer = ctx.on("session/created", (session) => wrapOne(session)); } catch { /* ignore */ }
+    return () => {
+      try { if (typeof disposer === "function") disposer(); } catch { /* ignore */ }
+      delete ctx.__dshPurgeRewindDerive;
     };
   });
 }
@@ -763,12 +806,12 @@ function installIdentityOverride(ctx, config = {}) {
     return prompt || null;
   };
   globalThis.__dshPurgePrepareAssemble = prepareAssemble;
-  uninstallHungPromptGlobal();
+  const hungFn = installHungPromptGlobal();
   // complete:true 会在 waterfall 之后盖掉 sections；包住 assemble 返回值，每轮都补回注入。
   wrapAssemble("init");
   // guard 需要在每次 cordis 换 systemPrompt 代理时重挂（session 内切预设、subagent fork、
   // live-mount）。原本 20 秒后 clearInterval，之后换代理就包不上 → 第二轮 inject 走原生
-  // assemble → complete:true 只留完整段，看起来像截了一截。installAssembleGuard 幂等
+  // assemble → 宿主按 token 预算裁剪 → 用户看到"只截取了部分"。installAssembleGuard 幂等
   // （wrappedPrompts WeakSet + 对象 identity 校验），400ms 持续跑到 ctx dispose 的 CPU 代价可忽略。
   // 400ms 回滚:2000ms 窗口 → 新对话第一次 assemble 可能跑在钩子挂上之前,inject 塌。
   // CPU 代价(幂等 wrap)相比"新对话失效"的用户感知,根本不值一提。
@@ -779,18 +822,9 @@ function installIdentityOverride(ctx, config = {}) {
   if (!ctx.__dshPurgeSessionHook) {
     ctx.__dshPurgeSessionHook = true;
     try {
-      ctx.on("session/created", (session) => {
+      ctx.on("session/created", () => {
         try { refreshHungOperator(core.findDshHome()); } catch { /* 主目录还没有提示词 */ }
         wrapAssemble("sessionCreated");
-        try {
-          if (session?.header?.origin !== "subagent") return;
-          const prepare = globalThis.__dshPurgePrepareAssemble;
-          if (typeof prepare !== "function") return;
-          const agents = ctx.agents || (typeof ctx.get === "function" ? ctx.get("agents") : null);
-          const child = typeof agents?.get === "function" ? agents.get(session.id) : null;
-          if (child?.ctx) prepare(child.ctx);
-          else prepare(ctx);
-        } catch { /* 子会话此时可能还没有 agent */ }
       });
     } catch { /* ignore */ }
   }
@@ -1137,8 +1171,8 @@ async function handlePurgeCommand(rawInput, config, ctx = null) {
     case "r": {
       const state = await core.gatherState();
       const lines = [];
-      {
-        const { reverted, errors } = await core.revertAllHosts();
+      if (state.ai_base) {
+        const { reverted, errors } = await core.revertAll(state.ai_base);
         lines.push(...reverted.map((p) => `  ✓ 已还原 / Reverted ${p}`));
         for (const [p, e] of errors) lines.push(`  ⚠ 还原失败 ${p}: ${e}`);
         if (reverted.length === 0) lines.push("  - 没有补丁备份可还原 / no patch backup");
@@ -1445,7 +1479,7 @@ export function apply(ctx, config) {
         }
       }
     } catch (e) { purgeLog("hung-disabled", { err: String(e?.message || e) }); }
-    uninstallHungPromptGlobal();
+    installHungPromptGlobal();
     // Apply→cleanup→restart 成功后，默认把加密提示词 seed 进 prompt-inject.md。
     // 用户已经改过的文件不动；只有「没有」或「仍是空文件」时才补写。
     try {
@@ -1515,9 +1549,10 @@ function applyHostHooks(ctx, cfg) {
     refreshHungOperator(home);
   } catch { /* 主目录尚未就绪 */ }
   installIdentityOverride(ctx, cfg);
-  // [seagull 全破] regionGate=false 时整段不挂：agent/pre-step 预检不拦任何目标。
-  if (cfg.regionGate !== false) installRegionGate(ctx);
+  // Keep the upstream local-lab gate active independently of legacy region settings.
+  installRegionGate(ctx);
   installFreshFullAccess(ctx);
+  installRewindDeriveFilter(ctx);
   installCwdCapture(ctx);
   installMnemonMessageStrip(ctx, cfg);
   registerPromptSections(ctx, cfg);
@@ -1555,7 +1590,7 @@ function applyHostHooks(ctx, cfg) {
     });
     commands.register({
       name: "rewind",
-      description: "回退：撤回已发出的那轮，官方 fork 新会话接上之前的上下文；那句回到输入框再发送会重新注入",
+      description: "回退：子代理直接回退一次；主代理 /rewind once 或 /rewind round",
       input: { hint: "once | round" },
       handler: async (invocation) => {
         const sessionId = rewind.invocationSessionId(invocation);
@@ -1564,7 +1599,7 @@ function applyHostHooks(ctx, cfg) {
         if (info.ok && info.kind === "main" && arg !== "once" && arg !== "round") {
           return {
             kind: "success",
-            text: "主代理请选择：/rewind once 撤回上一步，/rewind round 撤回上一轮（含子代理）。已进行的对话会撤销，新会话接上之前的上下文，那句回到输入框再发送。",
+            text: "主代理请选择：/rewind once 回退一次，/rewind round 回退上一轮（含本轮子代理）。",
           };
         }
         const mode = arg === "round" ? "round" : "once";
@@ -1573,8 +1608,8 @@ function applyHostHooks(ctx, cfg) {
         return {
           kind: "success",
           text: mode === "round"
-            ? "已撤回上一整轮。新会话接上之前的上下文，那句在输入框里，再发送会重新注入。"
-            : "已撤回上一步。新会话接上之前的上下文，那句在输入框里，再发送会重新注入。",
+            ? "已回退上一轮。还在这条对话里，上一句已放回输入框。再发送时，之前的回复不会带上。"
+            : "已回退一次。还在这条对话里，上一句已放回输入框。再发送时，之前的回复不会带上。",
         };
       },
     });
@@ -1657,8 +1692,8 @@ function applyHostHooks(ctx, cfg) {
       async execute() {
         const state = await core.gatherState();
         const lines = [];
-        {
-          const { reverted, errors } = await core.revertAllHosts();
+        if (state.ai_base) {
+          const { reverted, errors } = await core.revertAll(state.ai_base);
           lines.push(`reverted=${reverted.length}${errors.length ? ` errors=${errors.length}` : ""}`);
         }
         const shimRevert = await core.revertAllShims();
@@ -1772,7 +1807,6 @@ function installWebServer(ctx, cfg) {
                 ids: p.ids,
                 layer: p.layer || "",
                 status: p.status,
-                title: p.title || "",
               })),
               patch_names,
               shim_cmd: state.shim_cmd,
@@ -1892,11 +1926,8 @@ function installWebServer(ctx, cfg) {
               }
               const mode = body?.mode === "round" ? "round" : "once";
               const result = await rewind.applyRewind(ctx, sessionId, mode);
-              try { refreshHungOperator(core.findDshHome()); } catch { /* 回退后下一发仍走磁盘提示词 */ }
-              purgeLog("http.rewind", { mode, ok: result.ok, child: String(result.sessionId || "").slice(0, 8) });
               sendJson(response, result.ok ? 200 : 409, result);
             } catch (e) {
-              purgeLog("http.rewind", { err: String(e && e.message ? e.message : e) });
               sendJson(response, 500, { ok: false, error: String(e) });
             }
             return;
@@ -2024,32 +2055,17 @@ function installWebServer(ctx, cfg) {
             if (shouldRestart) reapply.markSettleRestart();
             let promptInjectInstall = "skipped";
             if (hostWritten && flash.ok === true) {
+              // Apply → cleanup → restart 成功后，默认把加密提示词 seed 进 prompt-inject.md。
+              // 用户自改过的内容保留；仅当文件不存在或仍是插件旧默认时才写。
               try {
-                const home = state.dsh_home;
-                const diskRaw = core.readPromptInjectFileSync(home);
-                const diskNorm = core.normalizeOverride(diskRaw);
-                const bundledNorm = core.normalizeOverride(core.defaultOverrideText());
-                if (diskNorm && diskNorm !== bundledNorm && core.isKeepableUserOverride(home, diskRaw)) {
-                  promptInjectInstall = "kept_user_custom";
-                } else {
-                  const seed = core.seedPromptInjectAtBoot(home);
-                  promptInjectInstall = seed?.action || "noop";
-                }
+                const seed = core.seedPromptInjectAtBoot(state.dsh_home);
+                promptInjectInstall = seed?.action || "noop";
               } catch (e) {
                 promptInjectInstall = `error:${String(e && e.message ? e.message : e)}`;
               }
             }
             const hung = refreshHungOperator(state.dsh_home);
             const override = await core.readOverrideForUi(state.dsh_home);
-            purgeLog("http.apply", {
-              complete,
-              restart: shouldRestart,
-              applied: summary.applied,
-              already: summary.already,
-              failed: summary.failed.length,
-              seed: promptInjectInstall,
-              incoming: incoming === null ? -1 : incoming.length,
-            });
             sendJson(response, 200, {
               ok: true,
               complete,
@@ -2080,7 +2096,6 @@ function installWebServer(ctx, cfg) {
               cmd_flash: flash,
             });
           } catch (e) {
-            purgeLog("http.apply", { err: String(e && e.message ? e.message : e) });
             sendJson(response, 500, { ok: false, error: String(e) });
           }
         },
@@ -2097,16 +2112,14 @@ function installWebServer(ctx, cfg) {
           try {
             const state = await core.gatherState();
             const result = {};
-            {
-              const { reverted, errors } = await core.revertAllHosts();
+            if (state.ai_base) {
+              const { reverted, errors } = await core.revertAll(state.ai_base);
               result.reverted = reverted.length;
               result.errors = errors.length;
             }
             result.shim = await core.revertAllShims();
             sendJson(response, 200, { ok: true, ...result, note: "重启 dsh 恢复; prompt-inject.md 保留" });
-            purgeLog("http.revert", { reverted: result.reverted, errors: result.errors });
           } catch (e) {
-            purgeLog("http.revert", { err: String(e && e.message ? e.message : e) });
             sendJson(response, 500, { ok: false, error: String(e) });
           }
         },
@@ -2122,7 +2135,6 @@ function installWebServer(ctx, cfg) {
           }
           try {
             const result = await uninstaller.uninstallPurge();
-            purgeLog("http.uninstall", { ok: result.ok, surface: hostctl.currentSurface() });
             sendJson(response, result.ok ? 200 : 500, {
               ...result,
               surface: hostctl.currentSurface(),
@@ -2194,16 +2206,11 @@ function installWebServer(ctx, cfg) {
                 return;
               }
               const saved = await core.saveOverrideContent(home, content);
-              purgeLog("http.override.save", {
-                bytes: content.length,
-                customized: saved.customized,
-                explicit: saved.explicitSave,
-              });
-              try { refreshHungOperator(home); } catch { /* 缓存刷新失败不影响已落盘 */ }
+              const hung = refreshHungOperator(home);
               const ui = await core.readOverrideForUi(home);
               sendJson(response, 200, {
                 ok: true,
-                content: saved.content,
+                content: hung.text,
                 defaultContent: saved.defaultContent,
                 customized: ui.customized,
                 usingDefault: ui.usingDefault,
@@ -2263,7 +2270,6 @@ function installWebServer(ctx, cfg) {
             const ready = await ensureRestartReady();
             if (!ready.ok) {
               bootFullQuit = false;
-              purgeLog("http.restart", { ok: false, pending: (ready.pending || []).join(",") });
               sendJson(response, 200, {
                 ok: false,
                 error: ready.error || "清洗没有完成，已取消重启",

@@ -8,7 +8,7 @@ import { readPresetDefinition, preparePresetDefinitions } from '../vendor/dsh-pu
 import { isRedteamPresetId } from '../vendor/dsh-purge/lib/identity.js';
 import { apply as mountRedteam } from '../vendor/dsh-purge/lib/redteam/index.js';
 
-const presetDir = fileURLToPath(new URL('../vendor/dsh-purge/presets/redteam/', import.meta.url));
+const presetDir = fileURLToPath(new URL('./fixtures/redteam-legacy/', import.meta.url));
 const flatten = (rows) => rows.flatMap((row) => row.group ? [row, ...flatten(row.config)] : [row]);
 
 test('legacy redteam filtering becomes a separate executor preset without losing parent tools or custom content', () => {
@@ -47,6 +47,13 @@ test('redteam executors retain role prompt identification', () => {
   assert.ok(path.isAbsolute(presetDir));
 });
 
+test('current upstream preset needs no legacy executor migration', () => {
+  const current = fileURLToPath(new URL('../vendor/dsh-purge/presets/redteam/', import.meta.url));
+  const definition = readPresetDefinition('redteam', current);
+  assert.deepEqual(preparePresetDefinitions(definition), [definition]);
+  assert.ok(flatten(definition.plugins).every(row => !row.config?.toolFilter));
+});
+
 for (const scenario of ['register-failed', 'executor-broken']) {
   test('preset declaration reports ' + scenario + ' and cleans up registered companions', async () => {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'seagull-preset-'));
@@ -55,6 +62,9 @@ for (const scenario of ['register-failed', 'executor-broken']) {
     let cleanup;
     process.env.DSH_HOME = temp;
     try {
+      const legacyDir = path.join(temp, '.agent-presets/redteam');
+      fs.mkdirSync(legacyDir, { recursive: true });
+      for (const name of ['agent.cordis.yml', 'preset.yml']) fs.copyFileSync(path.join(presetDir, name), path.join(legacyDir, name));
       const registry = {
         async register(definition) {
           registered.push(definition.id);

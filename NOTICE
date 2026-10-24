@@ -8,36 +8,31 @@
 ## 1. dsh-purge — 宿主层引擎（`vendor/dsh-purge/`）
 
 - 来源：https://github.com/YuJunZhiXue/dsh-purge
-- 作者：小杨（YuJunZhiXue）
-- 版本快照：1.1.72，固定 master 提交 ec69166706bed95efb6c35e225b01588f3cd9b72。
-- 核对日期：2026-10-19；下载快照的 118 个文件与该提交的 Git blob 哈希一致。
-- 核对时最新 Release 及上游部分说明仍为 1.1.71；本仓库采用上述源码提交，其 package.json 已为 1.1.72。
-- 许可：原文保留于 vendor/dsh-purge/LICENSE。
+- 作者：YuJunZhiXue。
+- 版本：1.1.77，发布提交 ac58b3e35509da23bd75b6250f01007590524102，2026-10-24 核验 98 个 Git blob。
+- 当前上游主体代码：Apache-2.0，原始 LICENSE、NOTICE 与 LICENSE-COMMERCIAL.md 原文保留。海鸥自身根 LICENSE 保持原样。
 
-本仓库相对固定快照的新增或修改文件：
+本地新增与修改文件：
 
-| 文件 | 改动 |
+| 文件 | 差异 |
 |---|---|
-| `vendor/dsh-purge/NOTICE.md` | 固定快照署名与本地差异说明 |
-| `vendor/dsh-purge/client.js` | 可用的新建项目入口、错误反馈、项目操作互斥和页面状态隔离 |
-| `vendor/dsh-purge/cordis.patch.yml` | 海鸥默认 regionGate: false、autoApplyOnStart: true |
-| `vendor/dsh-purge/lib/core.js` | 0.2.1 上下文和回退兼容、#40 迁移、Steer/Queue 语义、#89 原生消息契约、定制人格保存 |
-| `vendor/dsh-purge/lib/desktop.js` | 官方 CLI 先同步完成备份再替换入口 |
-| `vendor/dsh-purge/lib/identity.js` | 保留工作目录上下文兼容、执行预设角色识别及兼容导出 |
-| `vendor/dsh-purge/lib/index.js` | 保留地域开关与宿主挂载；状态读取实际系统消息契约，普通退出保留默认预设 |
-| `vendor/dsh-purge/lib/official-update-runtime.ps1` | Windows 更新辅助脚本，验证共享 runtime 联接并支持恢复 |
-| `vendor/dsh-purge/lib/official-update.wscript` | sealed 备份、当前用户安装、runtime 联接保护与失败恢复 |
-| `vendor/dsh-purge/lib/preset-default.js` | 卸载只替换精确拥有的预设值，保留注释和非目标字符串 |
-| `vendor/dsh-purge/lib/redteam/index.js` | 主/执行预设注册、诊断和失败清理；普通退出保留默认预设 |
-| `vendor/dsh-purge/lib/redteam/preset-composition.js` | 旧 toolFilter 迁到独立执行预设，保留配置与工具限制 |
-| `vendor/dsh-purge/lib/redteam/store-core.js` | 创建名称与重复校验、旧选择回退及多项目存储 |
-| `vendor/dsh-purge/package.json` | 保留上游 1.1.72，dshTarget 为 0.2.1-rc.2 |
+| `vendor/dsh-purge/NOTICE.md` | 海鸥快照、兼容修复与验证范围说明 |
+| `vendor/dsh-purge/client.js` | 保留项目创建、错误反馈、操作互斥与项目页面隔离 |
+| `vendor/dsh-purge/cordis.patch.yml` | 海鸥 file 安装显式挂载一个主模块并启用自动应用 |
+| `vendor/dsh-purge/lib/core.js` | 保留上下文迁移、消息/子代理适配、插话与人格持久化修复；86 条本地定义 |
+| `vendor/dsh-purge/lib/identity.js` | 识别旧版执行者预设，保留子角色身份路径 |
+| `vendor/dsh-purge/lib/index.js` | 实际消息状态读取，保留原有扩展并始终安装新版本地靶场限制 |
+| `vendor/dsh-purge/lib/official-update-runtime.ps1` | 本地 Windows 更新保护脚本，仅处理已验证的 runtime 联接 |
+| `vendor/dsh-purge/lib/official-update.wscript` | 保留 Windows 更新联接保护、备份和失败恢复 |
+| `vendor/dsh-purge/lib/preset-default.js` | 卸载时精确处理插件预设；不修改注释或相似 ID |
+| `vendor/dsh-purge/lib/redteam/index.js` | 旧过滤配置在注册时迁移，保留用户 YAML 和失败清理 |
+| `vendor/dsh-purge/lib/redteam/preset-composition.js` | 旧过滤迁到独立执行者预设，保留工具限制 |
+| `vendor/dsh-purge/lib/redteam/store-core.js` | 保留创建名称、重名与旧选择回退修复 |
+| `vendor/dsh-purge/package.json` | 适配 rc.3，海鸥安装器管理 bundle，因此不启用重复 postinstall |
 
-未分发的上游附属文件：`docs/notice/image.png`、`docs/notice/laozhang-live-1.jpg`、`docs/notice/laozhang-live-2.jpg`、`docs/notice/laozhang-wechat-1.jpg`、`docs/preview/dock-auth.png`、`docs/preview/dock-clean.png`、`docs/preview/dock-drill.png`、`docs/preview/own-servers-en.png`、`docs/preview/own-servers.png`、`docs/preview/rules.png`、`docs/preview/settings.png`、`lib/default-prompt-inject.md.bak`。它们是预览/公告图片或明文历史备份，不参与插件运行。其余 vendor 文件与固定上游快照逐字节一致；原上游版本文字保持原件。
+未分发的附属文件：`docs/notice/image.png`、`docs/notice/laozhang-live-1.jpg`、`docs/notice/laozhang-live-2.jpg`、`docs/notice/laozhang-wechat-1.jpg`、`docs/preview/dock-auth.png`、`docs/preview/dock-clean.png`、`docs/preview/dock-drill.png`、`docs/preview/own-servers-en.png`、`docs/preview/own-servers.png`、`docs/preview/rules.png`、`docs/preview/settings.png`、`lib/default-prompt-inject.md.bak`。其余当前 vendor 文件与固定快照逐字节一致。
 
-上游 README 声明「非营利 / 禁商用 / 需署名」。**MIT 许可本身允许商用**；
-本仓库尊重上游意愿，按非营利项目分发，并保留全部署名。若你计划商业使用
-`vendor/dsh-purge/` 部分，请先联系上游作者取得明确同意。
+历史 1.1.72 的 23 个技能保留在 src/skills/redteam 作源码存档，原 MIT 许可保留于 src/skills/redteam/LICENSE-legacy-MIT；本次安装器不自动复制它们到运行目录。现有用户数据不删除。
 
 ---
 

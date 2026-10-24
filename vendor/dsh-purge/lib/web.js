@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import * as core from "./core.js";
 
 export function restartNote() {
-  return "正在重启 dsh web…";
+  return "Restarting dsh web…";
 }
 
 export function portFromRequest(request) {

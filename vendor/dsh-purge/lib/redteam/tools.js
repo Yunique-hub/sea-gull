@@ -27,6 +27,7 @@ import {
   toolkitDirOf,
 } from './platform-config.js'
 import { maxAgentsOf, DEFAULT_MAX_AGENTS, MAX_AGENTS_LIMIT } from './settings.js'
+import { EvidenceLedger, UnknownRegistry } from './evidence-ledger.mjs'
 
 /**
  * link: 源码包不在 profile node_modules 树内，静态 import `@deepseek-ai/dsh-tools`
@@ -56,7 +57,14 @@ function considerBin(list, bin) {
 
 function loadDefineTool() {
   const candidates = []
+  try {
+    const req = createRequire(import.meta.url)
+    const mod = req('@deepseek-ai/dsh-tools')
+    const fn = mod && (mod.defineTool || (mod.default && mod.default.defineTool))
+    if (typeof fn === 'function') return fn
+  } catch { /* 插件自己的 node_modules 里没有，再扫宿主 */ }
   try { considerBin(candidates, process.argv[1]) } catch { /* ignore */ }
+  try { considerBin(candidates, process.execPath) } catch { /* ignore */ }
   const homes = [process.env.DSH_HOME, join(homedir(), '.dsh')].filter(Boolean)
   for (const home of homes) {
     addCandidate(candidates, join(home, 'package.json'))
@@ -64,6 +72,19 @@ function loadDefineTool() {
       addCandidate(candidates, join(home, 'profiles', profile, 'package.json'))
       addCandidate(candidates, join(home, 'profiles', profile, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
     }
+  }
+  const resources = process.resourcesPath || ''
+  const exeDir = process.execPath ? dirname(process.execPath) : ''
+  const desktopRoots = [
+    resources,
+    exeDir ? join(exeDir, 'resources') : '',
+    exeDir,
+  ].filter(Boolean)
+  for (const root of desktopRoots) {
+    addCandidate(candidates, join(root, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
+    addCandidate(candidates, join(root, 'app', 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
+    addCandidate(candidates, join(root, 'app.asar.unpacked', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
+    addCandidate(candidates, join(root, 'app.asar.unpacked', 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
   }
   addCandidate(candidates, join(process.cwd(), 'package.json'))
   addCandidate(candidates, join('D:', 'DeepSeek Harness', 'npm-global', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'))
@@ -78,7 +99,36 @@ function loadDefineTool() {
   throw new Error('dsh-purge/redteam/tools: cannot resolve @deepseek-ai/dsh-tools from host')
 }
 
-const defineTool = loadDefineTool()
+const defineToolRaw = loadDefineTool()
+
+/** 0.2.1：任何 type=object 都必须显式 additionalProperties，否则整份红队预设加载失败。 */
+function sealObjectSchemas(node) {
+  if (!node || typeof node !== 'object') return node
+  if (Array.isArray(node)) {
+    for (const item of node) sealObjectSchemas(item)
+    return node
+  }
+  if (node.type === 'object' && node.additionalProperties === undefined) {
+    node.additionalProperties = node.properties ? false : true
+  }
+  if (node.properties) {
+    for (const key of Object.keys(node.properties)) sealObjectSchemas(node.properties[key])
+  }
+  if (node.items) sealObjectSchemas(node.items)
+  if (node.additionalProperties && typeof node.additionalProperties === 'object') {
+    sealObjectSchemas(node.additionalProperties)
+  }
+  return node
+}
+
+function defineTool(spec) {
+  if (spec && spec.parameters) sealObjectSchemas(spec.parameters)
+  const tool = defineToolRaw(spec)
+  if (tool && tool.parameters) sealObjectSchemas(tool.parameters)
+  if (tool && tool.inputSchema) sealObjectSchemas(tool.inputSchema)
+  if (tool && tool.schema) sealObjectSchemas(tool.schema)
+  return tool
+}
 
 /** Cordis 插件名。 */
 export const name = 'dsh-purge-redteam-tools'
@@ -1804,10 +1854,8 @@ export function apply(ctx) {
     },
   })))
 
-  /* ── 知识库（POC/EXP）：全局共享，跨靶标复用 ───────────────────────────────
-     为什么单列一组工具：通用 POC/EXP 是一次性投入、长期复用的资产。打 Nday/1day
-     之前先查这里，能省掉整轮"去互联网找 + 手搓 + 调试"的时间；验证有效的通用
-     POC/EXP 必须回填，后面的靶标和智能体直接就能用。 */
+  /* 开源版下架知识库：保留工具名，执行一律返回关闭。 */
+  const KB_DISABLED = JSON.stringify({ ok: false, error: '开源版已下架知识库', disabled: true }, null, 2)
 
   ctx.tools.register(withStructuredErrors(defineTool({
     name: 'redteam_poc_search',
@@ -1827,7 +1875,8 @@ export function apply(ctx) {
       limit: { type: 'number', description: '知识库条目上限，默认 200' },
     },
     output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
-    async execute(args) {
+    async execute() {
+      return KB_DISABLED
       const items = store.searchPocs(args)
       const stats = store.pocStats()
       const q = args.q || args.cve || args.component || ''
@@ -1876,7 +1925,8 @@ export function apply(ctx) {
       code: { type: 'string', description: '知识库条目的稳定标识（search 结果里的 code）' },
     },
     output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
-    async execute(args) {
+    async execute() {
+      return KB_DISABLED
       const row = store.getPoc(args.id !== undefined ? args.id : args.code)
       if (row === undefined) return JSON.stringify({ ok: false, error: '知识库没有这一条（先用 redteam_poc_search 检索）' }, null, 2)
       return JSON.stringify({ ok: true, ...row }, null, 2)
@@ -1911,7 +1961,8 @@ export function apply(ctx) {
       created_by: { type: 'string', description: '哪个角色/智能体沉淀的' },
     },
     output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
-    async execute(args) {
+    async execute() {
+      return KB_DISABLED
       /* engagement 这个参数名在本工具里表示"来源靶标"，不是"作用在哪个靶标"，
          所以不能走 resolveEngagement；只做名称补全，把 id 与中文名都记下来便于面板归类。 */
       const payload = Object.assign({}, args)
@@ -1942,7 +1993,8 @@ export function apply(ctx) {
       verified: { type: 'boolean' }, limit: { type: 'number' },
     },
     output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
-    async execute(args) {
+    async execute() {
+      return KB_DISABLED
       const items = store.searchPocs(args)
       const stats = store.pocStats()
       return JSON.stringify({ ok: true, stats: { total: stats.total, verified: stats.verified, by_kind: stats.byKind, by_source: stats.bySource },
@@ -1966,7 +2018,8 @@ export function apply(ctx) {
       verified_note: { type: 'string', description: '便捷写法：直接传验证证据' },
     },
     output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
-    async execute(args) {
+    async execute() {
+      return KB_DISABLED
       const patch = Object.assign({}, args.patch || {})
       if (args.verified !== undefined) patch.verified = args.verified
       if (args.verified_note !== undefined) patch.verified_note = args.verified_note
@@ -1984,7 +2037,8 @@ export function apply(ctx) {
       used_on: { type: 'string', description: '用在哪：靶标名 / 目标 IP / URL' },
     },
     output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
-    async execute(args) {
+    async execute() {
+      return KB_DISABLED
       const r = store.markPocUsed(args.id !== undefined ? args.id : args.code, args.used_on)
       return JSON.stringify(r, null, 2)
     },
@@ -2014,6 +2068,203 @@ export function apply(ctx) {
         hint: '发现时间 = 这条资产**第一次进入本库**的时刻；重复采集只刷新 last_seen。'
           + '报告附录与资产测绘页都按它排序。',
       }, null, 2)
+    },
+  })))
+
+  function ledgerOf(engagementId) {
+    if (typeof store.db !== 'function') throw new Error('redteam store unavailable')
+    return new EvidenceLedger(store.db(engagementId))
+  }
+  function unknownsOf(engagementId) {
+    if (typeof store.db !== 'function') throw new Error('redteam store unavailable')
+    return new UnknownRegistry(store.db(engagementId))
+  }
+
+  ctx.tools.register(withStructuredErrors(defineTool({
+    name: 'redteam_evidence_record',
+    description: '记录一条作战证据。核心纪律：confidence 必须如实填写——claimed（子智能体口头报告，禁止直接采信）/ observed（你亲自核实过）/ derived（从 observed 推理）/ inferred（推测，必须标注）。ev_id 由内容哈希生成，改一字就变，落库后可防篡改核对。相关技能：evidence-discipline。',
+    parameters: {
+      engagement: { type: 'string' },
+      operation: { type: 'string', required: true, description: '操作名，如 "nmap_scan"、"webshell_established"、"sql_injection_confirmed"' },
+      parameters: { type: 'object', additionalProperties: true, description: '调用参数（JSON 对象，会参与哈希）' },
+      result: { type: 'object', additionalProperties: true, required: true, description: '规范化结果（JSON 对象，会参与哈希）' },
+      confidence: { type: 'string', description: 'claimed | observed | derived | inferred，默认 observed' },
+      authority: { type: 'string', description: 'tool-output | database-record | screenshot | request-replay | subagent-report | operator-input，默认 tool-output' },
+      limitations: { type: 'array', items: { type: 'string' }, description: '局限性说明，如 ["只扫了 Top1000 端口"]' },
+      supporting_ev_ids: { type: 'array', items: { type: 'string' }, description: '支撑这条证据的其他 ev_id' },
+      source_agent: { type: 'string', description: '哪个子智能体产出的（claimed 时必填）' },
+    },
+    output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
+    async execute(args, exec) {
+      const id = resolveEngagement(store, exec, args.engagement)
+      const result = ledgerOf(id).record({
+        operation: args.operation,
+        parameters: args.parameters ?? {},
+        result: args.result,
+        confidence: args.confidence,
+        authority: args.authority,
+        limitations: args.limitations ?? [],
+        supporting_ev_ids: args.supporting_ev_ids ?? [],
+        source_agent: args.source_agent,
+        recorded_by: agentOf(args),
+        engagement_id: id,
+      })
+      return JSON.stringify({ ok: result.ok, engagement: id, ...result }, null, 2)
+    },
+  })))
+
+  ctx.tools.register(withStructuredErrors(defineTool({
+    name: 'redteam_evidence_verify',
+    description: '核对子智能体回报与证据账本是否一致（hash 级核对）。matched=false 表示子智能体改口、夸大或库里没有。',
+    parameters: {
+      engagement: { type: 'string' },
+      operation: { type: 'string', required: true },
+      parameters: { type: 'object', additionalProperties: true },
+      result: { type: 'object', additionalProperties: true, required: true },
+      confidence: { type: 'string' },
+      authority: { type: 'string' },
+      limitations: { type: 'array', items: { type: 'string' } },
+      supporting_ev_ids: { type: 'array', items: { type: 'string' } },
+    },
+    output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
+    async execute(args, exec) {
+      const id = resolveEngagement(store, exec, args.engagement)
+      const result = ledgerOf(id).verify({
+        operation: args.operation,
+        parameters: args.parameters ?? {},
+        result: args.result,
+        confidence: args.confidence ?? 'observed',
+        authority: args.authority ?? 'tool-output',
+        limitations: args.limitations ?? [],
+        supporting_ev_ids: args.supporting_ev_ids ?? [],
+      })
+      return JSON.stringify({ ok: true, engagement: id, ...result }, null, 2)
+    },
+  })))
+
+  ctx.tools.register(withStructuredErrors(defineTool({
+    name: 'redteam_evidence_upgrade',
+    description: '把 claimed / inferred 升级为 observed。必须带 verified_result（亲自验证的回显/数据）。',
+    parameters: {
+      engagement: { type: 'string' },
+      claimed_ev_id: { type: 'string', required: true, description: '要升级的证据 ID' },
+      verified_result: { type: 'object', additionalProperties: true, description: '亲自验证后的实际结果' },
+      verified_by: { type: 'string', description: '谁核实的，默认 coordinator' },
+    },
+    output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
+    async execute(args, exec) {
+      const id = resolveEngagement(store, exec, args.engagement)
+      const result = ledgerOf(id).upgrade({
+        claimed_ev_id: args.claimed_ev_id,
+        verified_result: args.verified_result,
+        verified_by: args.verified_by ?? agentOf(args),
+      })
+      return JSON.stringify({ ok: result.ok, engagement: id, ...result }, null, 2)
+    },
+  })))
+
+  ctx.tools.register(withStructuredErrors(defineTool({
+    name: 'redteam_evidence_list',
+    description: '列出证据账本条目，可按 operation / confidence 过滤。汇报前先确认没有未升级的 claimed。',
+    parameters: {
+      engagement: { type: 'string' },
+      operation: { type: 'string' },
+      confidence: { type: 'string', description: 'claimed | observed | derived | inferred' },
+      limit: { type: 'number' },
+      offset: { type: 'number' },
+    },
+    output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
+    async execute(args, exec) {
+      const id = resolveEngagement(store, exec, args.engagement)
+      const items = ledgerOf(id).list({
+        operation: args.operation,
+        confidence: args.confidence,
+        engagement_id: id,
+        limit: args.limit ?? 50,
+        offset: args.offset ?? 0,
+      })
+      return JSON.stringify({ ok: true, engagement: id, items }, null, 2)
+    },
+  })))
+
+  ctx.tools.register(withStructuredErrors(defineTool({
+    name: 'redteam_unverified_count',
+    description: '当前靶标还有多少条 claimed/inferred 没有闭环核实。返回 >0 时汇报必须提醒未核实条数。',
+    parameters: { engagement: { type: 'string' } },
+    output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
+    async execute(args, exec) {
+      const id = resolveEngagement(store, exec, args.engagement)
+      const count = ledgerOf(id).countUnresolvedClaims(id)
+      return JSON.stringify({
+        ok: true, engagement: id, unverified_count: count,
+        hint: count > 0 ? `还有 ${count} 条 claimed/inferred 未闭环核实，汇报时不要说"已拿到"` : '所有子智能体报告都已亲自核实闭环',
+      }, null, 2)
+    },
+  })))
+
+  ctx.tools.register(withStructuredErrors(defineTool({
+    name: 'redteam_unknown_record',
+    description: '记录一个还没解决的作战问题。question+domain 相同会去重。',
+    parameters: {
+      engagement: { type: 'string' },
+      question: { type: 'string', required: true },
+      severity: { type: 'string', description: 'low | medium | high | critical，默认 medium' },
+      domain: { type: 'string', description: '如 internal-recon / boundary-break / lateral-movement' },
+      recommended_probe: { type: 'string', description: '建议的验证手段' },
+      supporting_ev_ids: { type: 'array', items: { type: 'string' } },
+    },
+    output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
+    async execute(args, exec) {
+      const id = resolveEngagement(store, exec, args.engagement)
+      const result = unknownsOf(id).record({
+        question: args.question,
+        severity: args.severity ?? 'medium',
+        domain: args.domain ?? 'general',
+        recommended_probe: args.recommended_probe,
+        supporting_ev_ids: args.supporting_ev_ids ?? [],
+        engagement_id: id,
+        recorded_by: agentOf(args),
+      })
+      return JSON.stringify({ ok: result.ok, engagement: id, ...result }, null, 2)
+    },
+  })))
+
+  ctx.tools.register(withStructuredErrors(defineTool({
+    name: 'redteam_unknown_resolve',
+    description: '把未解决问题标为 resolved / contradicted / withdrawn。',
+    parameters: {
+      engagement: { type: 'string' },
+      unk_id: { type: 'string', required: true },
+      disposition: { type: 'string', required: true, description: 'resolved | contradicted | withdrawn' },
+      resolution: { type: 'string', description: '解决说明' },
+    },
+    output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
+    async execute(args, exec) {
+      const id = resolveEngagement(store, exec, args.engagement)
+      const result = unknownsOf(id).resolve(args.unk_id, args.disposition, args.resolution, agentOf(args))
+      return JSON.stringify({ ok: result.ok, engagement: id, ...result }, null, 2)
+    },
+  })))
+
+  ctx.tools.register(withStructuredErrors(defineTool({
+    name: 'redteam_unknown_list',
+    description: '列出未解决的作战问题，派活前先看 open 项。',
+    parameters: {
+      engagement: { type: 'string' },
+      status: { type: 'string', description: 'open | investigating | blocked | contradicted | resolved' },
+      severity: { type: 'string' },
+      limit: { type: 'number' },
+    },
+    output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
+    async execute(args, exec) {
+      const id = resolveEngagement(store, exec, args.engagement)
+      const items = unknownsOf(id).list({
+        status: args.status ?? 'open',
+        severity: args.severity,
+        engagement_id: id,
+        limit: args.limit ?? 50,
+      })
+      return JSON.stringify({ ok: true, engagement: id, items }, null, 2)
     },
   })))
 }

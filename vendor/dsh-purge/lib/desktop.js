@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { isWshAscii, wshLiteral } from "./official-update.js";
 import { asarArchiveIsFile, hostFs } from "./extract-asar.js";
 import { hostPromptKeepsInject } from "./host-clean.js";
-import { atomicWriteSync } from "./core.js";
+import { atomicCopyFileSync, atomicWriteSync } from "./core.js";
 
 function restartUniqSuffix() {
   return `${process.pid}-${randomBytes(4).toString("hex")}`;
@@ -818,10 +818,14 @@ export function restartPlan(input = {}) {
   };
 }
 
-function helperEnv(payload) {
+function helperEnv(payload, runner) {
   const env = { ...process.env };
   delete env.DSH_PERMISSION_MODE;
-  env.ELECTRON_RUN_AS_NODE = "1";
+  if (runner && path.basename(runner).toLowerCase().includes("node")) {
+    delete env.ELECTRON_RUN_AS_NODE;
+  } else {
+    env.ELECTRON_RUN_AS_NODE = "1";
+  }
   env.DSH_PURGE_RESTART = JSON.stringify(payload);
   return env;
 }
@@ -832,12 +836,32 @@ function helperEnv(payload) {
 // 问题靠 patch #83+#84 (新 main.js 加载后 close 回调 silent) 解决第二次之后,
 // 第一次 restart 的 crash dialog 是 Electron 内存版本滞后的必然代价,无法避免。
 
+/** 换包助手不能再用 Electron 本体跑：Stop-HarnessInstall / taskkill 按 exe 名会先把自己杀掉，app.asar 永远挪不开（#133）。 */
+function helperNodePath() {
+  if (!process.versions.electron) return process.execPath;
+  const hinted = String(process.env.DSH_NODE || "").trim();
+  if (hinted && isFile(hinted)) return hinted;
+  try {
+    const out = execFileSync(process.platform === "win32" ? "where.exe" : "which", ["node"], {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 3000,
+    });
+    const first = String(out || "").split(/\r?\n/).map((s) => s.trim()).find(Boolean);
+    if (first && isFile(first)) return first;
+  } catch {
+    /* 没有系统 node 时再退回 Electron + RUN_AS_NODE */
+  }
+  return process.execPath;
+}
+
 function spawnHelper(helper, payload, opts = {}) {
   const plan = restartPlan();
   const hinted = payload && payload.execPath ? payload.execPath : "";
   const execPath = hinted || plan.execPath;
   if (!execPath) throw new Error(plan.error || "未找到 DSH Desktop.exe，无法重启桌面应用");
-  const child = spawn(process.execPath, [helper], {
+  const runner = helperNodePath();
+  const child = spawn(runner, [helper], {
     detached: true,
     stdio: "ignore",
     windowsHide: true,
@@ -848,8 +872,9 @@ function spawnHelper(helper, payload, opts = {}) {
       argv: plan.argv,
       cwd: plan.cwd || path.dirname(execPath),
       pid: process.pid,
+      helperPidKeep: true,
       ...payload,
-    }),
+    }, runner),
   });
   child.unref();
   if (opts.exit !== false) setTimeout(() => process.exit(0), opts.exitAfter ?? 250);
@@ -1766,8 +1791,7 @@ export function repairOfficialCliAfterUnpack(exe = findDesktopAppExecutable()) {
       // 原子写之前先存一份 .dsh-purge.bak，断电/磁盘满也能回退到官方原文。
       const bak = `${fp}.dsh-purge.bak`;
       if (!isFile(bak)) {
-        // 同步调用需先完成备份，再替换 Windows 启动器，避免备份任务延后到调用结束。
-        try { atomicWriteSync(bak, fs.readFileSync(fp)); } catch { /* 写不了 bak 不致命 */ }
+        try { atomicCopyFileSync(fp, bak); } catch { /* 写不了 bak 不致命 */ }
       }
       atomicWriteSync(fp, patched.text, "utf8");
       report.shims.push({ path: fp, status: "patched" });
