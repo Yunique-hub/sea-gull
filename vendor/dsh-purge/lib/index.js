@@ -28,6 +28,12 @@ import * as uninstaller from "./uninstall.js";
 import { readDrillGrant, writeDrillGrant } from "./drill-grant.js";
 import { installRegionGate, readAllowText, writeAllowText } from "./net-scope.js";
 import {
+  cancelClearOwnedSelectedDefault,
+  clearOwnedSelectedDefault,
+  removeStaleAgentPresetDir,
+  scheduleClearOwnedSelectedDefault,
+} from "./preset-default.js";
+import {
   applyShouldRestart,
   isInactiveContextError,
   settleDelayMs,
@@ -1457,8 +1463,16 @@ export function apply(ctx, config) {
   const cfg = { ...DEFAULTS, ...(config || {}) };
   if (!cfg.enabled) {
     purgeLog("boot", { enabled: false });
+    try { clearOwnedSelectedDefault({ ctx, dshHome: core.findDshHome() }); } catch { /* 停用不被清默认挡住 */ }
+    try { removeStaleAgentPresetDir(core.findDshHome(), "redteam"); } catch { /* ignore */ }
     return;
   }
+  cancelClearOwnedSelectedDefault();
+  try {
+    ctx.effect(() => () => {
+      try { scheduleClearOwnedSelectedDefault({ ctx, dshHome: core.findDshHome() }); } catch { /* 停用不被清默认挡住 */ }
+    });
+  } catch { /* 无 effect 时靠 uninstall / enabled:false 清 */ }
   purgeLog("boot", {
     enabled: true,
     surface: hostctl.currentSurface(),

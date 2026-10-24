@@ -1,3 +1,17 @@
+# 1.1.78
+
+## 中文
+
+- 版本 **1.1.78**。修复 bug：停用/卸载后无法新建会话。
+- **#108**：停用或卸载时把 `agent-preset-registry.selectedDefault` 从 `redteam` 改回 `standard`，并清掉 `$DSH_HOME/.agent-presets/redteam`。热重载不会冲掉用户设的红队默认。
+- 卸载同时处理 `dsh.profile.bundles` / `dsh.profile.plugins`，桌面 profile 不再残留 `dsh-purge`。
+
+## English
+
+- **1.1.78**. Bug fix: new sessions after disable/uninstall.
+- **#108**: on disable or uninstall, reset `agent-preset-registry.selectedDefault` from `redteam` to `standard`, and remove `$DSH_HOME/.agent-presets/redteam`. Hot reload keeps a user-chosen redteam default.
+- Uninstall also strips `dsh.profile.bundles` / `dsh.profile.plugins`.
+
 # 1.1.77
 
 ## 中文

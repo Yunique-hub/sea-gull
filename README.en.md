@@ -4,7 +4,9 @@
 
 One-line install · idempotent · uninstallable · backed by evidence
 
-**v1.0.6 targets the official Windows Harness 0.2.1-rc.3** and upgrades to **dsh-purge 1.1.77**, pinned to upstream release commit [ac58b3e](https://github.com/YuJunZhiXue/dsh-purge/tree/ac58b3e35509da23bd75b6250f01007590524102). All 98 upstream Git blobs, the official installer SHA-512, and its signature were verified.
+**v1.0.7 targets the official Windows Harness 0.2.1-rc.3** with **dsh-purge 1.1.78**, pinned to upstream master commit [fd109e1](https://github.com/YuJunZhiXue/dsh-purge/tree/fd109e106ce5818b3c00524123a3431e4afc0e81). All 98 upstream Git blobs were verified.
+
+Update mode also repairs an **existing** market installation to the verified 0.4.16: BOM settings, stale nested dependencies, bundle verification, and mixed profile listings. Users without the market do not receive it. Actual purge runtime files are checked after pnpm, including same-version updates. See [verification K](docs/VERIFICATION.md#k-插件市场与-purge-运行副本修复2026-10-24).
 
 The saved **Seagull persona**, five Seagull skills, project fixes, immediate steering, separate queue delivery, and installer/update protections are retained. The upstream local-lab and tool pre-execution checks remain active, with engineering additions including the evidence ledger. Upstream no longer ships the skill/knowledge library entry points; existing local data is preserved and the 23 earlier skills remain source archives without automatic deployment.
 

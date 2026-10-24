@@ -6,6 +6,7 @@ import * as hostctl from "./host.js";
 import * as rules from "./rules.js";
 import * as updater from "./update.js";
 import { clearDrillGrant } from "./drill-grant.js";
+import { clearOwnedSelectedDefault, removeStaleAgentPresetDir } from "./preset-default.js";
 
 export function wasApplied(state) {
   if (!state) return false;
@@ -34,6 +35,18 @@ export function shouldDeletePluginTree(dir, dshHome = core.findDshHome()) {
   return n.startsWith(`${homeN}/profiles/`);
 }
 
+function isPurgeBundleItem(item) {
+  if (typeof item === "string") return item === "dsh-purge" || item.startsWith("dsh-purge@");
+  const id = item && (item.id || item.name);
+  return id === "dsh-purge";
+}
+
+function stripBundleList(list) {
+  if (!Array.isArray(list)) return { list, changed: false };
+  const next = list.filter((item) => !isPurgeBundleItem(item));
+  return { list: next, changed: next.length !== list.length };
+}
+
 export function stripPluginFromPackage(pkg) {
   if (!pkg || typeof pkg !== "object") return false;
   let changed = false;
@@ -44,14 +57,15 @@ export function stripPluginFromPackage(pkg) {
     }
   }
   for (const key of ["bundles", "plugins"]) {
-    if (!Array.isArray(pkg[key])) continue;
-    const next = pkg[key].filter((item) => {
-      if (typeof item === "string") return item !== "dsh-purge" && !item.startsWith("dsh-purge@");
-      const id = item && (item.id || item.name);
-      return id !== "dsh-purge";
-    });
-    if (next.length !== pkg[key].length) {
-      pkg[key] = next;
+    const top = stripBundleList(pkg[key]);
+    if (top.changed) {
+      pkg[key] = top.list;
+      changed = true;
+    }
+    const nested = pkg.dsh && pkg.dsh.profile ? pkg.dsh.profile[key] : null;
+    const nest = stripBundleList(nested);
+    if (nest.changed) {
+      pkg.dsh.profile[key] = nest.list;
       changed = true;
     }
   }
@@ -74,11 +88,9 @@ function pkgMentionsPurge(pkg) {
   if (!pkg) return false;
   if (pkg.dependencies?.["dsh-purge"] || pkg.devDependencies?.["dsh-purge"]) return true;
   for (const key of ["bundles", "plugins"]) {
-    if (!Array.isArray(pkg[key])) continue;
-    if (pkg[key].some((item) => {
-      if (typeof item === "string") return item === "dsh-purge" || item.startsWith("dsh-purge@");
-      return item && (item.id === "dsh-purge" || item.name === "dsh-purge");
-    })) return true;
+    if (Array.isArray(pkg[key]) && pkg[key].some(isPurgeBundleItem)) return true;
+    const nested = pkg.dsh && pkg.dsh.profile ? pkg.dsh.profile[key] : null;
+    if (Array.isArray(nested) && nested.some(isPurgeBundleItem)) return true;
   }
   return false;
 }
@@ -252,6 +264,14 @@ export async function uninstallPurge() {
     report.rules = await resetRules(dshHome);
   } catch (e) {
     report.errors.push(`reset rules: ${e.message || e}`);
+  }
+
+  try {
+    const preset = clearOwnedSelectedDefault({ dshHome });
+    report.presetDefault = { live: preset.live, files: preset.files };
+    report.stalePresetDir = removeStaleAgentPresetDir(dshHome, "redteam");
+  } catch (e) {
+    report.errors.push(`clear selectedDefault: ${e.message || e}`);
   }
 
   const profiles = listInstalledProfiles(dshHome);

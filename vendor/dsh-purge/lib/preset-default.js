@@ -38,8 +38,10 @@ function listProfilePatchFiles(dshHome) {
   }
   for (const name of names) {
     if (name === "node_modules") continue;
-    const fp = path.join(root, name, "cordis.patch.yml");
-    if (fs.existsSync(fp)) out.push(fp);
+    for (const file of ["cordis.patch.yml", "cordis.yml"]) {
+      const fp = path.join(root, name, file);
+      if (fs.existsSync(fp)) out.push(fp);
+    }
   }
   return out;
 }
@@ -172,6 +174,29 @@ export function clearOwnedSelectedDefault({ ctx = null, dshHome = "" } = {}) {
     }
   }
   return report;
+}
+
+let pendingClear = null;
+
+/** 热重载会先 dispose 再 apply：延迟写盘，apply 进来就取消，避免把用户的红队默认冲掉。 */
+export function scheduleClearOwnedSelectedDefault(opts = {}) {
+  const home = opts.dshHome || findDshHome();
+  if (pendingClear) {
+    clearTimeout(pendingClear);
+    pendingClear = null;
+  }
+  pendingClear = setTimeout(() => {
+    pendingClear = null;
+    try { clearOwnedSelectedDefault({ ...opts, dshHome: home }); } catch { /* 停用不被清默认挡住 */ }
+    try { removeStaleAgentPresetDir(home, "redteam"); } catch { /* ignore */ }
+  }, 800);
+  if (typeof pendingClear.unref === "function") pendingClear.unref();
+}
+
+export function cancelClearOwnedSelectedDefault() {
+  if (!pendingClear) return;
+  clearTimeout(pendingClear);
+  pendingClear = null;
 }
 
 export function removeStaleAgentPresetDir(dshHome, id = "redteam") {

@@ -972,6 +972,10 @@ function runReapplyChild() {
 let applyUpdateInflight = null;
 
 export async function applyUpdate(jobs = planUpdates(), options = {}) {
+  const pkg = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, "package.json"), "utf8"));
+  if (pkg.seagull?.updateManaged) {
+    throw new Error("此安装由海鸥管理，直接覆盖上游包会丢失海鸥适配。请先退出 Harness，再执行海鸥一键更新：Windows: irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 | iex；Bash: curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh | bash");
+  }
   // 同一时刻只能有一次 applyUpdate 在跑。第二次调用在第一次完成前共享同一个 Promise,
   // 避免两条 overlayFromZip 同时往同一目录写出一半文件,或两次 writeStamp 竞争。
   if (applyUpdateInflight) return applyUpdateInflight;

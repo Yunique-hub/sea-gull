@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.6-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.7-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,7 +17,9 @@
 
 ---
 
-当前 **v1.0.6** 已适配官方 Windows Harness **0.2.1-rc.3**，引擎升级为 dsh-purge **1.1.77**（上游发布提交 [ac58b3e](https://github.com/YuJunZhiXue/dsh-purge/tree/ac58b3e35509da23bd75b6250f01007590524102)）。98 个上游 Git blob 已核验；官方安装包 SHA-512 和签名已验证。
+当前 **v1.0.7** 适配官方 Windows Harness **0.2.1-rc.3**，引擎为 dsh-purge **1.1.78**（固定上游 master 提交 [fd109e1](https://github.com/YuJunZhiXue/dsh-purge/tree/fd109e106ce5818b3c00524123a3431e4afc0e81)）。98 个上游 Git blob 已核验。
+
+一键更新同时修复**已安装**的插件市场：升级至已验证的 0.4.16，修复 BOM 设置导致错误回退到 `web`、旧 core 遮蔽新依赖、bundle 校验误报重启，以及跨 profile 混列旧版本。没有市场的用户不会被额外安装。pnpm 完成后还会逐文件校验 purge 运行副本，避免同版本陈旧代码被误报为更新成功。详见[本次验证记录](docs/VERIFICATION.md#k-插件市场与-purge-运行副本修复2026-10-24)。
 
 保留用户保存的**海鸥人格**、5 个海鸥技能、项目创建与切换修复、立即插话、独立排队、安装/更新和回退保护。新版保留上游的本地靶场限制及工具执行前检查，并纳入证据账本等工程功能。上游已下架随包技能库与知识库入口；本机已有数据保留，旧 23 个技能仅在源码中作历史存档，不再自动分发。
 
@@ -43,7 +45,7 @@
 
 | 来源 | 提供什么 |
 |---|---|
-| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.77 | 宿主兼容、演练台、证据账本与本地靶场限制；保留 86 条本地补丁定义 |
+| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.78 | 宿主兼容、演练台、证据账本与本地靶场限制；保留 86 条本地补丁定义 |
 | [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | 海鸥人格（00a–00r 规则体系）+ 5 个领域技能 |
 
 合并不是拼盘——`SOUL.md` 不能直接当 DSH 提示词（插值白名单、ChatML 信封、技能目录协议

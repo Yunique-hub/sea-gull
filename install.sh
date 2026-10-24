@@ -8,7 +8,7 @@
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.0.6"
+VERSION="1.0.7"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
@@ -256,6 +256,10 @@ ok "插件就位: $PLUGIN_DIR"
 # ── 2. 改写 profile ────────────────────────────────────────────────
 step "改写 profile"
 "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" "$(winpath "$PROFILE_DIR/package.json")" "file:../../plugins/$PLUGIN_ID" "$PLUGIN_ID"
+if [ "$UPDATE" = 1 ]; then
+  "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --repair-market "$(winpath "$PROFILE_DIR/package.json")" "0.4.16" \
+    || die "插件市场配置修复失败，备份已保留"
+fi
 
 # ── 3. pnpm install ────────────────────────────────────────────────
 DEPENDENCIES_READY=0
@@ -264,6 +268,12 @@ if [ "$NO_PNPM" = 0 ] && [ -n "$NODE_EMB" ] && [ -n "$PNPM_EMB" ]; then
   ( cd "$PROFILE_DIR" && "$NODE_EMB" "$PNPM_EMB" install --reporter=append-only ) \
     || die "pnpm install 失败：检查 registry / file: 路径后重试；备份已保留"
   [ -f "$PROFILE_DIR/node_modules/$PLUGIN_ID/package.json" ] || die "依赖未就位: node_modules/$PLUGIN_ID"
+  "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --sync-plugin "$(winpath "$DSH_HOME")" "$PROFILE" \
+    || die "插件运行副本校验失败，备份已保留"
+  if [ "$UPDATE" = 1 ]; then
+    "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --market-runtime "$(winpath "$PROFILE_DIR/package.json")" \
+      || die "插件市场运行校验修复失败，备份已保留"
+  fi
   DEPENDENCIES_READY=1
   ok "依赖已链接"
 fi

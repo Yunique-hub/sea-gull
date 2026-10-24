@@ -1,0 +1,22 @@
+function isPatchApplied(cfg, profile, name) {
+    const patchPath = join(cfg.profilesDir, profile, "cordis.patch.yml");
+    try {
+        if (!existsSync(patchPath))
+            return false;
+        const raw = readFileSync(patchPath, "utf8");
+        // 插入行形态：`- id: <id>`（id 通常是包名或其短名；`name:` 是 cordis 插件元数据字段）
+        const idLines = raw
+            .split(/\r?\n/)
+            .map((l) => l.trim())
+            .filter((l) => /^[-*]\s+(id|name):/.test(l));
+        const nameLower = name.toLowerCase();
+        return idLines.some((l) => {
+            const v = l.replace(/^[-*]\s+(id|name):/, "").trim().replace(/["']/g, "");
+            return v.toLowerCase() === nameLower || v.toLowerCase() === nameLower.replace(/^@[^/]+\//, "");
+        });
+    }
+    catch {
+        return false;
+    }
+}
+/** cordis 型插件四态验证 */

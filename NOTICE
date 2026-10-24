@@ -9,7 +9,7 @@
 
 - 来源：https://github.com/YuJunZhiXue/dsh-purge
 - 作者：YuJunZhiXue。
-- 版本：1.1.77，发布提交 ac58b3e35509da23bd75b6250f01007590524102，2026-10-24 核验 98 个 Git blob。
+- 版本：1.1.78，master 提交 fd109e106ce5818b3c00524123a3431e4afc0e81，2026-10-24 核验 98 个 Git blob。
 - 当前上游主体代码：Apache-2.0，原始 LICENSE、NOTICE 与 LICENSE-COMMERCIAL.md 原文保留。海鸥自身根 LICENSE 保持原样。
 
 本地新增与修改文件：
@@ -24,11 +24,12 @@
 | `vendor/dsh-purge/lib/index.js` | 实际消息状态读取，保留原有扩展并始终安装新版本地靶场限制 |
 | `vendor/dsh-purge/lib/official-update-runtime.ps1` | 本地 Windows 更新保护脚本，仅处理已验证的 runtime 联接 |
 | `vendor/dsh-purge/lib/official-update.wscript` | 保留 Windows 更新联接保护、备份和失败恢复 |
-| `vendor/dsh-purge/lib/preset-default.js` | 卸载时精确处理插件预设；不修改注释或相似 ID |
+| `vendor/dsh-purge/lib/preset-default.js` | 精确处理插件预设；延迟清理固定原 DSH_HOME；不修改注释或相似 ID |
 | `vendor/dsh-purge/lib/redteam/index.js` | 旧过滤配置在注册时迁移，保留用户 YAML 和失败清理 |
 | `vendor/dsh-purge/lib/redteam/preset-composition.js` | 旧过滤迁到独立执行者预设，保留工具限制 |
 | `vendor/dsh-purge/lib/redteam/store-core.js` | 保留创建名称、重名与旧选择回退修复 |
-| `vendor/dsh-purge/package.json` | 适配 rc.3，海鸥安装器管理 bundle，因此不启用重复 postinstall |
+| `vendor/dsh-purge/lib/update.js` | 海鸥托管标记阻止原版更新覆盖定制，提示海鸥更新入口 |
+| `vendor/dsh-purge/package.json` | 适配 rc.3、海鸥托管标记；安装器管理 bundle，因此不启用重复 postinstall |
 
 未分发的附属文件：`docs/notice/image.png`、`docs/notice/laozhang-live-1.jpg`、`docs/notice/laozhang-live-2.jpg`、`docs/notice/laozhang-wechat-1.jpg`、`docs/preview/dock-auth.png`、`docs/preview/dock-clean.png`、`docs/preview/dock-drill.png`、`docs/preview/own-servers-en.png`、`docs/preview/own-servers.png`、`docs/preview/rules.png`、`docs/preview/settings.png`、`lib/default-prompt-inject.md.bak`。其余当前 vendor 文件与固定快照逐字节一致。
 
@@ -73,3 +74,10 @@
 - 上游文件标注许可：CC BY-NC-SA 4.0；其来源说明指向 Minglink/dsh-infinite-gen-4。
 - 本仓库在既有安装器和配置工具中独立实现安装检查、失败反馈及配置保护，未复制富江代码、提示词、题库或品牌资产。
 - 分析、采用范围及验证证据：`docs/FUJIANG-REVIEW.md`。本说明不对富江原作作重新许可。
+
+## 6. DSH Market 运行时兼容修复
+
+- 来源：https://github.com/2bingling/dsh-market ，npm 包 @dsh-market/plugin 0.4.16、@dsh-market/core 0.4.13，MIT。
+- 不在海鸥 vendor 中复制市场完整源码。Update 模式只对已有安装执行版本、BOM 设置及旧依赖归档处理。
+- `src/tools/patch_profile.py` 对已验证的 core 0.4.13 的 dist/verify.js 和 dist/installed.js 作本地兼容修改，识别 bundle patch 并按所选 profile 扫描，原文件先备份。未知 core 版本停止自动修改。
+- tests/fixtures/market-verify-original.js.txt 为该版本原始校验函数片段，用于复现漏读 bundle 的问题。

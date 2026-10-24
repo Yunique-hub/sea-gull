@@ -177,3 +177,9 @@ Bash：`curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/u
 ## 1.0.6 / purge 1.1.77
 
 推荐先完成官方 Harness 0.2.1-rc.3 更新，再运行海鸥一键更新。海鸥保留保存的人格、项目数据和偏好，当前包不启用重复 postinstall，bundle 由安装器显式管理。新版保留上游本地靶场限制；旧 23 个技能仅源码存档，不重新复制到运行目录，现有本地数据保留。
+
+## 1.0.7 / 插件市场修复
+
+一键更新会将已安装市场升级到已验证的 0.4.16，修复设置 BOM、profile 选择、旧嵌套依赖与 bundle 校验。没有市场的 profile 不会额外安装。保留有效显式 profile 选择，不创建假的 web 目录。市场 core 兼容修复针对 0.4.13，未知版本会停止并报告，避免盲目修改。
+
+pnpm 完成后，海鸥还会核对实际 node_modules/dsh-purge 文件；陈旧同版本副本先归档再替换，失败恢复原目录。purge 面板的原版更新器会提示改用海鸥一键更新，以保留定制适配。更新前先结束任务并退出 Harness。

@@ -11,6 +11,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readPresetDefinition, preparePresetDefinitions } from './preset-composition.js'
+import { scheduleClearOwnedSelectedDefault } from '../preset-default.js'
 
 /** Cordis 插件名。 */
 export const name = 'dsh-purge-redteam'
@@ -581,6 +582,7 @@ export function apply(ctx) {
       closed = true
       if (timer) clearInterval(timer)
       if (stop) clearTimeout(stop)
+      try { scheduleClearOwnedSelectedDefault({ ctx }) } catch { /* 清默认失败不挡停用 */ }
       void undeclare()
     }
   }, 'dsh-purge-redteam: declare agent preset')

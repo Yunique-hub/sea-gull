@@ -18,7 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 if ($Update -and $Uninstall) { throw "-Update 和 -Uninstall 不能同时使用" }
-$VERSION = "1.0.6"
+$VERSION = "1.0.7"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -180,6 +180,10 @@ Ok "插件就位: $PlugDir"
 Step "改写 profile"
 & $Py (Join-Path $Here "src\tools\patch_profile.py") (Join-Path $ProfDir "package.json") "file:../../plugins/$PluginId" $PluginId
 if ($LASTEXITCODE -ne 0) { Die "profile 写入失败，备份已保留" }
+if ($Update) {
+  & $Py (Join-Path $Here "src\tools\patch_profile.py") --repair-market (Join-Path $ProfDir "package.json") "0.4.16"
+  if ($LASTEXITCODE -ne 0) { Die "插件市场配置修复失败，备份已保留" }
+}
 
 # ── 3. pnpm ─────────────────────────────────────────────────────
 $DependenciesReady = $false
@@ -191,6 +195,12 @@ if (-not $NoPnpm -and $Node -and $Pnpm) {
     if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败：检查 registry / file: 路径后重试；备份已保留" }
   } finally { Pop-Location }
   if (-not (Test-Path -LiteralPath (Join-Path $ProfDir "node_modules\$PluginId\package.json"))) { Die "依赖未就位: node_modules/$PluginId" }
+  & $Py (Join-Path $Here "src\tools\patch_profile.py") --sync-plugin $DH $Profile
+  if ($LASTEXITCODE -ne 0) { Die "插件运行副本校验失败，备份已保留" }
+  if ($Update) {
+    & $Py (Join-Path $Here "src\tools\patch_profile.py") --market-runtime (Join-Path $ProfDir "package.json")
+    if ($LASTEXITCODE -ne 0) { Die "插件市场运行校验修复失败，备份已保留" }
+  }
   $DependenciesReady = $true
 }
 
