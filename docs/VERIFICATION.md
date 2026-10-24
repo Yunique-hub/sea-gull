@@ -442,6 +442,9 @@ bash tests/smoke.sh
 | 用户配置保护 | 提示词、desktop package、偏好 YAML、凭据与升级前 SHA-256 一致 |
 | 本机最终状态 | 86 条定义；76 applied / 6 na / 1 missing_file / 3 skipped / 0 pending |
 | 正常启动复核 | 临时项目归档；原项目选择恢复；正常启动、调试端口关闭、插件 ready、无待应用补丁 |
+| 既有文件复核 | 其他插件 100 个文件、原项目 9 个文件、已有技能 26 个文件均与升级前哈希一致 |
+| 已发布一键更新入口 | PowerShell / Git Bash 均真实下载 main 并更新到 1.1.77；5 个关键运行文件一致；定制人格、启动保留、偏好、项目与额外技能全部保留 |
+| 代码提交 CI | [7f268f4 的 CI](https://github.com/Yunique-hub/sea-gull/actions/runs/40073523470) 三个任务全部通过：Windows、Ubuntu、插件语法 |
 
 官方安装包 SHA-512（Base64）：`q5IGr2Bf+TvvCpagHj49Ypn/ZrqR7kqrYpLjqXP7VfDINmddlqZQmG+YfsdL3q3EdTRMRlKz/a3jDAEzdNdDOw==`。
 
