@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.9-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.10-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,7 +17,11 @@
 
 ---
 
-当前 **v1.0.9** 适配官方 Windows Harness **0.2.1-rc.3**，引擎为 dsh-purge **1.1.78**（固定上游 master 提交 [fd109e1](https://github.com/YuJunZhiXue/dsh-purge/tree/fd109e106ce5818b3c00524123a3431e4afc0e81)）。98 个上游 Git blob 已核验。
+当前 **v1.0.10** 适配官方 Windows Harness **0.2.1-rc.3**，引擎为 dsh-purge **1.1.78**（固定上游 master 提交 [fd109e1](https://github.com/YuJunZhiXue/dsh-purge/tree/fd109e106ce5818b3c00524123a3431e4afc0e81)）。98 个上游 Git blob 已核验。
+
+1.0.10 修复市场把 scoped 包误识别成短名称的校验失败及新装技能未刷新到 `/` 菜单，新增工具目录选择、缺失工具自动下载校验和中文回复约定，并整合 **AgentTeams 0.1.26**。在工作区新会话输入 `agent-teams 创建两名成员，分别实现和复核……` 或 `/agent-teams ……`，队长会创建成员及任务依赖并执行；明确要求先审阅时才等待确认。团队状态保存在当前工作区 `.agent-teams/`，更新保留存档。来源、改动与限制见[本轮整合分析](docs/INTEGRATION-1.0.10.md)。
+
+首次安装必须自行设置工具安装目录；已有用户更新沿用保存值。在「dsh-purge → 演练台 → 环境适配」选择文件夹后，点「一键安装并配置」。现有工具优先保留，缺失工具使用固定官方发布文件及 SHA-256；Impacket 安装在独立 Python 环境。Nmap 的驱动安装、没有官方 Windows 二进制的 Masscan 会明确列为待处理。Windows x64 桌面实测识别 **13/15** 项，不能把这个结果解释为 15 项全部自动安装成功。
 
 1.0.9 修复「恢复默认」的备份失败和同秒备份覆盖问题：备份失败即停止，每次备份使用唯一文件名。真机校验脚本同步支持当前注入标记、纯 Markdown 人格、五个原生技能和保留的本地靶场检查。分析与本轮桌面结果见[项目审查](docs/PROJECT-REVIEW-2026-10-25.md)及[验证记录 M](docs/VERIFICATION.md#m-109-全面审查与桌面回归2026-10-25)。
 
@@ -25,7 +29,7 @@
 
 保留用户保存的**海鸥人格**、5 个海鸥技能、项目创建与切换修复、立即插话、独立排队、安装/更新和回退保护。新版保留上游的本地靶场限制及工具执行前检查，并纳入证据账本等工程功能。上游已下架随包技能库与知识库入口；本机已有数据保留，旧 23 个技能仅在源码中作历史存档，不再自动分发。
 
-上游主体代码现为 **Apache-2.0**；原始 LICENSE、NOTICE 与来源均保留，海鸥自身及历史资产分别按原有许可标注。当前本地仍维护 86 条补丁定义，其中 #89–#92 为保留原生消息路径等海鸥兼容修复。验证范围见[本次验证记录](docs/VERIFICATION.md#j-harness-021-rc3--dsh-purge-1177-合并2026-10-24)。
+上游主体代码现为 **Apache-2.0**；原始 LICENSE、NOTICE 与来源均保留，海鸥自身及历史资产分别按原有许可标注。当前本地维护 88 条补丁定义，其中 #89–#92 保留原生消息路径，#93–#94 接通技能目录变化与菜单刷新。验证范围见[本次验证记录](docs/VERIFICATION.md#j-harness-021-rc3--dsh-purge-1177-合并2026-10-24)。
 
 已安装用户请使用下方“一键更新”命令，更新模式会保留现有提示词。先完成 Harness 官方版本更新，再重新应用插件；仅替换版本号或把旧 `resources/app` 整目录复制到新版会重新加载旧宿主。Windows 更新若静默失败，会改为显示安装界面；取消或失败时恢复旧解包目录并提示退出码。
 
@@ -47,7 +51,7 @@
 
 | 来源 | 提供什么 |
 |---|---|
-| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.78 | 宿主兼容、演练台、证据账本与本地靶场限制；保留 86 条本地补丁定义 |
+| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.78 | 宿主兼容、演练台、证据账本与本地靶场限制；保留 88 条本地补丁定义 |
 | [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | 海鸥人格（00a–00r 规则体系）+ 5 个领域技能 |
 
 合并不是拼盘——`SOUL.md` 不能直接当 DSH 提示词（插值白名单、ChatML 信封、技能目录协议

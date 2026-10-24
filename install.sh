@@ -8,7 +8,7 @@
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.0.7"
+VERSION="1.0.10"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
@@ -44,6 +44,7 @@ usage() {
   --profile <desktop|web>   目标宿主 profile（默认自动：有 desktop 用 desktop）
   --dsh-home <路径>         DSH 主目录（默认 $DSH_HOME 或 ~/.dsh）
   --app-root <路径>         DSH 安装目录（默认自动探测）
+  --toolkit-dir <路径>      工具安装目录（首次安装自行选择，更新保留）
   --apply                  装完立刻尝试 Apply（desktop 会解 asar，需宿主已退出）
   --no-pnpm                跳过 pnpm install（离线/已装过时用）
   --dry-run                只打印计划，不落盘
@@ -55,12 +56,13 @@ usage() {
 EOF
 }
 
-PROFILE=""; DSH_HOME_ARG=""; APP_ROOT=""; DRY=0; NO_PNPM=0; APPLY=0; UNINSTALL=0; UPDATE=0
+PROFILE=""; DSH_HOME_ARG=""; APP_ROOT=""; TOOLKIT_DIR="${SEAGULL_TOOLKIT_DIR:-}"; DRY=0; NO_PNPM=0; APPLY=0; UNINSTALL=0; UPDATE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --profile)     PROFILE="${2:-}"; shift 2 ;;
     --dsh-home)    DSH_HOME_ARG="${2:-}"; shift 2 ;;
     --app-root)    APP_ROOT="${2:-}"; shift 2 ;;
+    --toolkit-dir) TOOLKIT_DIR="${2:-}"; shift 2 ;;
     --apply)       APPLY=1; shift ;;
     --no-pnpm)     NO_PNPM=1; shift ;;
     --dry-run)     DRY=1; shift ;;
@@ -207,6 +209,20 @@ if [ "$UNINSTALL" = 0 ]; then
   fi
 fi
 
+TEAMS_SOURCE="$ROOT/vendor/dsh-agent-teams"
+if [ "$UPDATE" = 0 ] && [ "$UNINSTALL" = 0 ] && [ -f "$TEAMS_SOURCE/package.json" ] && [ -z "$TOOLKIT_DIR" ]; then
+  TOOLKIT_DIR="$("$PY" -c 'import json, pathlib, sys; p=pathlib.Path(sys.argv[1]); print(json.loads(p.read_text(encoding="utf-8-sig")).get("toolkitDir", "") if p.exists() else "")' "$(winpath "$DSH_HOME/redteam/config.json")")"
+  if [ -z "$TOOLKIT_DIR" ]; then
+    if [ -t 0 ]; then read -r -p "首次安装：请输入工具安装目录（不覆盖已有工具）: " TOOLKIT_DIR
+    elif [ -t 1 ] && [ -r /dev/tty ]; then read -r -p "首次安装：请输入工具安装目录（不覆盖已有工具）: " TOOLKIT_DIR </dev/tty
+    else die "首次安装请用 --toolkit-dir 指定工具安装目录，或在交互式终端运行安装器"; fi
+    [ -n "$TOOLKIT_DIR" ] || die "必须自行设置工具安装目录"
+  fi
+fi
+if [ "$UNINSTALL" = 0 ] && [ -n "$TOOLKIT_DIR" ]; then
+  "$PY" "$(winpath "$ROOT/src/tools/configure_toolkit.py")" "$(winpath "$DSH_HOME")" "$(winpath "$TOOLKIT_DIR")" --validate-only || die "工具安装目录无效，未修改安装文件"
+fi
+
 # 子进程只操作本次选定的目标，不继承其他 profile 的定位变量。
 run_dsh_cli() (
   export DSH_HOME="$(winpath "$DSH_HOME")" DSH_PROFILE="$PROFILE" DSH_SURFACE="$PROFILE"
@@ -225,6 +241,9 @@ if [ "$UNINSTALL" = 1 ]; then
   if [ -f "$PLUGIN_DIR/bin/dsh-purge.js" ] && [ -n "$NODE_EMB" ]; then
     run_dsh_cli "$PLUGIN_DIR/bin/dsh-purge.js" --revert || die "revert 失败，保留插件和配置以便重试"
     ok "宿主补丁已还原"
+  fi
+  if [ -f "$ROOT/src/tools/managed_teams.py" ]; then
+    "$PY" "$(winpath "$ROOT/src/tools/managed_teams.py")" remove "$(winpath "$DSH_HOME")" "$PROFILE" || die "AgentTeams 卸载挂载失败"
   fi
   "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --remove "$(winpath "$PROFILE_DIR/package.json")" "$PLUGIN_ID" \
     || die "profile 移除失败，保留插件文件"
@@ -261,6 +280,9 @@ ok "插件就位: $PLUGIN_DIR"
 # ── 2. 改写 profile ────────────────────────────────────────────────
 step "改写 profile"
 "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" "$(winpath "$PROFILE_DIR/package.json")" "file:../../plugins/$PLUGIN_ID" "$PLUGIN_ID"
+if [ -f "$TEAMS_SOURCE/package.json" ]; then
+  "$PY" "$(winpath "$ROOT/src/tools/managed_teams.py")" stage "$(winpath "$DSH_HOME")" "$PROFILE" "$(winpath "$TEAMS_SOURCE")" || die "AgentTeams 部署失败，备份已保留"
+fi
 if [ "$UPDATE" = 1 ]; then
   "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --repair-market "$(winpath "$PROFILE_DIR/package.json")" "0.4.16" \
     || die "插件市场配置修复失败，备份已保留"
@@ -275,6 +297,9 @@ if [ "$NO_PNPM" = 0 ] && [ -n "$NODE_EMB" ] && [ -n "$PNPM_EMB" ]; then
   [ -f "$PROFILE_DIR/node_modules/$PLUGIN_ID/package.json" ] || die "依赖未就位: node_modules/$PLUGIN_ID"
   "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --sync-plugin "$(winpath "$DSH_HOME")" "$PROFILE" \
     || die "插件运行副本校验失败，备份已保留"
+  if [ -f "$TEAMS_SOURCE/package.json" ]; then
+    "$PY" "$(winpath "$ROOT/src/tools/managed_teams.py")" sync "$(winpath "$DSH_HOME")" "$PROFILE" || die "AgentTeams 运行副本校验失败"
+  fi
   if [ "$UPDATE" = 1 ]; then
     "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --market-runtime "$(winpath "$PROFILE_DIR/package.json")" \
       || die "插件市场运行校验修复失败，备份已保留"
@@ -285,6 +310,9 @@ fi
 
 # ── 4. 资产落地（幂等 + 备份）──────────────────────────────────────
 step "落地提示词 / 技能（单源：人格只落 prompt-inject.md）"
+if [ -n "$TOOLKIT_DIR" ]; then
+  "$PY" "$(winpath "$ROOT/src/tools/configure_toolkit.py")" "$(winpath "$DSH_HOME")" "$(winpath "$TOOLKIT_DIR")" || die "工具安装目录保存失败"
+fi
 STAMP="$(date +%Y%m%d-%H%M%S)"
 put() { if [ -e "$2" ]; then cp -r "$2" "$2.bak-$STAMP"; fi; cp -r "$1" "$2"; }
 if [ "$UPDATE" = 1 ] && [ -s "$DSH_HOME/prompt-inject.md" ]; then

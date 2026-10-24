@@ -4,7 +4,9 @@
 
 One-line install · idempotent · uninstallable · backed by evidence
 
-**v1.0.9 targets the official Windows Harness 0.2.1-rc.3** with **dsh-purge 1.1.78**, pinned to upstream master commit [fd109e1](https://github.com/YuJunZhiXue/dsh-purge/tree/fd109e106ce5818b3c00524123a3431e4afc0e81). All 98 upstream Git blobs were verified.
+**v1.0.10 targets the official Windows Harness 0.2.1-rc.3** with **dsh-purge 1.1.78**, pinned to upstream master commit [fd109e1](https://github.com/YuJunZhiXue/dsh-purge/tree/fd109e106ce5818b3c00524123a3431e4afc0e81). All 98 upstream Git blobs were verified.
+
+Version 1.0.10 fixes market verification of scoped packages and refreshes slash menus when skills are installed or removed, adds a chosen toolkit directory with verified official downloads, keeps Chinese as the default response language unless requested otherwise, and includes AgentTeams 0.1.26. Start a workspace conversation with `agent-teams` or `/agent-teams`, followed by a team goal; members and task dependencies run automatically unless the user explicitly requests plan review. Fresh installs require an explicit toolkit directory (`-ToolkitDir` / `--toolkit-dir`, or an interactive prompt); updates preserve the saved choice. The Windows desktop test found 13 of 15 tools: Nmap driver installation and Masscan's missing official Windows binaries remain explicitly reported manual steps. See [integration analysis](docs/INTEGRATION-1.0.10.md).
 
 Version 1.0.9 stops a prompt reset if its backup fails and gives every backup a unique filename. Runtime verification now accepts the current injection markers, plain Markdown persona and five native skills, and checks that the local-lab gate remains installed. See the [project review](docs/PROJECT-REVIEW-2026-10-25.md) and [desktop verification M](docs/VERIFICATION.md#m-109-全面审查与桌面回归2026-10-25).
 

@@ -1,0 +1,212 @@
+{
+  "nuclei": {
+    "version": "v3.11.1",
+    "assets": {
+      "win32-x64": {
+        "url": "https://github.com/projectdiscovery/nuclei/releases/download/v3.11.1/nuclei_3.11.1_windows_amd64.zip",
+        "sha256": "bb6cb9ff8939b753f6fcab06fd30a15f5bc61d8382a597871334c007a85ff9d2",
+        "size": 46067128
+      },
+      "linux-x64": {
+        "url": "https://github.com/projectdiscovery/nuclei/releases/download/v3.11.1/nuclei_3.11.1_linux_amd64.zip",
+        "sha256": "ea63d4ae232808cd7c6bc00d0142428e231fab59dae01042246097d195835ab6",
+        "size": 46148343
+      }
+    }
+  },
+  "fscan": {
+    "version": "v2.2.2",
+    "assets": {
+      "win32-x64": {
+        "url": "https://github.com/shadow1ng/fscan/releases/download/v2.2.2/fscan_2.2.2_windows_x64.exe",
+        "sha256": "34973a25a3d67077fccd687a46bf6ad737ecac7ea6133a5993915901f193114a",
+        "size": 8785920
+      },
+      "linux-x64": {
+        "url": "https://github.com/shadow1ng/fscan/releases/download/v2.2.2/fscan_2.2.2_linux_x64",
+        "sha256": "e5c645434b4fb3b9bfa8d7402e2e6e80189c9ec9533ebdc8620aaace686cd84c",
+        "size": 8493220
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/shadow1ng/fscan/releases/download/v2.2.2/fscan_2.2.2_mac_arm64",
+        "sha256": "eca58aa1c1fe7fc43e48478a907be40f1b8627c39674a0365c2aa67b83377418",
+        "size": 26855026
+      }
+    }
+  },
+  "gogo": {
+    "version": "v2.15.0",
+    "assets": {
+      "win32-x64": {
+        "url": "https://github.com/chainreactors/gogo/releases/download/v2.15.0/gogo_windows_amd64.exe",
+        "sha256": "c3f56039ca1b647d2f64a4c541877638d8d39631eeea7a23f9595cf578a46d87",
+        "size": 4307456
+      },
+      "linux-x64": {
+        "url": "https://github.com/chainreactors/gogo/releases/download/v2.15.0/gogo_linux_amd64",
+        "sha256": "3b51080a909023f7d484e2443740b572307ce0054eb9e32d98f0a06bfcd2db90",
+        "size": 4340260
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/chainreactors/gogo/releases/download/v2.15.0/gogo_darwin_arm64",
+        "sha256": "1f705ca1065191c5bdfbadf5722e69c85a6640a45de67a83e4fb6f1b9064cdca",
+        "size": 11461410
+      }
+    }
+  },
+  "suo5": {
+    "version": "v2.2.0",
+    "assets": {
+      "win32-x64": {
+        "url": "https://github.com/zema1/suo5/releases/download/v2.2.0/suo5-windows-amd64.exe",
+        "sha256": "e0e83bbcdae5bddc0cf1367207f454b32b6c110ebfa2a46589c18932fdb946ac",
+        "size": 11940352
+      },
+      "linux-x64": {
+        "url": "https://github.com/zema1/suo5/releases/download/v2.2.0/suo5-linux-amd64",
+        "sha256": "629dc3e537d611e2da7e5e0274900213e817d4057b344e6cb82bd95dee937d3b",
+        "size": 11456674
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/zema1/suo5/releases/download/v2.2.0/suo5-darwin-arm64",
+        "sha256": "f5681a08ed2a5bbe8223584f3b827a09cf65878864685b862120dd010961a9f4",
+        "size": 11019778
+      }
+    }
+  },
+  "frpc": {
+    "version": "v0.71.1",
+    "assets": {
+      "win32-x64": {
+        "url": "https://github.com/fatedier/frp/releases/download/v0.71.1/frp_0.71.1_windows_amd64.zip",
+        "sha256": "b90074b2b6a1d792a7a40f085ac6d276bcab2d1bc60201f8a86ca53ce65ce821",
+        "size": 14152383
+      },
+      "linux-x64": {
+        "url": "https://github.com/fatedier/frp/releases/download/v0.71.1/frp_0.71.1_linux_amd64.tar.gz",
+        "sha256": "1d9875210972a5d1a62b2dc4c48df45ab0af05d3ca1b5e494a014428259df803",
+        "size": 14140587
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/fatedier/frp/releases/download/v0.71.1/frp_0.71.1_darwin_arm64.tar.gz",
+        "sha256": "d15d0324b99e14619c9aa46e37f6db588c06a09be4bc6f7948890b6b61077842",
+        "size": 12867210
+      }
+    }
+  },
+  "frps": {
+    "version": "v0.71.1",
+    "assets": {
+      "win32-x64": {
+        "url": "https://github.com/fatedier/frp/releases/download/v0.71.1/frp_0.71.1_windows_amd64.zip",
+        "sha256": "b90074b2b6a1d792a7a40f085ac6d276bcab2d1bc60201f8a86ca53ce65ce821",
+        "size": 14152383
+      },
+      "linux-x64": {
+        "url": "https://github.com/fatedier/frp/releases/download/v0.71.1/frp_0.71.1_linux_amd64.tar.gz",
+        "sha256": "1d9875210972a5d1a62b2dc4c48df45ab0af05d3ca1b5e494a014428259df803",
+        "size": 14140587
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/fatedier/frp/releases/download/v0.71.1/frp_0.71.1_darwin_arm64.tar.gz",
+        "sha256": "d15d0324b99e14619c9aa46e37f6db588c06a09be4bc6f7948890b6b61077842",
+        "size": 12867210
+      }
+    }
+  },
+  "chisel": {
+    "version": "v1.12.0",
+    "assets": {
+      "win32-x64": {
+        "url": "https://github.com/jpillora/chisel/releases/download/v1.12.0/chisel_1.12.0_windows_amd64.zip",
+        "sha256": "600a8ad6f03bc7f6d285fd01ab6a3f8a657204adaafa5666ade9451d18df1ebc",
+        "size": 4873570
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/jpillora/chisel/releases/download/v1.12.0/chisel_1.12.0_darwin_arm64.gz",
+        "sha256": "707a4b932eea214765146504a0df246cefc415b4297af65a80dd67cf69ba85a9",
+        "size": 4433894
+      }
+    }
+  },
+  "ffuf": {
+    "version": "v2.3.0",
+    "assets": {
+      "win32-x64": {
+        "url": "https://github.com/ffuf/ffuf/releases/download/v2.3.0/ffuf_2.3.0_windows_amd64.zip",
+        "sha256": "091c8a22d0c7fbe07d343b3ae2c213dbd37b38a8a2ed40631fcd3128ea1764fb",
+        "size": 4497208
+      },
+      "linux-x64": {
+        "url": "https://github.com/ffuf/ffuf/releases/download/v2.3.0/ffuf_2.3.0_linux_amd64.tar.gz",
+        "sha256": "b2a3c725fcb9da175159682f54d6e9149f2905b00d84d155e7efc5d599975ceb",
+        "size": 4367536
+      }
+    }
+  },
+  "httpx": {
+    "version": "v1.12.0",
+    "assets": {
+      "win32-x64": {
+        "url": "https://github.com/projectdiscovery/httpx/releases/download/v1.12.0/httpx_1.12.0_windows_amd64.zip",
+        "sha256": "14d8ccaa2d95ce9365162682f1a2ba3f14d2000bb4bfb0924af65ec5163ae021",
+        "size": 18633379
+      },
+      "linux-x64": {
+        "url": "https://github.com/projectdiscovery/httpx/releases/download/v1.12.0/httpx_1.12.0_linux_amd64.zip",
+        "sha256": "9d8439e8b6c9aa7d1e2314817a392e00d5178da3af5652f7475f88868f418f76",
+        "size": 19200026
+      }
+    }
+  },
+  "dnsx": {
+    "version": "v1.3.1",
+    "assets": {
+      "win32-x64": {
+        "url": "https://github.com/projectdiscovery/dnsx/releases/download/v1.3.1/dnsx_1.3.1_windows_amd64.zip",
+        "sha256": "112c2d62d67d26a1b940ed9d10d500d2aa1ee3e3e18393d181ac4969936b9d96",
+        "size": 10077681
+      },
+      "linux-x64": {
+        "url": "https://github.com/projectdiscovery/dnsx/releases/download/v1.3.1/dnsx_1.3.1_linux_amd64.zip",
+        "sha256": "438b964653056dd51dcfe614b1a16f8bced3cc48a1d27bc07cc6fdf2ef2a9533",
+        "size": 9829391
+      }
+    }
+  },
+  "subfinder": {
+    "version": "v2.17.0",
+    "assets": {
+      "win32-x64": {
+        "url": "https://github.com/projectdiscovery/subfinder/releases/download/v2.17.0/subfinder_2.17.0_windows_amd64.zip",
+        "sha256": "a3fd612928d591fb31c1e59a2e06055e364421ba32251e553073f5673a2d3103",
+        "size": 10578907
+      },
+      "linux-x64": {
+        "url": "https://github.com/projectdiscovery/subfinder/releases/download/v2.17.0/subfinder_2.17.0_linux_amd64.zip",
+        "sha256": "a39c3e5c7a26ef3c430915c4d6cbf7716a00f26769a75e9405aba796142eba37",
+        "size": 10308162
+      }
+    }
+  },
+  "ksubdomain": {
+    "version": "v2.4.0",
+    "assets": {
+      "win32-x64": {
+        "url": "https://github.com/boy-hack/ksubdomain/releases/download/v2.4.0/KSubdomain-v2.4.0-windows-amd64.zip",
+        "sha256": "fb1e281ec7115bca038ee62167f363cbb3504916bc54a6f7ffe8237e19841b53",
+        "size": 7966823
+      },
+      "linux-x64": {
+        "url": "https://github.com/boy-hack/ksubdomain/releases/download/v2.4.0/KSubdomain-v2.4.0-linux-amd64.zip",
+        "sha256": "9011bf0537aa08ec9dcbc31d22e01ad7ee3a9a99ad42cffd78373cbd39a51f27",
+        "size": 7515861
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/boy-hack/ksubdomain/releases/download/v2.4.0/KSubdomain-v2.4.0-darwin-arm64.zip",
+        "sha256": "ef63157ee3401360d45bf361ab76b640327a04fc8fc719c8d27de4721745b523",
+        "size": 7461843
+      }
+    }
+  }
+}

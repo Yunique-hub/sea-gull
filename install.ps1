@@ -8,6 +8,7 @@ param(
   [string]$Profile = "",
   [string]$DshHome = "",
   [string]$AppRoot = "",
+  [string]$ToolkitDir = "",
   [switch]$Apply,
   [switch]$NoPnpm,
   [switch]$DryRun,
@@ -18,7 +19,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 if ($Update -and $Uninstall) { throw "-Update 和 -Uninstall 不能同时使用" }
-$VERSION = "1.0.7"
+$VERSION = "1.0.10"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -131,6 +132,23 @@ if (-not $Uninstall) {
   if ($Apply -and (-not $AppRoot -or -not $Node)) { Die "缺少安装根或 node，无法 Apply" }
 }
 
+$TeamsSource = Join-Path $Here "vendor\dsh-agent-teams"
+if (-not $ToolkitDir) { $ToolkitDir = $env:SEAGULL_TOOLKIT_DIR }
+if (-not $Update -and -not $Uninstall -and (Test-Path (Join-Path $TeamsSource "package.json")) -and -not $ToolkitDir) {
+  $toolConfig = Join-Path $DH "redteam\config.json"
+  if (Test-Path $toolConfig) { $ToolkitDir = (Get-Content -LiteralPath $toolConfig -Raw -Encoding UTF8 | ConvertFrom-Json).toolkitDir }
+  if (-not $ToolkitDir) {
+    if ([Console]::IsInputRedirected) { Die "首次安装请用 -ToolkitDir 指定工具安装目录，或在交互式终端运行安装器" }
+    $ToolkitDir = Read-Host "首次安装：请输入工具安装目录（不覆盖已有工具）"
+    if (-not $ToolkitDir) { Die "必须自行设置工具安装目录" }
+  }
+}
+
+if (-not $Uninstall -and $ToolkitDir) {
+  & $Py (Join-Path $Here "src\tools\configure_toolkit.py") $DH $ToolkitDir --validate-only
+  if ($LASTEXITCODE -ne 0) { Die "工具安装目录无效，未修改安装文件" }
+}
+
 function Invoke-DshCli([string]$Script, [string[]]$CliArgs = @()) {
   $saved = @{}
   foreach ($key in @("DSH_HOME", "DSH_PROFILE", "DSH_SURFACE", "DSH_DESKTOP_INSTALL", "DSH_BASE")) {
@@ -152,6 +170,10 @@ if ($Uninstall) {
   Step "卸载"
   $cli = Join-Path $PlugDir "bin\dsh-purge.js"
   if ((Test-Path $cli) -and $Node) { Invoke-DshCli $cli @("--revert"); Ok "宿主补丁已还原" }
+  if (Test-Path (Join-Path $Here "src\tools\managed_teams.py")) {
+    & $Py (Join-Path $Here "src\tools\managed_teams.py") remove $DH $Profile
+    if ($LASTEXITCODE -ne 0) { Die "AgentTeams 卸载挂载失败" }
+  }
   & $Py (Join-Path $Here "src\tools\patch_profile.py") --remove (Join-Path $ProfDir "package.json") $PluginId
   if ($LASTEXITCODE -ne 0) { Die "profile 移除失败，保留插件文件" }
   Remove-Item -Recurse -Force $PlugDir -ErrorAction SilentlyContinue
@@ -184,6 +206,10 @@ Ok "插件就位: $PlugDir"
 Step "改写 profile"
 & $Py (Join-Path $Here "src\tools\patch_profile.py") (Join-Path $ProfDir "package.json") "file:../../plugins/$PluginId" $PluginId
 if ($LASTEXITCODE -ne 0) { Die "profile 写入失败，备份已保留" }
+if (Test-Path (Join-Path $TeamsSource "package.json")) {
+  & $Py (Join-Path $Here "src\tools\managed_teams.py") stage $DH $Profile $TeamsSource
+  if ($LASTEXITCODE -ne 0) { Die "AgentTeams 部署失败，备份已保留" }
+}
 if ($Update) {
   & $Py (Join-Path $Here "src\tools\patch_profile.py") --repair-market (Join-Path $ProfDir "package.json") "0.4.16"
   if ($LASTEXITCODE -ne 0) { Die "插件市场配置修复失败，备份已保留" }
@@ -201,6 +227,10 @@ if (-not $NoPnpm -and $Node -and $Pnpm) {
   if (-not (Test-Path -LiteralPath (Join-Path $ProfDir "node_modules\$PluginId\package.json"))) { Die "依赖未就位: node_modules/$PluginId" }
   & $Py (Join-Path $Here "src\tools\patch_profile.py") --sync-plugin $DH $Profile
   if ($LASTEXITCODE -ne 0) { Die "插件运行副本校验失败，备份已保留" }
+  if (Test-Path (Join-Path $TeamsSource "package.json")) {
+    & $Py (Join-Path $Here "src\tools\managed_teams.py") sync $DH $Profile
+    if ($LASTEXITCODE -ne 0) { Die "AgentTeams 运行副本校验失败" }
+  }
   if ($Update) {
     & $Py (Join-Path $Here "src\tools\patch_profile.py") --market-runtime (Join-Path $ProfDir "package.json")
     if ($LASTEXITCODE -ne 0) { Die "插件市场运行校验修复失败，备份已保留" }
@@ -210,6 +240,10 @@ if (-not $NoPnpm -and $Node -and $Pnpm) {
 
 # ── 4. 资产 ─────────────────────────────────────────────────────
 Step "落地提示词 / 技能（单源：人格只落 prompt-inject.md）"
+if ($ToolkitDir) {
+  & $Py (Join-Path $Here "src\tools\configure_toolkit.py") $DH $ToolkitDir
+  if ($LASTEXITCODE -ne 0) { Die "工具安装目录保存失败" }
+}
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $pi = Join-Path $DH "prompt-inject.md"
 if ($Update -and (Test-Path -LiteralPath $pi) -and (Get-Item -LiteralPath $pi).Length -gt 0) {

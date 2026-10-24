@@ -37,7 +37,7 @@ jobs:
         run: |
           set -e
           for f in install.sh update.sh verify.sh verify-e2e.sh tests/smoke.sh; do bash -n "$f"; echo "OK $f"; done
-          python -m py_compile src/tools/patch_profile.py && echo "OK patch_profile.py"
+          python -m py_compile src/tools/patch_profile.py src/tools/managed_teams.py src/tools/configure_toolkit.py vendor/dsh-purge/lib/redteam/extract-tools.py
 
       - name: shellcheck
         if: runner.os == 'Linux'
@@ -61,7 +61,9 @@ jobs:
           for p in VERSION LICENSE NOTICE README.md install.sh install.ps1 update.sh update.ps1 verify.sh verify.ps1 \
                    src/prompt/prompt-inject.md vendor/dsh-purge/lib/default-prompt-inject.md \
                    docs/archive/seagull-fullbreak-1.0.7.json \
-                   src/tools/patch_profile.py src/skills/redteam vendor/dsh-purge/lib/index.js \
+                   src/tools/patch_profile.py src/tools/managed_teams.py src/tools/configure_toolkit.py \
+                   vendor/dsh-agent-teams/package.json vendor/dsh-agent-teams/LICENSE vendor/dsh-agent-teams/lib/index.js vendor/dsh-agent-teams/lib/client.js \
+                   vendor/dsh-purge/lib/redteam/tool-releases.json src/skills/redteam vendor/dsh-purge/lib/index.js \
                    vendor/dsh-purge/LICENSE vendor/dsh-purge/NOTICE vendor/dsh-purge/LICENSE-COMMERCIAL.md; do
             [ -e "$p" ] || { echo "缺: $p"; exit 1; }
           done
@@ -92,7 +94,10 @@ jobs:
                    vendor/dsh-purge/lib/preset-default.js \
                    vendor/dsh-purge/lib/mnemon-settings.js \
                    vendor/dsh-purge/lib/reapply.js \
-                   vendor/dsh-purge/lib/net-scope.js; do
+                   vendor/dsh-purge/lib/net-scope.js \
+                   vendor/dsh-purge/lib/redteam/tool-installer.js vendor/dsh-purge/lib/redteam/ui.js \
+                   vendor/dsh-purge/lib/seagull-language.js \
+                   vendor/dsh-agent-teams/lib/index.js vendor/dsh-agent-teams/lib/command.js vendor/dsh-agent-teams/lib/client.js; do
             node --check "$f" && echo "OK $f"
           done
       - name: JSON 合法

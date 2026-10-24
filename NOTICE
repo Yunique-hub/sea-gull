@@ -19,7 +19,7 @@
 | `vendor/dsh-purge/NOTICE.md` | 海鸥快照、兼容修复与验证范围说明 |
 | `vendor/dsh-purge/client.js` | 保留项目创建、错误反馈、操作互斥与项目页面隔离；不挂载首启用户须知弹窗；1.0.8 起面板提示「恢复默认」会先备份提示词；1.0.9 起按钮显式发送恢复操作，接通备份路径 |
 | `vendor/dsh-purge/cordis.patch.yml` | 海鸥 file 安装显式挂载一个主模块并启用自动应用 |
-| `vendor/dsh-purge/lib/core.js` | 保留上下文迁移、消息/子代理适配、插话与人格持久化修复；86 条本地定义；1.0.8 起「恢复默认」前自动备份，并让显式保存优先于血统战标记判定；1.0.9 起备份失败停止覆盖，备份名添加唯一标识避免同秒覆盖 |
+| `vendor/dsh-purge/lib/core.js` | 保留上下文迁移、消息/子代理适配、插话与人格持久化修复；88 条本地定义；1.0.10 新增 #93–#94 技能变更事件转发与菜单缓存刷新；1.0.8 起「恢复默认」前自动备份，并让显式保存优先于血统战标记判定；1.0.9 起备份失败停止覆盖，备份名添加唯一标识避免同秒覆盖 |
 | `vendor/dsh-purge/lib/default-prompt-inject.md` | 加密槽源文件，与 `src/prompt/prompt-inject.md` 逐字节同源（1.0.8 单源化；上游同名文件此前仅在构建期存在） |
 | `vendor/dsh-purge/.gitignore` | 仅新增一条例外规则，让上面那份槽源可以入库（上游默认忽略该文件） |
 | `vendor/dsh-purge/lib/identity.js` | 识别旧版执行者预设，保留子角色身份路径 |
@@ -30,6 +30,8 @@
 | `vendor/dsh-purge/lib/redteam/index.js` | 旧过滤配置在注册时迁移，保留用户 YAML 和失败清理 |
 | `vendor/dsh-purge/lib/redteam/preset-composition.js` | 旧过滤迁到独立执行者预设，保留工具限制 |
 | `vendor/dsh-purge/lib/redteam/store-core.js` | 保留创建名称、重名与旧选择回退修复 |
+| `vendor/dsh-purge/lib/redteam/ui.js`、`tool-installer.js`、`tool-releases.json`、`extract-tools.py`、`vendor/dsh-purge/client.js` | 1.0.10 新增原生工具目录选择、安装接口、官方发布下载、SHA-256、独立 Python 环境和受限解包；不分发工具二进制 |
+| `vendor/dsh-purge/lib/seagull-language.js` | 1.0.10 新增独立中文回复约定，注册于 lib/index.js；不改用户人格 |
 | `vendor/dsh-purge/lib/update.js` | 海鸥托管标记阻止原版更新覆盖定制，提示海鸥更新入口 |
 | `vendor/dsh-purge/package.json` | 适配 rc.3、海鸥托管标记；安装器管理 bundle，因此不启用重复 postinstall |
 
@@ -58,6 +60,15 @@
 | DeepSeek Harness（`@deepseek-ai/*`） | 宿主 | 见其自身许可 |
 | Node.js | 运行时 | MIT 类 |
 | pnpm | 包管理 | MIT |
+
+### AgentTeams 运行快照（1.0.10 新增）
+
+- 来源：https://github.com/NanmiCoder/dsh-agent-teams
+- 固定版本：0.1.26；提交 `230958db812ed34bcf2d1168e8157bbf5af04055`。
+- 作者：程序员阿江（Relakkes）；MIT，原始许可证保留在 `vendor/dsh-agent-teams/LICENSE`。
+- 复用运行 JS、类型、前端和内置团队资源；完整 TypeScript 源码及开发构建工具见固定上游提交。
+- 本地修改：`lib/command.js` 支持裸命令、默认自动执行与中文激活说明；`lib/index.js` 同步 usage 提示；`package.json` 增加托管标记与 rc.3 peer 范围。其余快照文件保持上游内容。
+- 安装器挂载独立 bundle，不复制上游人格；卸载保留工作区团队档案。详情见 `docs/INTEGRATION-1.0.10.md`。
 
 ---
 

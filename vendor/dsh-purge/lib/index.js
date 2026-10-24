@@ -9,6 +9,7 @@ import * as skills from "./skills.js";
 import * as updater from "./update.js";
 import * as reapply from "./reapply.js";
 import * as officialUpdate from "./official-update.js";
+import { RESPONSE_LANGUAGE } from "./seagull-language.js";
 import {
   GLOBAL_PROMPT_ORDER,
   adaptInjectForMinimalPreset,
@@ -385,6 +386,12 @@ function addPromptSection(ctx, section) {
 }
 
 export function registerPromptSections(ctx, config) {
+  addPromptSection(ctx, {
+    name: "seagull:response-language",
+    order: GLOBAL_PROMPT_ORDER + 50,
+    interpolate: false,
+    text: () => injectAllowedNow(config) ? RESPONSE_LANGUAGE : "",
+  });
   addPromptSection(ctx, {
     name: "dsh-purge",
     order: GLOBAL_PROMPT_ORDER,

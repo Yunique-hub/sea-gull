@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"
 TW="$TMP"; if command -v cygpath >/dev/null 2>&1; then TW="$(cygpath -w "$TMP")"; fi
+export SEAGULL_TOOLKIT_DIR="$TW/toolkit"
 trap 'rm -rf "$TMP"' EXIT
 
 PY="$(command -v python3 || command -v python)"
@@ -47,7 +48,8 @@ echo "── 3. profile JSON 正确挂载 ──"
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 assert d["dependencies"]["dsh-purge"] == "file:../../plugins/dsh-purge", d.get("dependencies")
-assert d["dsh"]["profile"]["bundles"][-1] == "dsh-purge", d["dsh"]["profile"]["bundles"]
+assert "dsh-purge" in d["dsh"]["profile"]["bundles"], d["dsh"]["profile"]["bundles"]
+assert d["dependencies"]["@nanmicoder/dsh-agent-teams"] == "file:../../plugins/@nanmicoder/dsh-agent-teams"
 assert d["dsh"]["profile"]["bundles"][0] == "@deepseek-ai/dsh-base", "原有 bundle 被破坏"
 print("   bundles =", d["dsh"]["profile"]["bundles"])
 PY

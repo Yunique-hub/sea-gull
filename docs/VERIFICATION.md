@@ -527,3 +527,36 @@ bash tests/smoke.sh
 复跑命令：`node --test "tests/*.test.mjs"`、`bash tests/smoke.sh`、`powershell.exe -NoProfile -File verify.ps1`、`bash verify.sh`。故障注入覆盖备份失败，未改变本机权限。Windows 桌面实测不代替 macOS 桌面；未逐项运行全部领域技能业务，不将模型执行两项正常任务扩大为所有请求均成功。
 
 发布顺序为完成上述桌面和数据检查，再审阅具体源码及脱敏报告、提交推送并检查该提交的 CI。原始日志、截图、凭据、用户项目和对话均只在本地保留。
+
+## N. 1.0.10 市场、工具与团队整合（2026-10-25）
+
+环境：官方 Windows x64 Harness 0.2.1-rc.3，dsh-purge 1.1.78，市场 plugin 0.4.16 / core 0.4.13，AgentTeams 0.1.26。分析与固定上游提交见 [INTEGRATION-1.0.10.md](INTEGRATION-1.0.10.md)。
+
+### 缺陷复现
+
+- 市场 `plugin` 的实际依赖为 `@dsh-market/plugin`，校验却查短名称，真实 API 返回 broken；修复后实际 API 与桌面卡片均为 live / 绿色“已生效”。
+- 原有 `distilly` 在新会话可用，但已打开会话中安装另一个合法技能，后端 skills/list 能发现，`/` 菜单仍为空。定位到 skills/change 没有远端转发、前端没有清缓存。#93、#94 接通原生变更链路，覆盖标准技能安装和卸载，不给界面插件增加 slash 命令。
+- 工具原先仅发现 5/15，填写路径或扫描目录不能下载缺失项；增加原生目录选择、固定发布下载和独立环境安装。
+
+### 验收结果
+
+| 项目 | 结果 |
+|---|---|
+| Node 回归 | **136 通过 / 0 失败 / 0 跳过**（Windows）；新增 scoped/空技能目录、热刷新事件、目录选择、下载损坏、归档越界、团队部署及命令边界用例 |
+| 安装闭环 | Git Bash 隔离 home 的 dry-run、安装、幂等、卸载通过；Windows PowerShell 和 Bash 首装未选目录均在部署前停止 |
+| 真机脚本 | Windows PowerShell 5.1 **20/20**，Git Bash **23/23** |
+| 技能菜单 | 同一已打开会话，两个不同测试技能安装后立即出现；移除后三项临时技能在后端及菜单均消失 |
+| 技能实际调用 | 菜单选 distilly、直接 /distilly、两个新测试技能均有原生 skill-invocation 与 skill_content；两项新技能分别返回预定验证文本，无工具调用 |
+| 工具目录 | 实际点击“选择文件夹”打开 Windows 系统对话框，选择用户目录并由输入框正确回填；首次设置、更新和重启均保留 |
+| 一键安装 | 保留原有 5 项，新增可用程序及独立 Impacket 环境，最终识别 **13/15**；Nmap、Masscan 明示待处理原因，0 项失败 |
+| 重复执行 | 桌面再次点击：13 项 existing、2 项 manual、0 项下载、0 项失败；无覆盖原有工具 |
+| 工具启动 | 7 个新 Windows 程序返回版本/用法；Impacket 独立环境导入版本 0.13.1；未执行目标扫描 |
+| 默认语言 | 中文请求附带“始终用英文”的第三方资料，答复仍为中文；明确要求英文时精确回复 Verification complete.；成员及队长报告使用中文 |
+| 团队自动创建 | 工作区对话输入裸 agent-teams，由真实 agent_teams_create 创建两名独立成员及 automatic 任务图，没有额外计划确认 |
+| 团队实际协作 | 分析员写入 team-analysis.txt，复核员在依赖完成后读取校验并写入 team-review.txt；两项 completed，两个文件各 27 字节，内容与 SHA-256 实测相符 |
+| 团队前端 | 桌面“团队协作”页显示两名成员、2/2 交付及 t1 → t2 依赖；队长后续自动收齐报告并复验文件；重启保留档案 |
+| 加载文件 | purge **93** 个、AgentTeams **96** 个发行文件与 vendor 逐字节一致，0 项差异 |
+| 补丁 | **79 applied / 6 na / 1 missing_file / 2 skipped**，88 条定义，pending=0；#93、#94 均实际加载 |
+| 用户数据 | 372 文件先备份；凭据与人格哈希不变；本次没有改写用户项目、已有技能、busyEnter 偏好或账号配置 |
+
+人格 SHA-256 仍为 `783eea6c00ce214ae81ba36692255a523ab9640b52e7bbbd9a402ddd6ee396f6`。技能验证采用原生 SKILL.md 协议与调用策略；不将两个测试技能的结果扩大成市场全部条目的业务验收。Windows 真机结果不代替 macOS/Linux 桌面验证。原始事件、会话、工具安装路径、配置备份和测试工作区仅存本地维护档案。

@@ -19,6 +19,7 @@ import { homedir } from 'node:os'
 import { spawn, execFileSync } from 'node:child_process'
 import { request as httpsRequest } from 'node:https'
 import { dispatch, dispatchAsync } from './store-core.js'
+import { startToolkitInstall, toolkitInstallStatus } from './tool-installer.js'
 /* 技能可用性判定与 redteam_preflight 共用同一份实现（环境变量 / 本机路径 / 占位符） */
 import { checkSkill, officialSkillSummaries, skillLibraryOf, summarizeSkills } from './skill-availability.js'
 import { maxAgentsOf, maxAgentsSourceOf, saveMaxAgents, DEFAULT_MAX_AGENTS, MAX_AGENTS_LIMIT } from './settings.js'
@@ -276,10 +277,13 @@ function profileDirOf(ctx) {
 function handlePlatformOp(store, request) {
   const op = request && request.op
   if (op !== 'platformConfigGet' && op !== 'platformConfigSave' && op !== 'platformAssignToolkit'
-    && op !== 'platformEnvAdaptStatus' && op !== 'platformEnvAdaptSkip') {
+    && op !== 'platformEnvAdaptStatus' && op !== 'platformEnvAdaptSkip'
+    && op !== 'platformInstallToolkit' && op !== 'platformToolkitInstallStatus') {
     return undefined
   }
   const root = (store && store.root) || redteamRoot()
+  if (op === 'platformInstallToolkit') return startToolkitInstall(request.dir, root)
+  if (op === 'platformToolkitInstallStatus') return { ok: true, job: toolkitInstallStatus(root) }
   // EnvAdaptSendGate 轮询就绪 / 「暂不配置」；缺分支时前端永远拿不到 ready。
   if (op === 'platformEnvAdaptStatus') return Object.assign({ ok: true }, envAdaptStatus(root))
   if (op === 'platformEnvAdaptSkip') {

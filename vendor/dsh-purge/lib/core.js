@@ -6133,7 +6133,28 @@ const NEW_TOOL_PATCHES = [
   },
 ];
 
-export const ALL_PATCHES = [...PATCHES, ...CODE_PATCHES, ...ENGINE_PATCHES, ...NEW_TOOL_PATCHES];
+const SEAGULL_SKILL_PATCHES = [
+  {
+    id: 93, name: "SKILL_CATALOG_CHANGE_EVENT", layer: "代码", layer_en: "Code",
+    desc: "转发原生技能目录变更事件，让安装和卸载及时刷新 / forward native skill catalog changes",
+    file: ["api-remotes"], optional: true, skipIfMarked: true,
+    replacements: [{
+      pattern: '\t\tevent: "commands/change",\n\t\tmode: "emit"\n\t},',
+      replace: '\t\tevent: "commands/change",\n\t\tmode: "emit"\n\t},\n\t{\n\t\tevent: "skills/change", // [seagull-93] skill catalog changes\n\t\tmode: "emit"\n\t},',
+    }], markers: ["[seagull-93] skill catalog changes"],
+  },
+  {
+    id: 94, name: "SKILL_MENU_CACHE_REFRESH", layer: "代码", layer_en: "Code",
+    desc: "技能变化清理各会话菜单缓存，修复市场安装后 / 菜单不可见 / refresh slash skill menus after catalog changes",
+    file: ["skill-client"], optional: true, skipIfMarked: true,
+    replacements: [{
+      pattern: '\t\t\tctx.remote.$on("plugin-manager/changed", clearAll);',
+      replace: '\t\t\tctx.remote.$on("plugin-manager/changed", clearAll);\n\t\t\tctx.remote.$on("skills/change", clearAll); // [seagull-94] refresh installed skills',
+    }], markers: ["[seagull-94] refresh installed skills"],
+  },
+];
+
+export const ALL_PATCHES = [...PATCHES, ...CODE_PATCHES, ...ENGINE_PATCHES, ...NEW_TOOL_PATCHES, ...SEAGULL_SKILL_PATCHES];
 
 /** Read the installed request contract; saving a prompt does not imply a host patch was applied. */
 export function systemFieldExtracted(aiBase = findAiBase()) {
@@ -6839,6 +6860,12 @@ export function targetFiles(aiBase, dshHome = findDshHome()) {
     ]),
     "conversation-client": allExisting([
       ...nestedPkg(aiBase, "dsh-client-ui-conversation", "lib", "client.js"),
+    ]),
+    "api-remotes": allExisting([
+      ...nestedPkg(aiBase, "dsh-api-remotes", "lib", "index.js"),
+    ]),
+    "skill-client": allExisting([
+      ...nestedPkg(aiBase, "dsh-client-ui-skill", "lib", "client.js"),
     ]),
     "tool-todo": allExisting([
       ...nestedPkg(aiBase, "dsh-tool-todo", "lib", "index.js"),

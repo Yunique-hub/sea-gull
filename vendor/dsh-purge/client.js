@@ -6113,6 +6113,18 @@ body[data-ds-dark-theme] .dshp-rewind-item span{color:var(--dsw-alias-label-tert
       const [msg, setMsg] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
       const [folderPath, setFolderPath] = React.useState('')
+      const [installJob, setInstallJob] = React.useState(null)
+      React.useEffect(() => {
+        let active = true
+        const refreshInstall = () => api({ op: 'platformToolkitInstallStatus' }).then(r => {
+          if (!active) return
+          setInstallJob(r && r.job)
+          if (r && r.job && r.job.state !== 'running' && installJob && installJob.state === 'running') load()
+        }).catch(() => {})
+        refreshInstall()
+        const timer = setInterval(refreshInstall, 1000)
+        return () => { active = false; clearInterval(timer) }
+      }, [installJob && installJob.state])
 
       const applyDraftFrom = (r) => {
         const c = (r && r.config) || {}
@@ -6179,6 +6191,24 @@ body[data-ds-dark-theme] .dshp-rewind-item span{color:var(--dsw-alias-label-tert
       }
 
       const setTool = (id, value) => setDraft((d) => d ? Object.assign({}, d, { tools: Object.assign({}, d.tools, { [id]: value }) }) : d)
+      const chooseFolder = async () => {
+        try {
+          const picker = globalThis.__DSH_DIRECTORY_PICKER__
+          if (!picker || typeof picker.pick !== 'function') { setMsg({ err: '当前宿主没有原生目录选择器，请直接填写绝对路径' }); return }
+          const selected = await picker.pick()
+          if (selected) setFolderPath(typeof selected === 'string' ? selected : selected.path || '')
+        } catch (e) { setMsg({ err: '选择目录失败：' + String(e.message || e) }) }
+      }
+      const installTools = () => {
+        const dir = String(folderPath || '').trim()
+        if (!dir) { setMsg({ err: '请先选择工具安装目录' }); return }
+        setBusy(true); setMsg(null)
+        api({ op: 'platformInstallToolkit', dir }).then(r => {
+          setBusy(false)
+          if (!r || !r.ok) { setMsg({ err: r && r.error || '启动安装失败' }); return }
+          setInstallJob(r.job)
+        }, e => { setBusy(false); setMsg({ err: String(e.message || e) }) })
+      }
       const setEnv = (key, value) => setDraft((d) => d ? Object.assign({}, d, { env: Object.assign({}, d.env, { [key]: value }) }) : d)
 
       const runtime = (data && data.runtime) || {}
@@ -6198,7 +6228,7 @@ body[data-ds-dark-theme] .dshp-rewind-item span{color:var(--dsw-alias-label-tert
           h('span', { className: 'rt-tag' + (found ? ' rt-tag-live' : ' rt-tag-warn') }, '工具 ' + found + '/' + tools.length),
           h('div', { className: 'rt-spacer' }),
           h('button', { className: 'rt-btn', disabled: busy, onClick: load }, busy ? '读取中…' : '刷新'),
-          h('button', { className: 'rt-btn rt-btn-primary', disabled: busy || !draft, onClick: save }, '保存')),
+          h('button', { className: 'rt-btn rt-btn-primary', disabled: busy || !draft || installJob && installJob.state === 'running', onClick: save }, '保存')),
         h('div', { className: 'rt-pane', style: { minHeight: 0 } },
         err ? h('div', { className: 'rt-err' }, err) : null,
         msg ? h('div', { className: msg.err ? 'rt-err' : 'rt-foot' }, msg.err || msg.ok) : null,
@@ -6206,21 +6236,29 @@ body[data-ds-dark-theme] .dshp-rewind-item span{color:var(--dsw-alias-label-tert
           adapt.message
             || '均可选填：留空则用默认路径/自动查找。填了的覆盖默认。密钥类只在需要测绘/反弹时才填。'),
         h('div', { className: 'rt-card', style: { margin: '0 0 8px', fontSize: 12, lineHeight: 1.6 } },
-          h('div', { style: { fontWeight: 600, marginBottom: 6 } }, '整包文件夹 → 自动分配工具'),
+          h('div', { style: { fontWeight: 600, marginBottom: 6 } }, '工具安装目录'),
           h('div', { style: { marginBottom: 8, opacity: 0.9 } },
-            '工具都在同一个文件夹（含子目录）时，填路径后点「自动分配」：会写入 toolkitDir，并按文件名匹配 nmap / nuclei / fscan 等填到下方。'),
+            '选择目录后点「一键安装并配置」：保留已有工具，下载缺失的官方发布文件、校验 SHA-256 并保存路径。需要驱动或没有官方可用程序的项目会单独列出原因。'),
           h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
             h('input', {
-              className: 'rt-input', style: { flex: 1 },
+              className: 'rt-input', style: { flex: 1 }, 'aria-label': '工具安装目录',
               placeholder: '例如 D:\\pentest-tools 或 /opt/toolkit',
               value: folderPath,
               onChange: (e) => setFolderPath(e.target.value),
               onKeyDown: (e) => { if (e.key === 'Enter') assignFolder() },
             }),
+            h('button', { className: 'rt-btn', disabled: busy || installJob && installJob.state === 'running', onClick: chooseFolder }, '选择文件夹'),
             h('button', {
-              className: 'rt-btn rt-btn-primary', disabled: busy,
+              className: 'rt-btn rt-btn-primary', disabled: busy || installJob && installJob.state === 'running',
               onClick: assignFolder,
-            }, busy ? '扫描中…' : '自动分配'))),
+            }, busy ? '扫描中…' : '扫描已有工具'),
+            h('button', { className: 'rt-btn rt-btn-primary', disabled: busy || installJob && installJob.state === 'running', onClick: installTools }, installJob && installJob.state === 'running' ? '正在安装…' : '一键安装并配置')),
+          installJob ? h('div', { role: 'status', style: { marginTop: 8 } },
+            h('div', null, ({ running: '正在安装', complete: '全部配置完成', partial: '已完成可安装项目，请查看下方待处理项', failed: '安装失败', interrupted: '上次安装被中断，可重新安装继续' })[installJob.state] || installJob.state),
+            installJob.error ? h('div', { className: 'rt-err' }, installJob.error) : null,
+            (installJob.tools || []).map(item => h('div', { key: item.id, style: { marginTop: 4 } },
+              item.label + '：' + (item.message || ({ checking: '检查中', extracting: '解压中' })[item.state] || item.state)
+              + (item.state === 'downloading' && item.total ? ' ' + Math.floor(100 * (item.bytes || 0) / item.total) + '%' : '')))) : null),
         data && data.hint ? h('div', { className: 'rt-card', style: { margin: '0 0 8px', fontSize: 12, lineHeight: 1.6 } }, data.hint) : null,
         data && data.egress ? h('div', { className: 'rt-card', style: { margin: '0 0 8px', fontSize: 12, lineHeight: 1.55 } },
           h('div', { style: { fontWeight: 600, marginBottom: 6 } }, '出网状态（借鉴 Z3r0 egress，只读）'),

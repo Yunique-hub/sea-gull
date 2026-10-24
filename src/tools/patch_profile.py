@@ -55,6 +55,18 @@ MARKET_BUNDLE_CHECK = '''function isPatchApplied(cfg, profile, name) {
 }
 '''
 
+MARKET_INSTALLED_NAME = '''// seagull: resolve the installed scoped dependency before verifying it.
+function resolveInstalledName(cfg, profile, plugin) {
+    const name = resolveInstallName(plugin);
+    const pkg = readProfilePackage(cfg, profile);
+    const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
+    if (Object.hasOwn(deps, name)) return name;
+    const candidates = Object.keys(deps).filter(key =>
+        key.split("/").at(-1) === name.split("/").at(-1) && readInstalledPackage(cfg, profile, key)?.name === key);
+    return candidates.length === 1 ? candidates[0] : name;
+}
+'''
+
 
 def load(fp: Path):
     data = json.loads(fp.read_text(encoding="utf-8-sig"),
@@ -208,13 +220,13 @@ def cmd_repair_market(fp: Path, version: str) -> int:
     return 0
 
 
-def cmd_sync_plugin(home: Path, profile: str) -> int:
+def cmd_sync_plugin(home: Path, profile: str, name: str = DEFAULT_NAME) -> int:
     if not re.fullmatch(r"[\w.-]+", profile) or profile in (".", ".."):
         raise ValueError("profile 名称无效")
-    source = home / "plugins" / DEFAULT_NAME
-    target = home / "profiles" / profile / "node_modules" / DEFAULT_NAME
+    source = home / "plugins" / name
+    target = home / "profiles" / profile / "node_modules" / name
     manifest = load(source / "package.json")
-    if manifest.get("name") != DEFAULT_NAME or not target.parent.is_dir():
+    if manifest.get("name") != name or not target.parent.is_dir():
         raise ValueError("插件或 node_modules 不存在")
     files = [p for p in source.rglob("*") if p.is_file()]
     if any(p.is_symlink() for p in source.rglob("*")):
@@ -261,6 +273,18 @@ def cmd_market_runtime(fp: Path) -> int:
         start = text.index("function isPatchApplied(cfg, profile, name) {")
         end = text.index("/** cordis 型插件四态验证 */", start)
         updates[target] = text[:start] + MARKET_BUNDLE_CHECK + text[end:]
+    text = updates.get(target, text)
+    if '// seagull: a skill directory alone is not an invocable skill' not in text and 'if (existsSync(dir)) {' in text:
+        text = text.replace('if (existsSync(dir)) {', 'if (existsSync(join(dir, "SKILL.md"))) { // seagull: a skill directory alone is not an invocable skill', 1)
+        text = text.replace('技能目录不存在：${opts.name}', '技能缺少 SKILL.md 或尚未安装：${opts.name}')
+        updates[target] = text
+    if "const name = resolveInstallName(plugin);" in text and "// seagull: resolve the installed scoped dependency" not in text:
+        text = text.replace("const name = resolveInstallName(plugin);", "const name = resolveInstalledName(cfg, opts.profile ?? \"web\", plugin);")
+        text = text.replace("export function verifyAfterInstall", MARKET_INSTALLED_NAME + "export function verifyAfterInstall", 1)
+        updates[target] = text
+    if 'key.split("/").at(-1) === name && readInstalledPackage' in text:
+        text = text.replace('key.split("/").at(-1) === name && readInstalledPackage', 'key.split("/").at(-1) === name.split("/").at(-1) && readInstalledPackage')
+        updates[target] = text
     installed_file = core / "dist" / "installed.js"
     installed = installed_file.read_text(encoding="utf-8")
     if "// seagull: scan the selected profile only" not in installed:
@@ -268,6 +292,21 @@ def cmd_market_runtime(fp: Path) -> int:
         if installed.count(anchor) != 1:
             raise ValueError("市场扫描代码不匹配，停止修改")
         updates[installed_file] = 'import { readSettings } from "./config.js";\n// seagull: scan the selected profile only\n' + installed.replace(anchor, "if (!profile.isDirectory() || profile.name !== readSettings(cfg).profile)")
+    installed = updates.get(installed_file, installed)
+    repo_first = '''            const byRepo = byName.get(pkg);
+            if (byRepo)
+                return byRepo;
+            const byScopedFull = byFull.get(`${scope}/${pkg}`);
+            if (byScopedFull)
+                return byScopedFull;'''
+    if repo_first in installed:
+        updates[installed_file] = installed.replace(repo_first, '''            // seagull: prefer the exact owner over a same-name fork
+            const byScopedFull = byFull.get(`${scope}/${pkg}`);
+            if (byScopedFull)
+                return byScopedFull;
+            const byRepo = byName.get(pkg);
+            if (byRepo)
+                return byRepo;''', 1)
     for target, text in updates.items():
         backup(target)
         temporary = None
