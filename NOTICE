@@ -17,9 +17,11 @@
 | 文件 | 差异 |
 |---|---|
 | `vendor/dsh-purge/NOTICE.md` | 海鸥快照、兼容修复与验证范围说明 |
-| `vendor/dsh-purge/client.js` | 保留项目创建、错误反馈、操作互斥与项目页面隔离；不挂载首启用户须知弹窗 |
+| `vendor/dsh-purge/client.js` | 保留项目创建、错误反馈、操作互斥与项目页面隔离；不挂载首启用户须知弹窗；1.0.8 起面板提示「恢复默认」会先备份提示词 |
 | `vendor/dsh-purge/cordis.patch.yml` | 海鸥 file 安装显式挂载一个主模块并启用自动应用 |
-| `vendor/dsh-purge/lib/core.js` | 保留上下文迁移、消息/子代理适配、插话与人格持久化修复；86 条本地定义 |
+| `vendor/dsh-purge/lib/core.js` | 保留上下文迁移、消息/子代理适配、插话与人格持久化修复；86 条本地定义；1.0.8 起「恢复默认」前自动备份 `prompt-inject.md.bak-<时间戳>`，并让显式保存优先于血统战标记判定 |
+| `vendor/dsh-purge/lib/default-prompt-inject.md` | 加密槽源文件，与 `src/prompt/prompt-inject.md` 逐字节同源（1.0.8 单源化；上游同名文件此前仅在构建期存在） |
+| `vendor/dsh-purge/.gitignore` | 仅新增一条例外规则，让上面那份槽源可以入库（上游默认忽略该文件） |
 | `vendor/dsh-purge/lib/identity.js` | 识别旧版执行者预设，保留子角色身份路径 |
 | `vendor/dsh-purge/lib/index.js` | 实际消息状态读取，保留原有扩展并始终安装新版本地靶场限制 |
 | `vendor/dsh-purge/lib/official-update-runtime.ps1` | 本地 Windows 更新保护脚本，仅处理已验证的 runtime 联接 |

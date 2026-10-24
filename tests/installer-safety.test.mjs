@@ -28,7 +28,7 @@ function fixture(t, shell) {
   write(path.join(repo, 'VERSION'), 'test');
   write(profile, original);
   write(path.join(other, 'profiles/desktop/package.json'), original);
-  for (const file of ['src/prompt/prompt-inject.md', 'src/rules/seagull-fullbreak.md', 'src/rules/seagull-fullbreak.json', 'src/skills/example/SKILL.md', 'src/skills/redteam/example.md']) {
+  for (const file of ['src/prompt/prompt-inject.md', 'vendor/dsh-purge/lib/default-prompt-inject.md', 'src/skills/example/SKILL.md', 'src/skills/redteam/example.md']) {
     write(path.join(repo, file), 'fixture');
   }
   write(path.join(repo, 'vendor/dsh-purge/package.json'), '{"name":"dsh-purge","version":"1.1.71","type":"module"}');
@@ -133,7 +133,7 @@ for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
 
   test(shell + ' rejects incomplete payload before touching the target', (t) => {
     const f = fixture(t, shell);
-    fs.unlinkSync(path.join(f.repo, 'src/rules/seagull-fullbreak.json'));
+    fs.unlinkSync(path.join(f.repo, 'vendor/dsh-purge/lib/default-prompt-inject.md'));
     const result = f.run({ 'no-pnpm': true });
     assert.notEqual(result.status, 0, result.stdout + result.stderr);
     assert.equal(fs.readFileSync(f.profile, 'utf8'), f.original);

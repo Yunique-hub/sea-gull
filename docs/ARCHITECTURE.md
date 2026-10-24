@@ -26,7 +26,7 @@ lib/identity.js          身份段篡改 + ChatML 信封处理 + 插值转义
 lib/phase1-keep.js       放宽官方 phase-1 白名单到 dsh-purge* / dshpg-*
 lib/hooks-deny.js        hooks deny/ask 旁路
 lib/net-scope.js         目标地域闸门（CN/HK/MO）+ 银行/交易所黑名单
-lib/rules.js             规则集（写 AGENTS.md / CLAUDE.md）
+lib/rules.js             规则集（写 AGENTS.md / CLAUDE.md）；1.0.8 起只服务用户自建的非人格规则
 lib/skills.js            技能库（写 $DSH_HOME/skills/<id>/SKILL.md）
 lib/redteam/*            演练台：5 角色预设 + SQLite 资产库 + HTTP UI 桥
 presets/redteam/*        红队指挥智能体
@@ -47,7 +47,7 @@ client.js               右侧 dock 前端（Clean / Drill）
 
 1. **密封桌面宿主**：官方 EXE 的 `@deepseek-ai/*` 全在 `resources/app.asar` 里。
    插件先解包到 `resources/app/`，打补丁，再把 `app.asar` 挪走，让 Electron 下次走解包目录。
-2. **提示词优先级**：`prompt-inject.md` > 当前目录勾选的 `AGENTS.md/CLAUDE.md` > 插件内加密槽默认值。
+2. **提示词优先级**：`prompt-inject.md` > 当前目录勾选的 `AGENTS.md/CLAUDE.md` > 插件内加密槽默认值。1.0.8 起加密槽与 `src/prompt/prompt-inject.md` 同源；人格只允许出现在 `prompt-inject.md` 里，`AGENTS.md` 不得承载人格（否则每会话注入两份）。
 3. **身份段**：用 `dsh-purge*` / `dshpg-*` 前缀插段（前者会被官方挪到最前，后者不会，
    用前缀绕开渲染顺序反转）。
 4. **地域闸门**：`agent/pre-step` 全局前置钩子，step 1 判断攻击类任务 + CN/HK/MO 目标 → 停轮。
@@ -80,7 +80,7 @@ install.sh / README        指向 laoshu666/hermes-seagull（不是本仓）    
 |---|---|---|
 | 1 | dsh-purge 1.1.72 全量作为宿主层引擎 | `vendor/dsh-purge/` |
 | 2 | SOUL.md 的 00a–00r 重写成 DSH 兼容注入提示词 | `src/prompt/prompt-inject.md` |
-| 3 | 同一份文本做成规则集（写 `AGENTS.md`） | `src/rules/seagull-fullbreak.{md,json}` |
+| 3 | ~~同一份文本做成规则集（写 `AGENTS.md`）~~ **1.0.8 取消**：宿主会读 `AGENTS.md`，等于第二份人格注入 | 旧规则集归档于 `docs/archive/` |
 | 4 | 5 个海鸥技能按 DSH 技能格式落地 | `src/skills/seagull-*/SKILL.md` |
 | 5 | 23 个红队技能一并落地 | `src/skills/redteam/*.md` |
 | 6 | ★ `regionGate` 变可配置，本仓库默认 `false` | `vendor/dsh-purge/lib/index.js` + `cordis.patch.yml` |
@@ -147,7 +147,7 @@ SOUL.md 不能直接当 DSH 提示词，必须处理三件事：
 | 路径 | 谁维护 | 升级方式 |
 |---|---|---|
 | `vendor/dsh-purge/` | 上游与本地兼容修复 | 换版本时按 NOTICE 复核本地差异并验证 |
-| `src/prompt/` `src/rules/` `src/skills/` | 本项目 | 直接改 + 重跑 `install.sh` |
+| `src/prompt/` `src/skills/` | 本项目 | 直接改 + 重跑 `install.sh`；人格只此一份，勿再投向 `AGENTS.md` |
 | `install.*` `verify.*` `tests/` | 本项目 | 同上 |
 | `$DSH_HOME/skills/` | 用户 | 安装器只覆盖同名技能，不删其他 |
 

@@ -103,7 +103,7 @@ if ($DryRun) {
   Say "  1. 插件      $SrcPlugin → $PlugDir"
   Say "  2. profile   $ProfDir\package.json"
   Say "  3. pnpm      $(if ($NoPnpm -or -not $Node -or -not $Pnpm) { '跳过' } else { 'install @ ' + $ProfDir })"
-  Say "  4. 资产      prompt-inject.md / rules / skills → $DH"
+  Say "  4. 资产      prompt-inject.md / skills（单源，无 rules 副本） → $DH"
   if ($Apply) { Say "  5. Apply     desktop 会解 asar 且需宿主退出" }
   Say ""
   Write-Host "--DryRun：未改动任何文件" -ForegroundColor Yellow
@@ -123,7 +123,8 @@ if ($LASTEXITCODE -ne 0) { Die "profile 校验失败，未修改安装文件" }
 if (-not $Uninstall) {
   foreach ($required in @("vendor\dsh-purge\package.json", "vendor\dsh-purge\cordis.patch.yml",
       "vendor\dsh-purge\lib\index.js", "vendor\dsh-purge\bin\dsh-purge.js", "vendor\dsh-purge\lib\reapply-cli.js",
-      "src\prompt\prompt-inject.md", "src\rules\seagull-fullbreak.md", "src\rules\seagull-fullbreak.json")) {
+      "vendor\dsh-purge\lib\default-prompt-inject.md",
+      "src\prompt\prompt-inject.md")) {
     if (-not (Test-Path -LiteralPath (Join-Path $Here $required) -PathType Leaf)) { Die "安装包缺少: $required" }
   }
   if (-not (Test-Path -LiteralPath (Join-Path $Here "src\skills") -PathType Container)) { Die "安装包缺少: src/skills" }
@@ -156,6 +157,9 @@ if ($Uninstall) {
   Remove-Item -Recurse -Force $PlugDir -ErrorAction SilentlyContinue
   Remove-Item -Force (Join-Path $DH "prompt-inject.md") -ErrorAction SilentlyContinue
   Remove-Item -Force (Join-Path $DH "rules\seagull-fullbreak.md"), (Join-Path $DH "rules\seagull-fullbreak.json") -ErrorAction SilentlyContinue
+  Remove-Item -Force (Join-Path $DH "rules\archived\seagull-fullbreak.md"), (Join-Path $DH "rules\archived\seagull-fullbreak.json") -ErrorAction SilentlyContinue
+  $ruleState = Join-Path $DH "rules\state.json"
+  if ((Test-Path $ruleState) -and ((Get-Content -LiteralPath $ruleState -Raw) -match 'seagull-fullbreak')) { Remove-Item -Force $ruleState }
   Remove-Item -Recurse -Force (Join-Path $ProfDir "node_modules\$PluginId") -ErrorAction SilentlyContinue
   Ok "已删插件与注入文件（skills 保留）"
   Say ""
@@ -205,7 +209,7 @@ if (-not $NoPnpm -and $Node -and $Pnpm) {
 }
 
 # ── 4. 资产 ─────────────────────────────────────────────────────
-Step "落地提示词 / 规则集 / 技能"
+Step "落地提示词 / 技能（单源：人格只落 prompt-inject.md）"
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $pi = Join-Path $DH "prompt-inject.md"
 if ($Update -and (Test-Path -LiteralPath $pi) -and (Get-Item -LiteralPath $pi).Length -gt 0) {
@@ -216,9 +220,13 @@ if ($Update -and (Test-Path -LiteralPath $pi) -and (Get-Item -LiteralPath $pi).L
   if (Test-Path $pi) { Copy-Item $pi "$pi.bak-$stamp" -Force }
   Copy-Item (Join-Path $Here "src\prompt\prompt-inject.md") $pi -Force
 }
-New-Item -ItemType Directory -Force -Path (Join-Path $DH "rules") | Out-Null
-Copy-Item (Join-Path $Here "src\rules\seagull-fullbreak.md")   (Join-Path $DH "rules\seagull-fullbreak.md")   -Force
-Copy-Item (Join-Path $Here "src\rules\seagull-fullbreak.json") (Join-Path $DH "rules\seagull-fullbreak.json") -Force
+# 单源化迁移：1.0.7 及更早版本把同一份人格同时落到 rules\ 与 prompt-inject.md，
+# 而宿主会读 AGENTS.md —— 规则集被写成 AGENTS.md 后就变成第二次人格注入。
+# 这里清掉人格规则副本与激活状态；rules\ 目录保留给用户自己的非人格规则。
+Remove-Item -Force (Join-Path $DH "rules\seagull-fullbreak.md"), (Join-Path $DH "rules\seagull-fullbreak.json") -ErrorAction SilentlyContinue
+Remove-Item -Force (Join-Path $DH "rules\archived\seagull-fullbreak.md"), (Join-Path $DH "rules\archived\seagull-fullbreak.json") -ErrorAction SilentlyContinue
+$ruleState = Join-Path $DH "rules\state.json"
+if ((Test-Path $ruleState) -and ((Get-Content -LiteralPath $ruleState -Raw) -match 'seagull-fullbreak')) { Remove-Item -Force $ruleState }
 Get-ChildItem (Join-Path $Here "src\skills") -Directory | ForEach-Object {
   if ($_.Name -eq "redteam") { return }
   $dst = Join-Path $DH "skills\$($_.Name)"

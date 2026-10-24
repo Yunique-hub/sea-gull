@@ -109,7 +109,12 @@ if [ -f "$DH/prompt-inject.md" ]; then
   grep -q "全破内核" "$DH/prompt-inject.md" 2>/dev/null \
     && chk "注入是海鸥全破内核" 1 "已确认" || chk "注入是海鸥全破内核" 0 "内容不符"
 fi
-chk "规则集" "$([ -f "$DH/rules/seagull-fullbreak.md" ] && echo 1 || echo 0)" "rules/seagull-fullbreak.md"
+# 单源化（1.0.8）：人格只走 prompt-inject.md；rules\ 下不得再有副本，AGENTS.md 不得含人格指纹。
+chk "人格规则副本已清（单源）" "$([ ! -f "$DH/rules/seagull-fullbreak.md" ] && echo 1 || echo 0)" "rules/seagull-fullbreak.md 不应存在"
+if [ -f "$DH/AGENTS.md" ]; then
+  grep -qE "全破内核|Little Code Sauce|PRIME DIRECTIVE" "$DH/AGENTS.md" 2>/dev/null \
+    && chk "AGENTS.md 无人格指纹" 0 "第二注入点仍含人格" || chk "AGENTS.md 无人格指纹" 1 "已去人格"
+fi
 SK="$(ls -1 "$DH/skills" 2>/dev/null | wc -l | tr -d ' ')"
 chk "技能已落地 >= 6" "$([ "${SK:-0}" -ge 6 ] && echo 1 || echo 0)" "${SK} 个目录"
 

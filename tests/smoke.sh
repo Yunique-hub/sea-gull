@@ -37,7 +37,7 @@ echo "── 2. files-only 安装（跳过 pnpm）──"
 bash "$ROOT/install.sh" --dsh-home "$TMP/dsh" --app-root "$TMP/not-installed" --profile desktop --no-pnpm -q
 [ -f "$TMP/dsh/plugins/dsh-purge/package.json" ] || fail "插件未就位"
 [ -f "$TMP/dsh/prompt-inject.md" ]               || fail "prompt-inject.md 未落地"
-[ -f "$TMP/dsh/rules/seagull-fullbreak.md" ]     || fail "规则集未落地"
+[ ! -e "$TMP/dsh/rules/seagull-fullbreak.md" ]   || fail "单源化后不应再落人格规则副本（会经 AGENTS.md 二次注入）"
 [ ! -d "$TMP/dsh/skills/redteam" ]              || fail "新版不应重新分发已下架的旧技能库"
 [ -d "$TMP/dsh/skills/seagull-reverse" ]         || fail "海鸥技能未落地"
 pass "文件全部落地"

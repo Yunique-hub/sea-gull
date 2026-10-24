@@ -197,7 +197,8 @@ fi
 if [ "$UNINSTALL" = 0 ]; then
   for required in vendor/dsh-purge/package.json vendor/dsh-purge/cordis.patch.yml \
       vendor/dsh-purge/lib/index.js vendor/dsh-purge/bin/dsh-purge.js vendor/dsh-purge/lib/reapply-cli.js \
-      src/prompt/prompt-inject.md src/rules/seagull-fullbreak.md src/rules/seagull-fullbreak.json; do
+      vendor/dsh-purge/lib/default-prompt-inject.md \
+      src/prompt/prompt-inject.md; do
     [ -f "$ROOT/$required" ] || die "安装包缺少: $required"
   done
   [ -d "$ROOT/src/skills" ] || die "安装包缺少: src/skills"
@@ -229,7 +230,11 @@ if [ "$UNINSTALL" = 1 ]; then
     || die "profile 移除失败，保留插件文件"
   rm -rf "$PLUGIN_DIR" "$DSH_HOME/prompt-inject.md" \
          "$DSH_HOME/rules/seagull-fullbreak.md" "$DSH_HOME/rules/seagull-fullbreak.json" \
+         "$DSH_HOME/rules/archived/seagull-fullbreak.md" "$DSH_HOME/rules/archived/seagull-fullbreak.json" \
          "$PROFILE_DIR/node_modules/$PLUGIN_ID"
+  if [ -f "$DSH_HOME/rules/state.json" ] && grep -q 'seagull-fullbreak' "$DSH_HOME/rules/state.json"; then
+    rm -f "$DSH_HOME/rules/state.json"
+  fi
   ok "已删插件与注入文件（$DSH_HOME/skills 保留，不误删你自己的技能）"
   say ""
   say "重启 DeepSeek Harness 生效。若 app.asar 被挪走过，先放回去："
@@ -279,7 +284,7 @@ if [ "$NO_PNPM" = 0 ] && [ -n "$NODE_EMB" ] && [ -n "$PNPM_EMB" ]; then
 fi
 
 # ── 4. 资产落地（幂等 + 备份）──────────────────────────────────────
-step "落地提示词 / 规则集 / 技能"
+step "落地提示词 / 技能（单源：人格只落 prompt-inject.md）"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 put() { if [ -e "$2" ]; then cp -r "$2" "$2.bak-$STAMP"; fi; cp -r "$1" "$2"; }
 if [ "$UPDATE" = 1 ] && [ -s "$DSH_HOME/prompt-inject.md" ]; then
@@ -288,9 +293,12 @@ if [ "$UPDATE" = 1 ] && [ -s "$DSH_HOME/prompt-inject.md" ]; then
 else
   put "$ROOT/src/prompt/prompt-inject.md" "$DSH_HOME/prompt-inject.md"
 fi
-mkdir -p "$DSH_HOME/rules"
-cp "$ROOT/src/rules/seagull-fullbreak.md"   "$DSH_HOME/rules/seagull-fullbreak.md"
-cp "$ROOT/src/rules/seagull-fullbreak.json" "$DSH_HOME/rules/seagull-fullbreak.json"
+# 单源化迁移：清掉 1.0.7 及更早版本的人格规则副本与激活状态（宿主会读 AGENTS.md）。
+rm -f "$DSH_HOME/rules/seagull-fullbreak.md" "$DSH_HOME/rules/seagull-fullbreak.json" \
+      "$DSH_HOME/rules/archived/seagull-fullbreak.md" "$DSH_HOME/rules/archived/seagull-fullbreak.json"
+if [ -f "$DSH_HOME/rules/state.json" ] && grep -q 'seagull-fullbreak' "$DSH_HOME/rules/state.json"; then
+  rm -f "$DSH_HOME/rules/state.json"
+fi
 mkdir -p "$DSH_HOME/skills"
 for d in "$ROOT"/src/skills/*/; do
   id="$(basename "$d")"

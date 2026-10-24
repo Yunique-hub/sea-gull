@@ -140,7 +140,9 @@ curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh
 
 ### 层 2 · 提示词层 ✅
 
-注入的是海鸥全破内核（13 节行为契约），**不是**插件内置默认人格。
+注入的是海鸥全破内核（**整合版 v2**：25 域能力层 + CTF 契约 + 路由 + 确定性输出槽，加人格、输出机、原义锁定、破甲协议、执行纪律），
+并且**只有一份** —— 只走 `prompt-inject.md`。`AGENTS.md` 自 1.0.8 起是不含人格的宿主级工程约定，
+`rules\` 只留给用户自建的非人格规则；插件加密槽与人格源逐字节同源，所以面板「恢复默认」恢复的还是这一份。
 插件不会往 prompt 里塞任何额外禁令（`ownServerNote()` 是空壳、`withOwnServers()` 短路）。
 
 ### 层 3 · 行为层 ✅
@@ -193,6 +195,7 @@ bash verify-e2e.sh       # 端到端：金丝雀注入 + 出活 + A/B 对照（�
 ```
 
 插件内置默认人格是上游作者的「小码酱」，**不可能**吐这句 —— 所以注入确实是我们这份。
+（1.0.8 起加密槽与 `src/prompt/prompt-inject.md` 同源，这条判定对「恢复默认」后同样成立。）
 
 **A/B 对照**（同题、一份挂插件一份不挂）：
 
@@ -228,8 +231,7 @@ bash verify-e2e.sh       # 端到端：金丝雀注入 + 出活 + A/B 对照（�
 ├── verify.sh / verify.ps1        真机安装校验
 ├── verify-e2e.sh                 端到端行为验证
 ├── src/
-│   ├── prompt/prompt-inject.md   全破内核提示词（会话注入正文）
-│   ├── rules/                    规则集（写 AGENTS.md）
+│   ├── prompt/prompt-inject.md   全破内核提示词（唯一人格源，会话注入正文）
 │   ├── skills/                   5 海鸥 + 23 红队 = 28 个技能
 │   └── tools/patch_profile.py    profile JSON 幂等改写/摘出
 ├── vendor/dsh-purge/             上游宿主层引擎（保留其 LICENSE，改动见 NOTICE）

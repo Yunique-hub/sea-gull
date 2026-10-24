@@ -25,6 +25,8 @@ _archive/
 # 嵌入前的提示词原文
 lib/default-prompt-inject.md
 default-prompt-inject.md
+# [seagull] 例外：1.0.8 起该文件是海鸥的唯一人格源（与 src/prompt/prompt-inject.md 同源），必须入库
+!lib/default-prompt-inject.md
 
 # 本机官方安装包、解包目录、拆出的压缩包
 /deepseek-harness-*.exe

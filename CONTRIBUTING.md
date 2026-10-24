@@ -14,7 +14,7 @@ CI 会在 ubuntu + windows 上跑同一套。本地不过的不要在 PR 里赌�
 | 路径 | 放什么 | 注意 |
 |---|---|---|
 | `src/prompt/` | 注入提示词 | **不能出现** `{{ }}`（除 `cwd`/`model`/`provider`），不能有 ChatML 标签 |
-| `src/rules/` | 规则集 | `seagull-fullbreak.md` 与 `prompt-inject.md` 保持同步（互相备份用） |
+| `src/rules/`（已移除） | — | 1.0.8 起人格只走 `src/prompt/prompt-inject.md`；旧规则集移到 `docs/archive/`，**禁止再随包投放** —— 它会被写成 `AGENTS.md`，而宿主会读 `AGENTS.md`，等于注入第二份人格 |
 | `src/skills/` | 技能 | 目录名 `[a-z0-9-]`，必须有 `SKILL.md` 带 `name`/`description` frontmatter |
 | `vendor/dsh-purge/` | 上游引擎 | **尽量不改**；若必须改，同步更新 `NOTICE` 的改动表 |
 | `tests/` | 测试 | 必须能不装 DSH 就跑（假 `DSH_HOME`） |

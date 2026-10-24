@@ -43,7 +43,7 @@ cd "$DSH_HOME/profiles/desktop" && node /path/to/pnpm.cjs install
 | 4 | `vendor/dsh-purge` → `$DSH_HOME/plugins/dsh-purge` | 已有的先备份成 `.bak` |
 | 5 | 改 profile `package.json`（加依赖 + bundle） | 自动备份 `.bak-seagull`；原子替换失败保留原文件，停止后续步骤 |
 | 6 | 在该 profile 目录 `pnpm install`，检查依赖实际存在 | 失败非零退出；主动 `--no-pnpm` 跳过时仅报告文件部署完成 |
-| 7 | 落 `prompt-inject.md` / `rules/` / `skills/` | 已有的加时间戳备份 |
+| 7 | 落 `prompt-inject.md` / `skills/`（人格单源；同时清理 1.0.7 遗留的 `rules/seagull-fullbreak.*` 与激活状态） | 已有的加时间戳备份 |
 | 8 | （`--apply` 时）解 asar + 打补丁 | 见 §3 |
 
 **幂等**：重复执行不会重复追加 bundle，不会破坏已有配置。
@@ -124,7 +124,7 @@ bash install.sh --uninstall
 会：
 - 跑 `dsh-purge --revert` 还原宿主补丁
 - 从 profile `package.json` 摘掉依赖与 bundle
-- 删 `plugins/dsh-purge`、`prompt-inject.md`、`rules/seagull-fullbreak.*`
+- 删 `plugins/dsh-purge`、`prompt-inject.md`、`rules/seagull-fullbreak.*`（含 `rules/archived/` 里的历史副本及其激活状态）
 - **保留 `$DSH_HOME/skills`**（不误删你自己的技能）
 
 若 asar 被挪走过，记得放回：

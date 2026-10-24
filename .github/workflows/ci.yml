@@ -59,7 +59,8 @@ jobs:
         run: |
           set -e
           for p in VERSION LICENSE NOTICE README.md install.sh install.ps1 update.sh update.ps1 verify.sh verify.ps1 \
-                   src/prompt/prompt-inject.md src/rules/seagull-fullbreak.md src/rules/seagull-fullbreak.json \
+                   src/prompt/prompt-inject.md vendor/dsh-purge/lib/default-prompt-inject.md \
+                   docs/archive/seagull-fullbreak-1.0.7.json \
                    src/tools/patch_profile.py src/skills/redteam vendor/dsh-purge/lib/index.js \
                    vendor/dsh-purge/LICENSE vendor/dsh-purge/NOTICE vendor/dsh-purge/LICENSE-COMMERCIAL.md; do
             [ -e "$p" ] || { echo "缺: $p"; exit 1; }
@@ -97,6 +98,6 @@ jobs:
       - name: JSON 合法
         run: |
           set -e
-          for f in vendor/dsh-purge/package.json src/rules/seagull-fullbreak.json; do
+          for f in vendor/dsh-purge/package.json docs/archive/seagull-fullbreak-1.0.7.json; do
             node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" && echo "OK $f"
           done

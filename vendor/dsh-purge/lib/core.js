@@ -8085,11 +8085,15 @@ export function isKeepableUserOverride(dshHome, text) {
   const incoming = normalizeOverride(text);
   if (!incoming) return false;
   if (incoming === normalizeOverride(defaultOverrideText())) return false;
-  if (looksLikePluginDefault(text)) return false;
   const state = readOverrideStateSync(dshHome);
+  // [seagull] 显式保存优先于血统标记。用户的正文通常保留 ChatML 外壳
+  // （<|im_start|>system: / <project_instructions> / 人格名），若让血统标记先判，
+  // 启动同步会把用户改过的正文当成插件旧默认整段刷掉。#种子哈希仍需挡在后面：
+  // 「插件自己写下去的旧默认」靠 state.hash / seedHash 识别。
+  if (state.explicitSave === true || state.customized === true) return true;
+  if (looksLikePluginDefault(text)) return false;
   // Older releases recorded a hash even for customized text. The explicit
   // customization flag must take precedence over that ownership stamp.
-  if (state.explicitSave === true || state.customized === true) return true;
   const stamp = hashOverride(text);
   if (typeof state?.seedHash === "string" && state.seedHash === stamp) return false;
   if (overrideTextIsOurs(state, text)) return false;
@@ -8227,8 +8231,23 @@ export async function installOverride(dshHome, force = false) {
     await markOverrideCustomized(dshHome, false, bundled);
     return "exists";
   }
+  // [seagull] 显式「恢复默认」前先把现有正文备份成 prompt-inject.md.bak-<stamp>。
+  // 2026-10-24 事故：点一次恢复默认就把用户人格无痕换成插件默认，全盘无备份可回滚。
+  let backupPath = "";
+  if (force) {
+    try {
+      if (fs.existsSync(fp)) {
+        const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+        backupPath = `${fp}.bak-${stamp}`;
+        await fsp.copyFile(fp, backupPath);
+      }
+    } catch {
+      backupPath = "";
+    }
+  }
   await fsp.writeFile(fp, bundled, "utf8");
   await markOverrideCustomized(dshHome, false, bundled);
+  if (backupPath) console.warn(`[dsh-purge] 原提示词已备份 → ${backupPath}`);
   return "wrote";
 }
 

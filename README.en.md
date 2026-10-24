@@ -74,7 +74,7 @@ bundled node/pnpm are auto-detected; without an install root it degrades to file
 
 ## One-click update
 
-Finish active tasks and fully exit Harness first. The updater fetches the latest main snapshot on every run, refreshes the plugin and bundled rules/skills, and preserves the saved prompt, client preferences, project databases, and extra skills. Restart Harness afterwards and follow the Apply instructions. This updates Seagull; official Harness upgrades still use the official installer.
+Finish active tasks and fully exit Harness first. The updater fetches the latest main snapshot on every run, refreshes the plugin and the five bundled skills, and preserves the saved prompt, client preferences, project databases, and extra skills. The persona ships as a single file (`prompt-inject.md`); the installer also removes the legacy `rules/seagull-fullbreak.*` copy left by 1.0.7 and earlier, because that copy was written into `AGENTS.md` and injected a second persona. Restart Harness afterwards and follow the Apply instructions. This updates Seagull; official Harness upgrades still use the official installer.
 
 ```powershell
 irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 | iex
@@ -91,7 +91,7 @@ With an up-to-date local checkout, use `powershell -File install.ps1 -Update` or
 | Layer | Status |
 |---|---|
 | **1. Host policy** — approval gates, sandboxes, hooks deny/ask, pre-step region gate, stock identity, tool-surface trimming, inject-preservation | ✅ removed / neutered |
-| **2. Prompt** — injects the Seagull full-break core, no leftover restrictions | ✅ |
+| **2. Prompt** — a single source: `prompt-inject.md` carries the Seagull full-break core (capability layer + behaviour layer); `AGENTS.md` is engineering-only; no `rules/` persona copy | ✅ |
 | **3. Behaviour** — no keyword refusal, no downgrade, literal-intent, real execution | ✅ |
 | **4. Model weights** — trained-in alignment | ❌ **not promised** |
 

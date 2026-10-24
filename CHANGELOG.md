@@ -3,6 +3,23 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.8] - 2026-10-24
+
+### Changed
+
+- **人格单源化**：人格正文只由 `$DSH_HOME/prompt-inject.md`（源 `src/prompt/prompt-inject.md`）提供；`AGENTS.md` 改为不含人格的宿主级工程约定。1.0.7 及更早版本把同一份文本同时写成 `rules/seagull-fullbreak.md`，并由 `activateRule()` 整文件覆盖 `AGENTS.md` —— 而宿主会读 `AGENTS.md`，等于每个会话注入两份互相冲突的人格。旧规则集归档到 `docs/archive/seagull-fullbreak-1.0.7.{md,json}`；安装 / 更新 / 卸载都会清理运行目录里的遗留副本与激活状态。
+- 提示词换为整合版（25 域能力层 + CTF 契约 + 路由 + 确定性输出槽；人格 + 输出机 + 原义锁定 + 破甲协议 + 执行纪律），不含 ChatML 标签，符合 `CONTRIBUTING.md` 对 `src/prompt/` 的约定。
+
+### Fixed
+
+- 插件加密槽按同一份人格源重新封装：面板「恢复默认提示词」恢复的是 `src/prompt/prompt-inject.md`，不再把上游默认人格（小码酱）写进用户目录。
+- 「恢复默认」覆盖前自动备份为 `prompt-inject.md.bak-<时间戳>`，面板提示备份路径（此前一次点击即可无痕替换用户人格，且无备份可回滚）。
+- `isKeepableUserOverride()`：显式保存（`explicitSave`）优先于血统战标记判定。此前用户改过的正文若保留 ChatML 外壳，会被当成「插件旧默认」，在启动同步时被整段刷回默认槽。
+
+### Added
+
+- `tests/single-prompt-source.test.mjs`：断言人格源唯一、加密槽源与人格源逐字节一致、加密槽解包等于人格源、安装器不再投放规则副本、历史规则集归档到位。
+
 ## [1.0.7] - 2026-10-24
 
 ### Fixed

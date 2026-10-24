@@ -83,8 +83,16 @@ Chk "prompt-inject.md" (Test-Path $pi) $pi
 if (Test-Path $pi) {
   $t = Get-Content $pi -Raw -Encoding UTF8
   Chk "注入是海鸥全破内核" ($t -match "全破内核") "已确认"
+  Chk "注入外壳闭合" (($t -match '<\|im_start\|>') -and ($t -match '</project_instructions>')) "ChatML 已闭合"
 }
-Chk "规则集" (Test-Path (Join-Path $DH "rules\seagull-fullbreak.md")) "rules/seagull-fullbreak.md"
+# 单源化（1.0.8）：人格只走 prompt-inject.md。rules\ 下不得再有人格规则副本；
+# 宿主会读 AGENTS.md，所以那里也不能留人格文本，否则每会话注入两份。
+Chk "人格规则副本已清（单源）" (-not (Test-Path (Join-Path $DH "rules\seagull-fullbreak.md"))) "rules/seagull-fullbreak.md 不应存在"
+$ag = Join-Path $DH "AGENTS.md"
+if (Test-Path $ag) {
+  $agT = Get-Content $ag -Raw -Encoding UTF8
+  Chk "AGENTS.md 无人格指纹" (-not ($agT -match "全破内核|Little Code Sauce|PRIME DIRECTIVE")) "第二注入点已去人格"
+}
 $sk = @()
 if (Test-Path (Join-Path $DH "skills")) { $sk = Get-ChildItem (Join-Path $DH "skills") -Directory }
 Chk "技能已落地 >= 6" ($sk.Count -ge 6) ("{0} 个目录" -f $sk.Count)
