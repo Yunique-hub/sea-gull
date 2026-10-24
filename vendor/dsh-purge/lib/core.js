@@ -1,7 +1,7 @@
 import nodeFs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -8234,16 +8234,10 @@ export async function installOverride(dshHome, force = false) {
   // [seagull] 显式「恢复默认」前先把现有正文备份成 prompt-inject.md.bak-<stamp>。
   // 2026-10-24 事故：点一次恢复默认就把用户人格无痕换成插件默认，全盘无备份可回滚。
   let backupPath = "";
-  if (force) {
-    try {
-      if (fs.existsSync(fp)) {
-        const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
-        backupPath = `${fp}.bak-${stamp}`;
-        await fsp.copyFile(fp, backupPath);
-      }
-    } catch {
-      backupPath = "";
-    }
+  if (force && fs.existsSync(fp)) {
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+    backupPath = `${fp}.bak-${stamp}-${randomUUID()}`;
+    await fsp.copyFile(fp, backupPath, nodeFs.constants.COPYFILE_EXCL);
   }
   await fsp.writeFile(fp, bundled, "utf8");
   await markOverrideCustomized(dshHome, false, bundled);

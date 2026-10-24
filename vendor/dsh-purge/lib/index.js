@@ -2204,7 +2204,7 @@ function installWebServer(ctx, cfg) {
           if (request.method === "POST") {
             try {
               const body = await readJsonBody(request);
-              const content = typeof body?.content === "string" ? body.content : null;
+              const content = body?.resetDefault === true ? core.defaultOverrideText() : typeof body?.content === "string" ? body.content : null;
               if (content === null) {
                 sendJson(response, 400, { ok: false, error: "content must be a string" });
                 return;
@@ -2219,13 +2219,14 @@ function installWebServer(ctx, cfg) {
                 });
                 return;
               }
-              const saved = await core.saveOverrideContent(home, content);
+              if (body?.resetDefault === true) await core.installOverride(home, true);
+              else await core.saveOverrideContent(home, content);
               const hung = refreshHungOperator(home);
               const ui = await core.readOverrideForUi(home);
               sendJson(response, 200, {
                 ok: true,
                 content: hung.text,
-                defaultContent: saved.defaultContent,
+                defaultContent: ui.defaultContent,
                 customized: ui.customized,
                 usingDefault: ui.usingDefault,
                 path: ui.path,

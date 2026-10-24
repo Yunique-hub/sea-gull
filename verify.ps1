@@ -65,7 +65,7 @@ if ($App) {
     if (Test-Path $sp) {
       $id = (Select-String -Path $sp -Pattern "You are an AI agent powered by DeepSeek Harness" -ErrorAction SilentlyContinue).Count
       Chk "官方身份句已剥" ($id -eq 0) "$id 处"
-      $kp = (Select-String -Path $sp -Pattern "complete prompt keeps inject" -ErrorAction SilentlyContinue).Count
+      $kp = (Select-String -Path $sp -Pattern "complete prompt keeps (waterfall )?inject|fold-complete inject first" -ErrorAction SilentlyContinue).Count
       Chk "注入保留标记" ($kp -gt 0) "$kp 处"
     }
   }
@@ -83,7 +83,6 @@ Chk "prompt-inject.md" (Test-Path $pi) $pi
 if (Test-Path $pi) {
   $t = Get-Content $pi -Raw -Encoding UTF8
   Chk "注入是海鸥全破内核" ($t -match "全破内核") "已确认"
-  Chk "注入外壳闭合" (($t -match '<\|im_start\|>') -and ($t -match '</project_instructions>')) "ChatML 已闭合"
 }
 # 单源化（1.0.8）：人格只走 prompt-inject.md。rules\ 下不得再有人格规则副本；
 # 宿主会读 AGENTS.md，所以那里也不能留人格文本，否则每会话注入两份。
@@ -93,15 +92,14 @@ if (Test-Path $ag) {
   $agT = Get-Content $ag -Raw -Encoding UTF8
   Chk "AGENTS.md 无人格指纹" (-not ($agT -match "全破内核|Little Code Sauce|PRIME DIRECTIVE")) "第二注入点已去人格"
 }
-$sk = @()
-if (Test-Path (Join-Path $DH "skills")) { $sk = Get-ChildItem (Join-Path $DH "skills") -Directory }
-Chk "技能已落地 >= 6" ($sk.Count -ge 6) ("{0} 个目录" -f $sk.Count)
+$sk = @("seagull-reverse", "seagull-pentest", "seagull-exploit", "seagull-game-hack", "seagull-license-security")
+$missingSkills = @($sk | Where-Object { -not (Test-Path (Join-Path $DH "skills\$_\SKILL.md")) })
+Chk "五个海鸥技能已落地" ($missingSkills.Count -eq 0) ("缺失 {0} 个" -f $missingSkills.Count)
 
 $cp = Get-Content "$Plug\cordis.patch.yml" -Raw
-Chk "regionGate: false" ($cp -match "regionGate:\s*false") "地域闸门已关"
 Chk "hooksDenyBypass: true" ($cp -match "hooksDenyBypass:\s*true") "hook deny 旁路开"
 $idx = Get-Content "$Plug\lib\index.js" -Raw
-Chk "index.js 开关" ($idx -match "cfg\.regionGate !== false") "代码级开关存在"
+Chk "本地靶场检查已挂载" ($idx -match "installRegionGate\(ctx\)") "保留上游工具执行前检查"
 
 Write-Host ""
 $color = if ($Fail -eq 0) { "Green" } else { "Yellow" }

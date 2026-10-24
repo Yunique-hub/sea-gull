@@ -4,7 +4,9 @@
 
 One-line install · idempotent · uninstallable · backed by evidence
 
-**v1.0.7 targets the official Windows Harness 0.2.1-rc.3** with **dsh-purge 1.1.78**, pinned to upstream master commit [fd109e1](https://github.com/YuJunZhiXue/dsh-purge/tree/fd109e106ce5818b3c00524123a3431e4afc0e81). All 98 upstream Git blobs were verified.
+**v1.0.9 targets the official Windows Harness 0.2.1-rc.3** with **dsh-purge 1.1.78**, pinned to upstream master commit [fd109e1](https://github.com/YuJunZhiXue/dsh-purge/tree/fd109e106ce5818b3c00524123a3431e4afc0e81). All 98 upstream Git blobs were verified.
+
+Version 1.0.9 stops a prompt reset if its backup fails and gives every backup a unique filename. Runtime verification now accepts the current injection markers, plain Markdown persona and five native skills, and checks that the local-lab gate remains installed. See the [project review](docs/PROJECT-REVIEW-2026-10-25.md) and [desktop verification M](docs/VERIFICATION.md#m-109-全面审查与桌面回归2026-10-25).
 
 Update mode also repairs an **existing** market installation to the verified 0.4.16: BOM settings, stale nested dependencies, bundle verification, and mixed profile listings. Users without the market do not receive it. Actual purge runtime files are checked after pnpm, including same-version updates. See [verification K](docs/VERIFICATION.md#k-插件市场与-purge-运行副本修复2026-10-24).
 
@@ -38,7 +40,7 @@ it removes the host-side policy gates one by one and replaces the persona layer.
 
 | Component | Provides |
 |---|---|
-| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.77 | Host compatibility, console, evidence ledger and local-lab checks; 86 local patch definitions |
+| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.78 | Host compatibility, console, evidence ledger and local-lab checks; 86 local patch definitions |
 | [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | Seagull persona + 5 domain skills |
 
 This is not a stack of two tarballs: `SOUL.md` cannot be used as a DSH prompt as-is

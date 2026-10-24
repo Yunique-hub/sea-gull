@@ -3,6 +3,19 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.9] - 2026-10-25
+
+### Fixed
+
+- 桌面「恢复默认」按钮原先调用普通保存接口，未触发备份；现在显式调用备份后恢复。备份失败时停止覆盖；同一秒重复恢复使用独立备份，避免覆盖较早的用户正文。
+- PowerShell / Bash 真机校验兼容当前注入标记与纯 Markdown 人格，逐项检查五个海鸥技能和仍启用的本地靶场检查，移除过时的地域开关断言。
+- README 与插件海鸥托管版本信息同步。
+
+### Added
+
+- 备份失败、同时间戳重复恢复及双脚本当前运行态的正反例回归。
+- 本轮项目审查及桌面验收记录，见 `docs/PROJECT-REVIEW-2026-10-25.md`、`docs/VERIFICATION.md` M 节。
+
 ## [1.0.8] - 2026-10-24
 
 ### Changed

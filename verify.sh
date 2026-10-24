@@ -87,7 +87,7 @@ if [ -n "$APP" ]; then
     if [ -f "$SP" ]; then
       ID=$(grep -c "You are an AI agent powered by DeepSeek Harness" "$SP" 2>/dev/null | tr -d ' ')
       chk "官方身份句已剥" "$([ "${ID:-1}" = "0" ] && echo 1 || echo 0)" "${ID} 处"
-      KP=$(grep -c "complete prompt keeps inject" "$SP" 2>/dev/null | tr -d ' ')
+      KP=$(grep -cE "complete prompt keeps (waterfall )?inject|fold-complete inject first" "$SP" 2>/dev/null | tr -d ' ')
       chk "注入保留标记" "$([ "${KP:-0}" -gt 0 ] && echo 1 || echo 0)" "${KP} 处"
     fi
   else
@@ -115,17 +115,16 @@ if [ -f "$DH/AGENTS.md" ]; then
   grep -qE "全破内核|Little Code Sauce|PRIME DIRECTIVE" "$DH/AGENTS.md" 2>/dev/null \
     && chk "AGENTS.md 无人格指纹" 0 "第二注入点仍含人格" || chk "AGENTS.md 无人格指纹" 1 "已去人格"
 fi
-SK="$(ls -1 "$DH/skills" 2>/dev/null | wc -l | tr -d ' ')"
-chk "技能已落地 >= 6" "$([ "${SK:-0}" -ge 6 ] && echo 1 || echo 0)" "${SK} 个目录"
+for skill in seagull-reverse seagull-pentest seagull-exploit seagull-game-hack seagull-license-security; do
+  chk "技能 $skill" "$([ -f "$DH/skills/$skill/SKILL.md" ] && echo 1 || echo 0)" ""
+done
 
-# 8. 全破开关
+# 8. 当前宿主检查
 CP="$PLUG/cordis.patch.yml"
-grep -q "regionGate: *false" "$CP" 2>/dev/null && chk "regionGate: false" 1 "地域闸门已关" \
-  || chk "regionGate: false" 0 ""
 grep -q "hooksDenyBypass: *true" "$CP" 2>/dev/null && chk "hooksDenyBypass: true" 1 "hook deny 旁路开" \
   || chk "hooksDenyBypass: true" 0 ""
-grep -q "cfg.regionGate !== false" "$PLUG/lib/index.js" 2>/dev/null && chk "index.js 开关" 1 "代码级开关存在" \
-  || chk "index.js 开关" 0 ""
+grep -q 'installRegionGate(ctx)' "$PLUG/lib/index.js" 2>/dev/null && chk "本地靶场检查已挂载" 1 "保留上游工具执行前检查" \
+  || chk "本地靶场检查已挂载" 0 ""
 
 echo
 printf '通过 %d 项，失败 %d 项\n' "$PASS" "$FAIL"
