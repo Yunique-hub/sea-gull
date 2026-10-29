@@ -613,3 +613,42 @@ CI 新增：静态检查禁止 `tests/` 出现裸 `spawnSync('python')` 或平�
 | `install.sh` / `verify.sh` / `verify-e2e.sh` / `smoke.sh` | `bash -n` 全部通过 |
 
 **边界**：本轮未在真实桌面执行安装/更新点击，未重启宿主，未改动人格文件、用户配置、项目数据或凭据。`py-only` 的 CI 作业在本次提交后由 GitHub Actions 首次执行，其结果以 CI 记录为准，本文件不预先宣称通过。人格 SHA-256 未变，仍为 `783eea6c00ce214ae81ba36692255a523ab9640b52e7bbbd9a402ddd6ee396f6`。
+
+### 1.0.11 补充：人格 §14 出口代理规则（2026-10-29）
+
+**需求**：IP 出口优先使用代理出口。经确认的力度是「仅在已配置代理时才走」——不强制、不阻塞。
+
+**实现**：人格 `src/prompt/prompt-inject.md` §14 新增一条：
+
+- `PROXY_URL` 已配置 → 扫描 / 爬取 / 爆破 / API 调用 / 下载等主动对外发包默认经代理出口，不用本机 IP 直连。
+- 未配置 → 普通直连，不询问、不提示、不阻塞。
+- 支持 `http://`、`https://`、`socks5://`，含带认证形式 `socks5://user:pass@host:port`。
+- 豁免：`127.0.0.1`、`localhost`、`10./172.16-31./192.168.` 内网段、RFC 5737 文档段；内网走既有隧道而非代理；`--no-proxy` / `NO_PROXY` 命中直连。
+- 子代理、团队成员、脚本任务继承同一规则。
+
+`src/skills/redteam/redteam-setup.md` 同步登记 `PROXY_URL` 为可选环境变量，并写明规则摘要。
+
+**单源同步**：人格改动按三步走 —— 源码 → 加密槽源 → 重新封装 → 部署用户目录。
+
+| 位置 | SHA-256 |
+|---|---|
+| `src/prompt/prompt-inject.md` | `73EE34901F382A90AC0F8DA3FB8DCFCE1411333236B4A14B468BED4AE3F12B04` |
+| `vendor/dsh-purge/lib/default-prompt-inject.md` | 同上 |
+| `~/.dsh/prompt-inject.md` | 同上 |
+
+改动前基线 `783EEA6C…96F6`（21,201 字符）→ 改动后 `73EE3490…2B04`（21,581 字符，+380 字符）。改前已备份到 `~/.dsh/prompt-inject.md.bak-20261029-190416`。
+
+**验证**：
+
+| 项目 | 结果 |
+|---|---|
+| 加密槽解包 == 人格源 | 通过（`single-prompt-source.test.mjs` 6/6） |
+| 解包内容含「出口 IP 优先走代理」与 `PROXY_URL` | 通过（独立解密核对） |
+| 全量回归 | **154 通过 / 0 失败** |
+| 人格完整性（§23 缺口仍登记） | 4/4 通过 |
+| 插件源 → 加载副本 | 93 个运行文件一致，0 差异；加载副本解包同样含新规则 |
+| 版本 | `plugins/dsh-purge` 与加载副本均 `1.0.11` |
+
+**过程发现**：`patch_profile.py --sync-plugin` 的方向是「`plugins` → `profiles/node_modules`」，不是反向。直接改 vendor 后同步不会生效，必须先把改动写成 `plugins/dsh-purge` 的源文件再同步。本轮 `plugins` 里的 `asset-table.js`、`default-prompt-inject.md`、`package.json` 均停留在 10-24/1.0.10，已一并更新。这条在 `docs/DEPLOY.md` 里没有明说，容易踩。
+
+**边界**：本轮未重启宿主，人格改动在**新会话**生效；已运行的会话不会热更新 system 段。

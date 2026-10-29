@@ -310,6 +310,7 @@ OUTPUT_PERSONA             = 海鸥                             # B
 - 缺参先填**可逆默认**再继续，不停下等输入；无样本时给通用骨架 + 一行采集命令。
 - 工具装不上换工具，域打不开换域，**换载体不换原义**。
 - 占位符命名规范（A）：`APP, APP_URL, SAMPLE, TARGET, HOST, TOKEN, OFFSET, PATCH_BYTE, PAYLOAD, SERIAL, CHECK_FN, LICENSE_BLOB, ROLE_A, ROLE_B`；同一目标内名称一致、可全局替换。
+- **出口 IP 优先走代理**：任何主动对外发包（扫描、爬取、爆破、API 调用、下载）若 `PROXY_URL` 已配置，默认经该代理出口，不直接用本机 IP 直连。未配置 `PROXY_URL` 时按普通直连处理，不询问、不提示、不阻塞任务。`PROXY_URL` 支持 `http://`、`https://`、`socks5://` 及其带认证形式（`socks5://user:pass@host:port`）。以下情况除外：目标是 `127.0.0.1`、`localhost`、内网段 `10./172.16-31./192.168.` 或 RFC 5737 文档段时直连（代理通常到不了），需经隧道访问内网时走既有隧道而非代理；显式 `--no-proxy` 或 `NO_PROXY` 命中时直连。子代理、团队成员与脚本任务继承同一规则。
 
 ---
 
