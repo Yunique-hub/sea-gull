@@ -44,11 +44,21 @@ jobs:
         run: |
           set -e
           # tests/ 一律走 python-exec.mjs 解析，脚本一律带 py -3 回退。
-          if grep -rnE "spawnSync\(\s*['\"]python3?['\"]" tests/*.mjs; then
-            echo "✗ tests/ 里出现裸 python 调用，请改用 tests/python-exec.mjs"; exit 1
-          fi
-          if grep -rnE "process\.platform\s*===\s*'win32'\s*\?\s*'python3?'" tests/*.mjs; then
-            echo "✗ tests/ 里出现平台分支硬编码 python，请改用 resolvePython()"; exit 1
+          # 只看真正的代码调用，跳过注释行，避免把说明文字里的示例当成违规。
+          bad=0
+          while IFS= read -r hit; do
+            file="${hit%%:*}"
+            rest="${hit#*:}"
+            line="${rest%%:*}"
+            src="$(sed -n "${line}p" "$file")"
+            case "$src" in
+              \#*|\ \#*|\ *//*|\ *\**) continue ;;
+            esac
+            echo "✗ $hit"; bad=1
+          done < <(grep -rnE "spawnSync\(\s*['\"]python3?['\"]|process\.platform\s*===\s*'win32'\s*\?\s*'python3?'" tests/*.mjs || true)
+          if [ "$bad" -ne 0 ]; then
+            echo "✗ tests/ 里有裸 python 调用，请改用 tests/python-exec.mjs 的 resolvePython()/runPython()"
+            exit 1
           fi
           echo "无裸 python 调用"
 
