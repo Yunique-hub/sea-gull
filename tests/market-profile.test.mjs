@@ -1,20 +1,19 @@
 import assert from 'node:assert/strict';
-import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
+import {runPython} from './python-exec.mjs';
 
 const script=fileURLToPath(new URL('../src/tools/patch_profile.py',import.meta.url));
-const python=process.platform==='win32'?'python':'python3';
 function fixture(t,installed=true){
   const home=fs.mkdtempSync(path.join(os.tmpdir(),'seagull-market-'));
   t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
   const pkg=path.join(home,'profiles/desktop/package.json'),settings=path.join(home,'plugins/dsh-market/settings.json');
   fs.mkdirSync(path.dirname(pkg),{recursive:true});fs.mkdirSync(path.dirname(settings),{recursive:true});
   fs.writeFileSync(pkg,JSON.stringify({dependencies:installed?{'@dsh-market/plugin':'link:some-custom-market',other:'link:keep'}:{other:'link:keep'},dsh:{profile:{bundles:installed?['base','@dsh-market/plugin']:['base']}}}));
-  return {home,pkg,settings,run:()=>spawnSync(python,[script,'--repair-market',pkg,'0.4.16'],{encoding:'utf8'})};
+  return {home,pkg,settings,run:()=>runPython(script,['--repair-market',pkg,'0.4.16'])};
 }
 test('market repair normalizes BOM settings, selects the existing profile, and updates only an installed market',t=>{
   const f=fixture(t),original='\ufeff'+JSON.stringify({profile:'desktop',modeOverride:'custom',extra:{keep:true}});

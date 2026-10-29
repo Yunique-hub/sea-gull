@@ -67,7 +67,7 @@
 - 固定版本：0.1.26；提交 `230958db812ed34bcf2d1168e8157bbf5af04055`。
 - 作者：程序员阿江（Relakkes）；MIT，原始许可证保留在 `vendor/dsh-agent-teams/LICENSE`。
 - 复用运行 JS、类型、前端和内置团队资源；完整 TypeScript 源码及开发构建工具见固定上游提交。
-- 本地修改：`lib/command.js` 支持裸命令、默认自动执行与中文激活说明；`lib/index.js` 同步 usage 提示；`package.json` 增加托管标记与 rc.3 peer 范围。其余快照文件保持上游内容。
+- 本地修改：`lib/command.js` 支持裸命令、默认自动执行与中文激活说明；`lib/index.js` 同步 usage 提示；`package.json` 增加托管标记与 rc.3 peer 范围；`compatibility.json` 把 `recommendedHost` 与实际适配宿主 0.2.1-rc.3 对齐（此前停留在 rc.2，rc.3 落在「未声明但能跑」区间），由 `tests/agent-teams-compat.test.mjs` 保证它不再与 `vendor/dsh-purge/package.json` 的 `dshTarget` 漂移。其余快照文件保持上游内容。
 - 安装器挂载独立 bundle，不复制上游人格；卸载保留工作区团队档案。详情见 `docs/INTEGRATION-1.0.10.md`。
 
 ---

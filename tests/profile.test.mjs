@@ -5,16 +5,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { resolvePython } from './python-exec.mjs';
 
 const script = fileURLToPath(new URL('../src/tools/patch_profile.py', import.meta.url));
-const python = process.platform === 'win32' ? 'python' : 'python3';
+const python = resolvePython();
 
 function fixture(t, data) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'seagull-profile-'));
   t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
   const file = path.join(temp, 'package.json');
   fs.writeFileSync(file, data);
-  return { file, temp, run: (...args) => spawnSync(python, [script, ...args], { encoding: 'utf8' }) };
+  return { file, temp, run: (...args) => spawnSync(python.command, [...python.args, script, ...args], { encoding: 'utf8' }) };
 }
 
 test('profile accepts UTF-8 BOM and preserves unrelated configuration on add/remove', (t) => {
@@ -52,7 +53,7 @@ test('profile validation is read-only and allows missing optional fields', (t) =
 test('failed atomic replacement leaves original JSON and removes the temporary file', (t) => {
   const f = fixture(t, '{"dependencies":{}}');
   const code = `import importlib.util, pathlib, sys\nfrom unittest.mock import patch\nspec = importlib.util.spec_from_file_location('profile_patch', sys.argv[1])\nm = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(m)\nwith patch('os.replace', side_effect=OSError('replace failed')):\n    try:\n        m.cmd_add(pathlib.Path(sys.argv[2]), 'file:plugin', 'dsh-purge')\n    except OSError:\n        sys.exit(17)\n`;
-  const result = spawnSync(python, ['-c', code, script, f.file], { encoding: 'utf8' });
+  const result = spawnSync(python.command, [...python.args, '-c', code, script, f.file], { encoding: 'utf8' });
   assert.equal(result.status, 17, result.stderr);
   assert.equal(fs.readFileSync(f.file, 'utf8'), '{"dependencies":{}}');
   assert.deepEqual(fs.readdirSync(f.temp).sort(), ['package.json', 'package.json.bak-seagull']);

@@ -560,3 +560,56 @@ bash tests/smoke.sh
 | 用户数据 | 372 文件先备份；凭据与人格哈希不变；本次没有改写用户项目、已有技能、busyEnter 偏好或账号配置 |
 
 人格 SHA-256 仍为 `783eea6c00ce214ae81ba36692255a523ab9640b52e7bbbd9a402ddd6ee396f6`。技能验证采用原生 SKILL.md 协议与调用策略；不将两个测试技能的结果扩大成市场全部条目的业务验收。Windows 真机结果不代替 macOS/Linux 桌面验证。原始事件、会话、工具安装路径、配置备份和测试工作区仅存本地维护档案。
+
+---
+
+## O. 1.0.11 py-only 环境与测试脆弱性修复（2026-10-29）
+
+本轮不新增产品功能，只修「在只装 `py` 启动器的 Windows 上无法安装、且整批测试假失败」这一条链。
+
+### 复现与定位
+
+在具备 `python` 的普通环境跑 `node --test tests/*.test.mjs` 为 136 通过；把 `python`/`python3` 从 PATH 移除、只保留 `py` 后，同一套测试出现 **30+ 失败**。报错形态是 `spawnSync` 返回 `status: null`，看起来像大面积回归。
+
+逐项定位后分三类，全部与环境解析有关，不是产品逻辑缺陷：
+
+1. 7 个测试文件按 `process.platform === 'win32' ? 'python' : 'python3'` 取解释器，PATH 里没有该命令即整体失败。
+2. `install.ps1` 只用 `Get-Command python` 探测，找不到就 `Die "需要 python"`；`install.sh`、`verify.sh`、`verify-e2e.sh`、`tests/smoke.sh` 只在 `python`/`python3` 之间回退。
+3. `tests/smoke.sh` 在 Windows 上被 `C:\windows\system32\bash.exe`（WSL 存根）解释，存根在脚本执行前就拒绝，退出码 1。
+
+实测 Git Bash 下的解析结果：`command -v python` 与 `command -v python3` 均返回非零，`command -v py` 返回 `/c/windows/py`，且 `py -3 --version` 输出 `Python 3.11.4`。即「只有 py」是 Windows 官方安装方式的常态，不是异常。
+
+### 修改
+
+- `tests/python-exec.mjs`（新增）：按 `SEAGULL_PYTHON` → `python` → `python3` → `py -3` → `py` 解析，逐个用 `--version` 验证并匹配 `Python x.y`，失败时给出含 `SEAGULL_PYTHON` 的排查指引；结果缓存。
+- 7 个测试文件改为引用该模块（`managed-teams`、`market-profile`、`market-runtime`、`market-scoped-name`、`profile`、`runtime-sync`、`toolkit-install`）。
+- `install.ps1`：新增 `$PyArgs`，依次探测 `python` → `python3` → `py -3`，12 个调用点统一传 `@PyArgs`。
+- `install.sh`（13 处）、`verify.sh`、`verify-e2e.sh`（2 处）、`tests/smoke.sh`（3 处）：补 `py -3` 回退，统一 `PY_ARGS`。
+- `tests/run-bash.sh`（新增）：在「选择解释器」层挑真 bash（`SEAGULL_BASH` → `ProgramFiles/Git/bin/bash.exe` → `/bin/bash`），找不到则说明原因并退出 0。
+- `vendor/dsh-agent-teams/compatibility.json`：`recommendedHost` 由 `0.2.1-rc.2` 改为 `0.2.1-rc.3`，并加入 `supportedHosts`。
+
+### 新增回归
+
+| 测试 | 断言 |
+|---|---|
+| `python-exec.test.mjs` | 解析顺序、缓存、`SEAGULL_PYTHON` 覆盖、失败提示含排查指引 |
+| `run-bash.test.mjs` | 有真 bash 时透传执行；无真 bash 时输出跳过原因且退出 0 |
+| `version-sync.test.mjs` | `VERSION` 为唯一真源，`install.ps1`/`install.sh`/`seagull.version` 必须一致，`updateManaged` 必须为 true |
+| `agent-teams-compat.test.mjs` | `recommendedHost` 必须等于 `dsh-target` 且出现在 `supportedHosts`，版本不重复 |
+| `persona-integrity.test.mjs` | 章节号唯一、递增、无空标题；章号缺口与登记表一致（当前登记 §23） |
+
+CI 新增：静态检查禁止 `tests/` 出现裸 `spawnSync('python')` 或平台分支硬编码；新增 `py-only` 作业（Windows runner 不装 python，只靠 `py` 跑关键回归并验证安装器不误报缺 python）。
+
+### 验收结果
+
+| 项目 | 结果 |
+|---|---|
+| 回归（有 `python`） | **154 通过 / 0 失败 / 0 跳过** |
+| 回归（仅 `py`，无 `python`/`python3`） | **154 通过 / 0 失败 / 0 跳过** |
+| 修改前基线（仅 `py`） | 136 项中 30+ 失败 |
+| `tests/smoke.sh`（真 bash） | 装 / 幂等 / 卸 全闭环通过，退出码 0 |
+| `tests/run-bash.sh` 入口 | 透传通过；无真 bash 时跳过并退出 0 |
+| `install.ps1` | 保留 UTF-8 BOM（239,187,191）与 CRLF，Windows PowerShell 5.1 解析通过 |
+| `install.sh` / `verify.sh` / `verify-e2e.sh` / `smoke.sh` | `bash -n` 全部通过 |
+
+**边界**：本轮未在真实桌面执行安装/更新点击，未重启宿主，未改动人格文件、用户配置、项目数据或凭据。`py-only` 的 CI 作业在本次提交后由 GitHub Actions 首次执行，其结果以 CI 记录为准，本文件不预先宣称通过。人格 SHA-256 未变，仍为 `783eea6c00ce214ae81ba36692255a523ab9640b52e7bbbd9a402ddd6ee396f6`。

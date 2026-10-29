@@ -8,7 +8,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { installToolkit, toolkitDirectory } from '../vendor/dsh-purge/lib/redteam/tool-installer.js';
 import { TOOL_CATALOG, savePlatformConfig, loadPlatformConfig } from '../vendor/dsh-purge/lib/redteam/platform-config.js';
-const python = process.platform === 'win32' ? 'python' : 'python3';
+import { resolvePython } from './python-exec.mjs';
+const python = resolvePython();
 function fixture(t) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'seagull-toolkit-'));
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));
@@ -47,7 +48,7 @@ test('directory validation rejects relative paths and drive roots', () => {
 test('archive extraction rejects traversal and links before writing outside staging', t => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'seagull-archive-')); t.after(() => fs.rmSync(base, { recursive: true, force: true }));
   const archive = path.join(base, 'bad.zip'), destination = path.join(base, 'content'); fs.mkdirSync(destination);
-  const make = spawnSync(python, ['-c', 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1],"w"); z.writestr("../escape.exe",b"bad"); z.close()', archive]); assert.equal(make.status, 0);
-  const run = spawnSync(python, [fileURLToPath(new URL('../vendor/dsh-purge/lib/redteam/extract-tools.py', import.meta.url)), archive, destination], { encoding: 'utf8' });
+  const make = spawnSync(python.command, [...python.args, '-c', 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1],"w"); z.writestr("../escape.exe",b"bad"); z.close()', archive]); assert.equal(make.status, 0);
+  const run = spawnSync(python.command, [...python.args, fileURLToPath(new URL('../vendor/dsh-purge/lib/redteam/extract-tools.py', import.meta.url)), archive, destination], { encoding: 'utf8' });
   assert.notEqual(run.status, 0); assert.ok(!fs.existsSync(path.join(base, 'escape.exe')));
 });

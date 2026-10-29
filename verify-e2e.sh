@@ -41,6 +41,11 @@ for candidate in "$RT/primary-runtime/dependencies/python/python.exe" "$RT/prima
   [ -f "$candidate" ] && { PY="$candidate"; break; }
 done
 [ -n "$PY" ] || PY="$(command -v python || command -v python3 || true)"
+# Windows 官方安装只放 py 启动器；Git Bash 下 python/python3 往往都不存在。
+PY_ARGS=""
+if [ -z "$PY" ] && command -v py >/dev/null 2>&1; then
+  PY="$(command -v py)"; PY_ARGS="-3"
+fi
 DSH_HOME="${DSH_HOME:-$HOME/.dsh}"; [ -d "$DSH_HOME/profiles" ] || DSH_HOME="$HOME/.dsh"
 
 [ -f "$EXE" ]   || { echo "✗ 找不到宿主可执行文件"; exit 1; }
@@ -79,7 +84,7 @@ make_profile() { # name withPlugin
       || { echo "✗ profile $n 建不出来"; return 1; }
   fi
   if [ "$plug" = "1" ]; then
-    "$PY" "$(winpath "$HERE/src/tools/patch_profile.py")" \
+    "$PY" $PY_ARGS "$(winpath "$HERE/src/tools/patch_profile.py")" \
       "$(winpath "$p/package.json")" "file:../../plugins/dsh-purge" "dsh-purge" >/dev/null || return 1
     ( cd "$p" && MSYS_NO_PATHCONV=1 "$NODE_EMB" "$(winpath "$PNPM_EMB")" install --reporter=silent >/dev/null 2>&1 ) || return 1
   fi
@@ -108,7 +113,7 @@ if [ "$SKIP_AB" = "0" ]; then
     "$V/stock-run.txt"
 fi
 
-"$PY" - "$(winpath "$V")" <<'PY'
+"$PY" $PY_ARGS - "$(winpath "$V")" <<'PY'
 import os, re, sys
 V = sys.argv[1]
 def load(n):

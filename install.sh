@@ -8,7 +8,7 @@
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.0.10"
+VERSION="1.0.11"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
@@ -185,16 +185,25 @@ say "  4. 资产      prompt-inject.md / rules/ / skills/ → $DSH_HOME"
 if [ "$DRY" = 1 ]; then say ""; say "${C_Y}--dry-run：到此为止，未改动任何文件${C_0}"; exit 0; fi
 
 PY=""
+PY_ARGS=""
 if [ -n "$APP_ROOT" ]; then
   for p in "$APP_ROOT/resources/runtime/primary-runtime/dependencies/python/python.exe" \
            "$APP_ROOT/resources/runtime/primary-runtime/dependencies/python/bin/python3"; do
     [ -f "$p" ] && { PY="$p"; break; }
   done
 fi
-[ -n "$PY" ] || PY="$(command -v python || command -v python3 || true)"
-[ -n "$PY" ] || die "需要 python3（改 JSON 用）"
+# Windows 官方安装只放 py 启动器；Git Bash 下 python/python3 往往都不存在。
+if [ -z "$PY" ]; then
+  for cand in python python3; do
+    if command -v "$cand" >/dev/null 2>&1; then PY="$(command -v "$cand")"; break; fi
+  done
+fi
+if [ -z "$PY" ] && command -v py >/dev/null 2>&1; then
+  PY="$(command -v py)"; PY_ARGS="-3"
+fi
+[ -n "$PY" ] || die "需要 python3（已尝试 python / python3 / py -3；改 JSON 用）"
 
-"$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --validate "$(winpath "$PROFILE_DIR/package.json")" \
+"$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/patch_profile.py")" --validate "$(winpath "$PROFILE_DIR/package.json")" \
   || die "profile 校验失败，未修改安装文件"
 if [ "$UNINSTALL" = 0 ]; then
   for required in vendor/dsh-purge/package.json vendor/dsh-purge/cordis.patch.yml \
@@ -211,7 +220,7 @@ fi
 
 TEAMS_SOURCE="$ROOT/vendor/dsh-agent-teams"
 if [ "$UPDATE" = 0 ] && [ "$UNINSTALL" = 0 ] && [ -f "$TEAMS_SOURCE/package.json" ] && [ -z "$TOOLKIT_DIR" ]; then
-  TOOLKIT_DIR="$("$PY" -c 'import json, pathlib, sys; p=pathlib.Path(sys.argv[1]); print(json.loads(p.read_text(encoding="utf-8-sig")).get("toolkitDir", "") if p.exists() else "")' "$(winpath "$DSH_HOME/redteam/config.json")")"
+  TOOLKIT_DIR="$("$PY" $PY_ARGS -c 'import json, pathlib, sys; p=pathlib.Path(sys.argv[1]); print(json.loads(p.read_text(encoding="utf-8-sig")).get("toolkitDir", "") if p.exists() else "")' "$(winpath "$DSH_HOME/redteam/config.json")")"
   if [ -z "$TOOLKIT_DIR" ]; then
     if [ -t 0 ]; then read -r -p "首次安装：请输入工具安装目录（不覆盖已有工具）: " TOOLKIT_DIR
     elif [ -t 1 ] && [ -r /dev/tty ]; then read -r -p "首次安装：请输入工具安装目录（不覆盖已有工具）: " TOOLKIT_DIR </dev/tty
@@ -220,7 +229,7 @@ if [ "$UPDATE" = 0 ] && [ "$UNINSTALL" = 0 ] && [ -f "$TEAMS_SOURCE/package.json
   fi
 fi
 if [ "$UNINSTALL" = 0 ] && [ -n "$TOOLKIT_DIR" ]; then
-  "$PY" "$(winpath "$ROOT/src/tools/configure_toolkit.py")" "$(winpath "$DSH_HOME")" "$(winpath "$TOOLKIT_DIR")" --validate-only || die "工具安装目录无效，未修改安装文件"
+  "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/configure_toolkit.py")" "$(winpath "$DSH_HOME")" "$(winpath "$TOOLKIT_DIR")" --validate-only || die "工具安装目录无效，未修改安装文件"
 fi
 
 # 子进程只操作本次选定的目标，不继承其他 profile 的定位变量。
@@ -243,9 +252,9 @@ if [ "$UNINSTALL" = 1 ]; then
     ok "宿主补丁已还原"
   fi
   if [ -f "$ROOT/src/tools/managed_teams.py" ]; then
-    "$PY" "$(winpath "$ROOT/src/tools/managed_teams.py")" remove "$(winpath "$DSH_HOME")" "$PROFILE" || die "AgentTeams 卸载挂载失败"
+    "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/managed_teams.py")" remove "$(winpath "$DSH_HOME")" "$PROFILE" || die "AgentTeams 卸载挂载失败"
   fi
-  "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --remove "$(winpath "$PROFILE_DIR/package.json")" "$PLUGIN_ID" \
+  "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/patch_profile.py")" --remove "$(winpath "$PROFILE_DIR/package.json")" "$PLUGIN_ID" \
     || die "profile 移除失败，保留插件文件"
   rm -rf "$PLUGIN_DIR" "$DSH_HOME/prompt-inject.md" \
          "$DSH_HOME/rules/seagull-fullbreak.md" "$DSH_HOME/rules/seagull-fullbreak.json" \
@@ -279,12 +288,12 @@ ok "插件就位: $PLUGIN_DIR"
 
 # ── 2. 改写 profile ────────────────────────────────────────────────
 step "改写 profile"
-"$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" "$(winpath "$PROFILE_DIR/package.json")" "file:../../plugins/$PLUGIN_ID" "$PLUGIN_ID"
+"$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/patch_profile.py")" "$(winpath "$PROFILE_DIR/package.json")" "file:../../plugins/$PLUGIN_ID" "$PLUGIN_ID"
 if [ -f "$TEAMS_SOURCE/package.json" ]; then
-  "$PY" "$(winpath "$ROOT/src/tools/managed_teams.py")" stage "$(winpath "$DSH_HOME")" "$PROFILE" "$(winpath "$TEAMS_SOURCE")" || die "AgentTeams 部署失败，备份已保留"
+  "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/managed_teams.py")" stage "$(winpath "$DSH_HOME")" "$PROFILE" "$(winpath "$TEAMS_SOURCE")" || die "AgentTeams 部署失败，备份已保留"
 fi
 if [ "$UPDATE" = 1 ]; then
-  "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --repair-market "$(winpath "$PROFILE_DIR/package.json")" "0.4.16" \
+  "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/patch_profile.py")" --repair-market "$(winpath "$PROFILE_DIR/package.json")" "0.4.16" \
     || die "插件市场配置修复失败，备份已保留"
 fi
 
@@ -295,13 +304,13 @@ if [ "$NO_PNPM" = 0 ] && [ -n "$NODE_EMB" ] && [ -n "$PNPM_EMB" ]; then
   ( cd "$PROFILE_DIR" && "$NODE_EMB" "$PNPM_EMB" install --reporter=append-only ) \
     || die "pnpm install 失败：检查 registry / file: 路径后重试；备份已保留"
   [ -f "$PROFILE_DIR/node_modules/$PLUGIN_ID/package.json" ] || die "依赖未就位: node_modules/$PLUGIN_ID"
-  "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --sync-plugin "$(winpath "$DSH_HOME")" "$PROFILE" \
+  "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/patch_profile.py")" --sync-plugin "$(winpath "$DSH_HOME")" "$PROFILE" \
     || die "插件运行副本校验失败，备份已保留"
   if [ -f "$TEAMS_SOURCE/package.json" ]; then
-    "$PY" "$(winpath "$ROOT/src/tools/managed_teams.py")" sync "$(winpath "$DSH_HOME")" "$PROFILE" || die "AgentTeams 运行副本校验失败"
+    "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/managed_teams.py")" sync "$(winpath "$DSH_HOME")" "$PROFILE" || die "AgentTeams 运行副本校验失败"
   fi
   if [ "$UPDATE" = 1 ]; then
-    "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --market-runtime "$(winpath "$PROFILE_DIR/package.json")" \
+    "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/patch_profile.py")" --market-runtime "$(winpath "$PROFILE_DIR/package.json")" \
       || die "插件市场运行校验修复失败，备份已保留"
   fi
   DEPENDENCIES_READY=1
@@ -311,12 +320,12 @@ fi
 # ── 4. 资产落地（幂等 + 备份）──────────────────────────────────────
 step "落地提示词 / 技能（单源：人格只落 prompt-inject.md）"
 if [ -n "$TOOLKIT_DIR" ]; then
-  "$PY" "$(winpath "$ROOT/src/tools/configure_toolkit.py")" "$(winpath "$DSH_HOME")" "$(winpath "$TOOLKIT_DIR")" || die "工具安装目录保存失败"
+  "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/configure_toolkit.py")" "$(winpath "$DSH_HOME")" "$(winpath "$TOOLKIT_DIR")" || die "工具安装目录保存失败"
 fi
 STAMP="$(date +%Y%m%d-%H%M%S)"
 put() { if [ -e "$2" ]; then cp -r "$2" "$2.bak-$STAMP"; fi; cp -r "$1" "$2"; }
 if [ "$UPDATE" = 1 ] && [ -s "$DSH_HOME/prompt-inject.md" ]; then
-  "$PY" "$(winpath "$ROOT/src/tools/patch_profile.py")" --protect-prompt "$(winpath "$DSH_HOME")" || die "提示词保护失败，已停止更新"
+  "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/patch_profile.py")" --protect-prompt "$(winpath "$DSH_HOME")" || die "提示词保护失败，已停止更新"
   ok "已保留现有提示词"
 else
   put "$ROOT/src/prompt/prompt-inject.md" "$DSH_HOME/prompt-inject.md"

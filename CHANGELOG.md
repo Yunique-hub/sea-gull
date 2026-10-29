@@ -3,6 +3,29 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.11] - 2026-10-29
+
+### Fixed
+
+- **安装器在只有 `py` 启动器的 Windows 上拒绝安装**：`install.ps1` 只查找 `python`，找不到就直接 `Die "需要 python"`，尽管解释器明明装着。Windows 官方安装方式默认只放 `py` 启动器，因此这批机器无法安装。现按 `python` → `python3` → `py -3` 依次探测，`py` 分支带上 `-3` 参数。
+- **`install.sh` / `verify.sh` / `verify-e2e.sh` / `tests/smoke.sh` 同样的 `py` 缺口**：Git Bash 下 `python` 与 `python3` 通常都不存在（实测 `command -v python`、`command -v python3` 均失败，`py` 解析到 `/c/windows/py`）。四个脚本补上 `py -3` 回退。
+- **测试硬编码 `python` 导致整批假失败**：7 个测试文件按 `process.platform === 'win32' ? 'python' : 'python3'` 取解释器，在 `py`-only 机器上 30 多项失败，看着像大面积回归，实际产品无问题。新增 `tests/python-exec.mjs` 统一解析（`SEAGULL_PYTHON` 覆盖 → `python` → `python3` → `py -3`），失败时给出可读排查指引。
+- **`tests/smoke.sh` 在无 WSL 的 Windows 上退出 1**：Windows 的 `C:\windows\system32\bash.exe` 是 WSL 存根，没装发行版时连 `bash -c 'exit 0'` 都被拒绝，脚本根本无法被解释，脚本内部的任何探测都救不了。新增 `tests/run-bash.sh` 在「选择解释器」这一层挑真 bash，找不到则明确跳过并退出 0（环境缺失不等于回归失败）。
+- **AgentTeams 兼容声明落后于实际宿主**：`compatibility.json` 的 `recommendedHost` 停在 `0.2.1-rc.2`，而实际宿主与 `dshTarget` 都是 `0.2.1-rc.3`，rc.3 落在「未声明但能跑」区间，宿主再漂一个小版本就会以运行时异常暴露。现已对齐并由测试锁死。
+
+### Added
+
+- `tests/python-exec.mjs` + `tests/python-exec.test.mjs`：解释器解析顺序、`SEAGULL_PYTHON` 覆盖、失败提示的回归。
+- `tests/run-bash.sh` + `tests/run-bash.test.mjs`：真 bash 透传与「无真 bash 时跳过且退出 0」的回归。
+- `tests/version-sync.test.mjs`：`VERSION` 为唯一真源，`install.ps1`、`install.sh`、`vendor/dsh-purge` 的 `seagull.version` 必须一致，且 `updateManaged` 必须为 `true`。
+- `tests/agent-teams-compat.test.mjs`：`recommendedHost` 必须等于 `dsh-target`，且必须出现在 `supportedHosts` 中。
+- `tests/persona-integrity.test.mjs`：人格章节号必须唯一、递增、无空标题；章号缺口以显式登记表的形式锁住。当前登记缺口为 **§23**（人格 22 直接跳到 24，三处同源故三处同时缺失），属待确认语义归属的已知问题，补齐后测试会提示删除豁免声明。
+- CI 新增「禁止裸 python 调用」静态检查与 `py-only` 作业（Windows runner 不装 python，只靠 `py` 启动器跑关键回归）。
+
+### Changed
+
+- 测试总数 136 → **154**，在具备 `python` 与仅有 `py` 启动器两种环境下均为 154 通过 / 0 失败。
+
 ## [1.0.10] - 2026-10-25
 
 ### Fixed

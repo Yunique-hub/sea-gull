@@ -5,6 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { resolvePython } from './python-exec.mjs';
+
+const python = resolvePython();
 
 test('market verifies the actual scoped dependency and leaves ambiguous names unresolved', t => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'seagull-scoped-'));
@@ -33,7 +36,7 @@ export function verifyAfterInstall(cfg, plugin, opts) {
   return name;
 }`);
   const script = fileURLToPath(new URL('../src/tools/patch_profile.py', import.meta.url));
-  const run = () => spawnSync(process.platform === 'win32' ? 'python' : 'python3', [script, '--market-runtime', pkg], { encoding: 'utf8' });
+  const run = () => spawnSync(python.command, [...python.args, script, '--market-runtime', pkg], { encoding: 'utf8' });
   assert.equal(run().status, 0);
   const target = path.join(core, 'dist/verify.js'), source = fs.readFileSync(target, 'utf8');
   const resolve = new Function('resolveInstallName', 'readProfilePackage', 'readInstalledPackage', source.replace('export function', 'function') + ';return verifyAfterInstall;')(
@@ -65,7 +68,7 @@ export function verifyActivation(cfg, opts) {
   }
   return {state:'broken'};
 }`);
-  const r = spawnSync(process.platform === 'win32' ? 'python' : 'python3', [fileURLToPath(new URL('../src/tools/patch_profile.py', import.meta.url)), '--market-runtime', path.join(profile, 'package.json')], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr);
+  const r = spawnSync(python.command, [...python.args, fileURLToPath(new URL('../src/tools/patch_profile.py', import.meta.url)), '--market-runtime', path.join(profile, 'package.json')], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr);
   const verify = new Function('join', 'existsSync', fs.readFileSync(target, 'utf8').replace('export function', 'function') + ';return verifyActivation;')(path.join, fs.existsSync);
   const dir = path.join(home, 'skills/example'); fs.mkdirSync(dir, { recursive: true }); assert.equal(verify({skillsDir:path.dirname(dir)}, {name:'example'}).state, 'broken');
   fs.writeFileSync(path.join(dir, 'SKILL.md'), '---\nname: example\ndescription: fixture\n---\nFixture'); assert.equal(verify({skillsDir:path.dirname(dir)}, {name:'example'}).state, 'live');

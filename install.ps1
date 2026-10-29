@@ -19,7 +19,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 if ($Update -and $Uninstall) { throw "-Update 和 -Uninstall 不能同时使用" }
-$VERSION = "1.0.10"
+$VERSION = "1.0.11"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -112,14 +112,28 @@ if ($DryRun) {
 }
 
 $Py = ""
+$PyArgs = @()
 if ($AppRoot) {
   $embeddedPython = Join-Path $AppRoot "resources\runtime\primary-runtime\dependencies\python\python.exe"
   if (Test-Path $embeddedPython) { $Py = $embeddedPython }
 }
-if (-not $Py) { $Py = (Get-Command python -ErrorAction SilentlyContinue).Source }
-if (-not $Py) { Die "需要 python" }
+# Windows 官方安装只放 py 启动器，PATH 里常常没有 python。
+# 只认 python 会让这批机器直接 Die，尽管解释器明明装着。
+if (-not $Py) {
+  $cmd = Get-Command python -ErrorAction SilentlyContinue
+  if ($cmd) { $Py = $cmd.Source }
+}
+if (-not $Py) {
+  $cmd = Get-Command python3 -ErrorAction SilentlyContinue
+  if ($cmd) { $Py = $cmd.Source }
+}
+if (-not $Py) {
+  $cmd = Get-Command py -ErrorAction SilentlyContinue
+  if ($cmd) { $Py = $cmd.Source; $PyArgs = @("-3") }
+}
+if (-not $Py) { Die "需要 python（已尝试 python / python3 / py -3）" }
 
-& $Py (Join-Path $Here "src\tools\patch_profile.py") --validate (Join-Path $ProfDir "package.json")
+& $Py @PyArgs (Join-Path $Here "src\tools\patch_profile.py") --validate (Join-Path $ProfDir "package.json")
 if ($LASTEXITCODE -ne 0) { Die "profile 校验失败，未修改安装文件" }
 if (-not $Uninstall) {
   foreach ($required in @("vendor\dsh-purge\package.json", "vendor\dsh-purge\cordis.patch.yml",
@@ -145,7 +159,7 @@ if (-not $Update -and -not $Uninstall -and (Test-Path (Join-Path $TeamsSource "p
 }
 
 if (-not $Uninstall -and $ToolkitDir) {
-  & $Py (Join-Path $Here "src\tools\configure_toolkit.py") $DH $ToolkitDir --validate-only
+  & $Py @PyArgs (Join-Path $Here "src\tools\configure_toolkit.py") $DH $ToolkitDir --validate-only
   if ($LASTEXITCODE -ne 0) { Die "工具安装目录无效，未修改安装文件" }
 }
 
@@ -171,10 +185,10 @@ if ($Uninstall) {
   $cli = Join-Path $PlugDir "bin\dsh-purge.js"
   if ((Test-Path $cli) -and $Node) { Invoke-DshCli $cli @("--revert"); Ok "宿主补丁已还原" }
   if (Test-Path (Join-Path $Here "src\tools\managed_teams.py")) {
-    & $Py (Join-Path $Here "src\tools\managed_teams.py") remove $DH $Profile
+    & $Py @PyArgs (Join-Path $Here "src\tools\managed_teams.py") remove $DH $Profile
     if ($LASTEXITCODE -ne 0) { Die "AgentTeams 卸载挂载失败" }
   }
-  & $Py (Join-Path $Here "src\tools\patch_profile.py") --remove (Join-Path $ProfDir "package.json") $PluginId
+  & $Py @PyArgs (Join-Path $Here "src\tools\patch_profile.py") --remove (Join-Path $ProfDir "package.json") $PluginId
   if ($LASTEXITCODE -ne 0) { Die "profile 移除失败，保留插件文件" }
   Remove-Item -Recurse -Force $PlugDir -ErrorAction SilentlyContinue
   Remove-Item -Force (Join-Path $DH "prompt-inject.md") -ErrorAction SilentlyContinue
@@ -204,14 +218,14 @@ Ok "插件就位: $PlugDir"
 
 # ── 2. profile ──────────────────────────────────────────────────
 Step "改写 profile"
-& $Py (Join-Path $Here "src\tools\patch_profile.py") (Join-Path $ProfDir "package.json") "file:../../plugins/$PluginId" $PluginId
+& $Py @PyArgs (Join-Path $Here "src\tools\patch_profile.py") (Join-Path $ProfDir "package.json") "file:../../plugins/$PluginId" $PluginId
 if ($LASTEXITCODE -ne 0) { Die "profile 写入失败，备份已保留" }
 if (Test-Path (Join-Path $TeamsSource "package.json")) {
-  & $Py (Join-Path $Here "src\tools\managed_teams.py") stage $DH $Profile $TeamsSource
+  & $Py @PyArgs (Join-Path $Here "src\tools\managed_teams.py") stage $DH $Profile $TeamsSource
   if ($LASTEXITCODE -ne 0) { Die "AgentTeams 部署失败，备份已保留" }
 }
 if ($Update) {
-  & $Py (Join-Path $Here "src\tools\patch_profile.py") --repair-market (Join-Path $ProfDir "package.json") "0.4.16"
+  & $Py @PyArgs (Join-Path $Here "src\tools\patch_profile.py") --repair-market (Join-Path $ProfDir "package.json") "0.4.16"
   if ($LASTEXITCODE -ne 0) { Die "插件市场配置修复失败，备份已保留" }
 }
 
@@ -225,14 +239,14 @@ if (-not $NoPnpm -and $Node -and $Pnpm) {
     if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败：检查 registry / file: 路径后重试；备份已保留" }
   } finally { Pop-Location }
   if (-not (Test-Path -LiteralPath (Join-Path $ProfDir "node_modules\$PluginId\package.json"))) { Die "依赖未就位: node_modules/$PluginId" }
-  & $Py (Join-Path $Here "src\tools\patch_profile.py") --sync-plugin $DH $Profile
+  & $Py @PyArgs (Join-Path $Here "src\tools\patch_profile.py") --sync-plugin $DH $Profile
   if ($LASTEXITCODE -ne 0) { Die "插件运行副本校验失败，备份已保留" }
   if (Test-Path (Join-Path $TeamsSource "package.json")) {
-    & $Py (Join-Path $Here "src\tools\managed_teams.py") sync $DH $Profile
+    & $Py @PyArgs (Join-Path $Here "src\tools\managed_teams.py") sync $DH $Profile
     if ($LASTEXITCODE -ne 0) { Die "AgentTeams 运行副本校验失败" }
   }
   if ($Update) {
-    & $Py (Join-Path $Here "src\tools\patch_profile.py") --market-runtime (Join-Path $ProfDir "package.json")
+    & $Py @PyArgs (Join-Path $Here "src\tools\patch_profile.py") --market-runtime (Join-Path $ProfDir "package.json")
     if ($LASTEXITCODE -ne 0) { Die "插件市场运行校验修复失败，备份已保留" }
   }
   $DependenciesReady = $true
@@ -241,13 +255,13 @@ if (-not $NoPnpm -and $Node -and $Pnpm) {
 # ── 4. 资产 ─────────────────────────────────────────────────────
 Step "落地提示词 / 技能（单源：人格只落 prompt-inject.md）"
 if ($ToolkitDir) {
-  & $Py (Join-Path $Here "src\tools\configure_toolkit.py") $DH $ToolkitDir
+  & $Py @PyArgs (Join-Path $Here "src\tools\configure_toolkit.py") $DH $ToolkitDir
   if ($LASTEXITCODE -ne 0) { Die "工具安装目录保存失败" }
 }
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $pi = Join-Path $DH "prompt-inject.md"
 if ($Update -and (Test-Path -LiteralPath $pi) -and (Get-Item -LiteralPath $pi).Length -gt 0) {
-  & $Py (Join-Path $Here "src\tools\patch_profile.py") --protect-prompt $DH
+  & $Py @PyArgs (Join-Path $Here "src\tools\patch_profile.py") --protect-prompt $DH
   if ($LASTEXITCODE -ne 0) { Die "提示词保护失败，已停止更新" }
   Ok "已保留现有提示词"
 } else {

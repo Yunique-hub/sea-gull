@@ -36,15 +36,28 @@ jobs:
         shell: bash
         run: |
           set -e
-          for f in install.sh update.sh verify.sh verify-e2e.sh tests/smoke.sh; do bash -n "$f"; echo "OK $f"; done
+          for f in install.sh update.sh verify.sh verify-e2e.sh tests/smoke.sh tests/run-bash.sh; do bash -n "$f"; echo "OK $f"; done
           python -m py_compile src/tools/patch_profile.py src/tools/managed_teams.py src/tools/configure_toolkit.py vendor/dsh-purge/lib/redteam/extract-tools.py
+
+      - name: 禁止裸 python 调用（Windows 只装 py 启动器时整批假失败）
+        shell: bash
+        run: |
+          set -e
+          # tests/ 一律走 python-exec.mjs 解析，脚本一律带 py -3 回退。
+          if grep -rnE "spawnSync\(\s*['\"]python3?['\"]" tests/*.mjs; then
+            echo "✗ tests/ 里出现裸 python 调用，请改用 tests/python-exec.mjs"; exit 1
+          fi
+          if grep -rnE "process\.platform\s*===\s*'win32'\s*\?\s*'python3?'" tests/*.mjs; then
+            echo "✗ tests/ 里出现平台分支硬编码 python，请改用 resolvePython()"; exit 1
+          fi
+          echo "无裸 python 调用"
 
       - name: shellcheck
         if: runner.os == 'Linux'
         shell: bash
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
-          shellcheck -S error install.sh update.sh verify.sh verify-e2e.sh tests/smoke.sh
+          shellcheck -S error install.sh update.sh verify.sh verify-e2e.sh tests/smoke.sh tests/run-bash.sh
 
       - name: 冒烟测试（假 DSH_HOME，装/验/幂等/卸 全闭环）
         shell: bash
@@ -103,6 +116,50 @@ jobs:
       - name: JSON 合法
         run: |
           set -e
-          for f in vendor/dsh-purge/package.json docs/archive/seagull-fullbreak-1.0.7.json; do
+          for f in vendor/dsh-purge/package.json vendor/dsh-agent-teams/compatibility.json docs/archive/seagull-fullbreak-1.0.7.json; do
             node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" && echo "OK $f"
           done
+
+  # Windows 官方安装只放 py 启动器，PATH 里没有 python/python3。
+  # 这类机器上一度整批测试假失败（30+ 红），看起来像产品炸了。
+  # 这里刻意不 setup-python，只靠 py 启动器跑一遍关键回归。
+  py-only:
+    name: py 启动器（无 python 命令）
+    runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 确认环境确实没有 python 命令
+        shell: pwsh
+        run: |
+          $python = Get-Command python -ErrorAction SilentlyContinue
+          $python3 = Get-Command python3 -ErrorAction SilentlyContinue
+          if ($python -or $python3) {
+            Write-Host "! 该 runner 自带 python，本作业失去意义；跳过断言但仍跑回归。"
+          } else {
+            Write-Host "✓ 无 python/python3，只有 py 启动器"
+          }
+          Get-Command py -ErrorAction SilentlyContinue | Format-List Source
+
+      - name: python-exec 解析与关键回归
+        shell: pwsh
+        run: |
+          node --test tests/python-exec.test.mjs tests/version-sync.test.mjs tests/agent-teams-compat.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: 安装器在 py-only 环境下不误报缺 python
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $tmp = Join-Path $env:TEMP ("seagull-pyonly-" + [guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Path (Join-Path $tmp "profiles/desktop") -Force | Out-Null
+          Set-Content -LiteralPath (Join-Path $tmp "profiles/desktop/package.json") -Value '{"dependencies":{},"dsh":{"profile":{"bundles":[]}}}'
+          powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -DshHome $tmp -AppRoot (Join-Path $tmp "nope") -Profile desktop -NoPnpm -DryRun 2>&1 | Tee-Object -Variable out
+          if ($out -match "需要 python") { Write-Host "✗ py-only 环境下仍报缺 python"; exit 1 }
+          Write-Host "✓ 未误报缺 python"

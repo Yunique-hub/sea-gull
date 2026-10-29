@@ -55,8 +55,12 @@ chk "插件版本" "$([ -n "$VER" ] && echo 1 || echo 0)" "v${VER:-?}"
 
 # 4. profile 挂载
 PY="$(command -v python || command -v python3 || true)"
+PY_ARGS=""
+if [ -z "$PY" ] && command -v py >/dev/null 2>&1; then
+  PY="$(command -v py)"; PY_ARGS="-3"
+fi
 if [ -n "$PY" ] && [ -f "$PD/package.json" ]; then
-  if "$PY" - "$(winpath "$PD/package.json")" <<'EOF'
+  if "$PY" $PY_ARGS - "$(winpath "$PD/package.json")" <<'EOF'
 import json,sys
 d=json.load(open(sys.argv[1],encoding='utf-8'))
 ok=('dsh-purge' in (d.get('dependencies') or {})) and ('dsh-purge' in (((d.get('dsh') or {}).get('profile') or {}).get('bundles') or []))

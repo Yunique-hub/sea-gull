@@ -5,7 +5,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-const python = process.platform === 'win32' ? 'python' : 'python3';
+import { resolvePython } from './python-exec.mjs';
+const python = resolvePython();
 const script = fileURLToPath(new URL('../src/tools/managed_teams.py', import.meta.url));
 const vendor = fileURLToPath(new URL('../vendor/dsh-agent-teams', import.meta.url));
 const name = '@nanmicoder/dsh-agent-teams';
@@ -27,7 +28,7 @@ test('toolkit choice validation has no side effects and saving preserves existin
   const file = path.join(home, 'redteam/config.json'), chosen = path.join(home, 'chosen tools'); fs.mkdirSync(path.dirname(file));
   const original = JSON.stringify({ env: { FOFA_KEY: 'fixture' }, tools: { nmap: 'existing' }, notes: 'keep', custom: true }); fs.writeFileSync(file, original);
   const helper = fileURLToPath(new URL('../src/tools/configure_toolkit.py', import.meta.url));
-  const run = (dir, ...extra) => spawnSync(python, [helper, home, dir, ...extra], { encoding: 'utf8' });
+  const run = (dir, ...extra) => spawnSync(python.command, [...python.args, helper, home, dir, ...extra], { encoding: 'utf8' });
   assert.equal(run(chosen, '--validate-only').status, 0); assert.equal(fs.readFileSync(file, 'utf8'), original); assert.ok(!fs.existsSync(chosen));
   assert.notEqual(run('relative').status, 0); assert.notEqual(run(file).status, 0); assert.equal(fs.readFileSync(file, 'utf8'), original);
   assert.equal(run(chosen).status, 0); const config = JSON.parse(fs.readFileSync(file)); assert.equal(config.toolkitDir, chosen); assert.equal(config.env.FOFA_KEY, 'fixture'); assert.equal(config.tools.nmap, 'existing'); assert.equal(config.custom, true);
@@ -37,7 +38,7 @@ test('managed teams stage, update and unmount preserve unrelated profile setting
   const pkg = path.join(home, 'profiles/desktop/package.json'); fs.mkdirSync(path.dirname(pkg), { recursive: true });
   fs.writeFileSync(pkg, JSON.stringify({ private: true, dependencies: { other: '1.0.0' }, dsh: { profile: { bundles: ['other'] } } }));
   const archive = path.join(home, 'work/.agent-teams/state.json'); fs.mkdirSync(path.dirname(archive), { recursive: true }); fs.writeFileSync(archive, 'existing archive');
-  const run = action => spawnSync(python, [script, action, home, 'desktop', vendor], { encoding: 'utf8' });
+  const run = action => spawnSync(python.command, [...python.args, script, action, home, 'desktop', vendor], { encoding: 'utf8' });
   for (let i = 0; i < 2; i++) { const r = run('stage'); assert.equal(r.status, 0, r.stderr); }
   const profile = JSON.parse(fs.readFileSync(pkg)); assert.equal(profile.dependencies.other, '1.0.0'); assert.equal(profile.dsh.profile.bundles.filter(x => x === name).length, 1);
   const deployed = path.join(home, 'plugins', name); assert.ok(fs.existsSync(path.join(deployed, 'LICENSE'))); assert.ok(!fs.existsSync(path.join(deployed, 'node_modules')));

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
-const script=fileURLToPath(new URL('../src/tools/patch_profile.py',import.meta.url)),python=process.platform==='win32'?'python':'python3';
+import {runPython} from './python-exec.mjs';
+const script=fileURLToPath(new URL('../src/tools/patch_profile.py',import.meta.url));
 const original=fs.readFileSync(new URL('./fixtures/market-verify-original.js.txt',import.meta.url),'utf8');
 function fixture(t){
   const home=fs.mkdtempSync(path.join(os.tmpdir(),'seagull-market-verify-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
@@ -13,7 +13,7 @@ function fixture(t){
   fs.mkdirSync(path.dirname(target),{recursive:true});fs.mkdirSync(plugin,{recursive:true});fs.writeFileSync(path.join(core,'package.json'),'{"version":"0.4.13"}');fs.writeFileSync(pkg,'{"dependencies":{"@dsh-market/plugin":"0.4.16"}}');fs.writeFileSync(target,original);fs.writeFileSync(path.join(plugin,'package.json'),JSON.stringify({dsh:{bundle:{patch:'./cordis.patch.yml'}}}));
   fs.writeFileSync(path.join(core,'dist/installed.js'),'export function include(profile) { if (!profile.isDirectory()) return false; return true; }');
   const check=()=>new Function('join','readFileSync','readInstalledPackage',fs.readFileSync(target,'utf8')+'\nreturn isPatchApplied;')(path.join,fs.readFileSync,(cfg,p,n)=>JSON.parse(fs.readFileSync(path.join(cfg.profilesDir,p,'node_modules',n,'package.json'))))({profilesDir:path.join(home,'profiles')},'desktop','dsh-purge');
-  return {home,profile,core,plugin,pkg,target,check,run:()=>spawnSync(python,[script,'--market-runtime',pkg],{encoding:'utf8'})};
+  return {home,profile,core,plugin,pkg,target,check,run:()=>runPython(script,['--market-runtime',pkg])};
 }
 test('market verification recognizes the host-composed bundle instead of requesting another restart',t=>{
   const f=fixture(t);fs.writeFileSync(path.join(f.plugin,'cordis.patch.yml'),'- insert:\n    - id: dsh-purge\n      name: dsh-purge\n');assert.equal(f.check(),false);

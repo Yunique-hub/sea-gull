@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.10-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.11-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,7 +17,7 @@
 
 ---
 
-当前 **v1.0.10** 适配官方 Windows Harness **0.2.1-rc.3**，引擎为 dsh-purge **1.1.78**（固定上游 master 提交 [fd109e1](https://github.com/YuJunZhiXue/dsh-purge/tree/fd109e106ce5818b3c00524123a3431e4afc0e81)）。98 个上游 Git blob 已核验。
+当前 **v1.0.11** 适配官方 Windows Harness **0.2.1-rc.3**，引擎为 dsh-purge **1.1.78**（固定上游 master 提交 [fd109e1](https://github.com/YuJunZhiXue/dsh-purge/tree/fd109e106ce5818b3c00524123a3431e4afc0e81)）。98 个上游 Git blob 已核验。
 
 1.0.10 修复市场把 scoped 包误识别成短名称的校验失败及新装技能未刷新到 `/` 菜单，新增工具目录选择、缺失工具自动下载校验和中文回复约定，并整合 **AgentTeams 0.1.26**。在工作区新会话输入 `agent-teams 创建两名成员，分别实现和复核……` 或 `/agent-teams ……`，队长会创建成员及任务依赖并执行；明确要求先审阅时才等待确认。团队状态保存在当前工作区 `.agent-teams/`，更新保留存档。来源、改动与限制见[本轮整合分析](docs/INTEGRATION-1.0.10.md)。
 
