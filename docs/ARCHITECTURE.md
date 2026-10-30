@@ -1,6 +1,6 @@
 # 架构
 
-当前 1.0.9 使用 Harness 0.2.1-rc.3 / purge 1.1.78；本地靶场限制始终挂载，旧技能仅源码存档。当前差异见根 NOTICE，分析见 PROJECT-REVIEW-2026-10-25，验证见 VERIFICATION 的 M 节。以下保留设计演进记录。
+当前 1.0.13 使用 Harness 0.2.1-rc.3 / purge 1.1.82；本地靶场范围闸已移除（不再注册 `agent/pre-step` / `tools/pre-execute` 拦截），旧技能仅源码存档。当前差异见根 NOTICE，分析见 PROJECT-REVIEW-2026-10-25，验证见 VERIFICATION 的 M 节与 P 节。以下保留设计演进记录。
 
 ## 1. 为什么是「合并」而不是「选一个」
 
@@ -25,7 +25,7 @@ lib/index.js             插件入口 apply(ctx, config)：注入 systemPrompt/t
 lib/identity.js          身份段篡改 + ChatML 信封处理 + 插值转义
 lib/phase1-keep.js       放宽官方 phase-1 白名单到 dsh-purge* / dshpg-*
 lib/hooks-deny.js        hooks deny/ask 旁路
-lib/net-scope.js         目标地域闸门（CN/HK/MO）+ 银行/交易所黑名单
+lib/net-scope.js         目标地域闸门（CN/HK/MO）+ 银行/交易所黑名单（1.0.13 起只留自有服务器白名单存储层）
 lib/rules.js             规则集（写 AGENTS.md / CLAUDE.md）；1.0.8 起只服务用户自建的非人格规则
 lib/skills.js            技能库（写 $DSH_HOME/skills/<id>/SKILL.md）
 lib/redteam/*            演练台：5 角色预设 + SQLite 资产库 + HTTP UI 桥
@@ -50,7 +50,7 @@ client.js               右侧 dock 前端（Clean / Drill）
 2. **提示词优先级**：`prompt-inject.md` > 当前目录勾选的 `AGENTS.md/CLAUDE.md` > 插件内加密槽默认值。1.0.8 起加密槽与 `src/prompt/prompt-inject.md` 同源；人格只允许出现在 `prompt-inject.md` 里，`AGENTS.md` 不得承载人格（否则每会话注入两份）。
 3. **身份段**：用 `dsh-purge*` / `dshpg-*` 前缀插段（前者会被官方挪到最前，后者不会，
    用前缀绕开渲染顺序反转）。
-4. **地域闸门**：`agent/pre-step` 全局前置钩子，step 1 判断攻击类任务 + CN/HK/MO 目标 → 停轮。
+4. **地域闸门**：`agent/pre-step` 全局前置钩子，step 1 判断攻击类任务 + CN/HK/MO 目标 → 停轮。1.0.13 起整体移除。
 
 **已知脆弱点（实测踩到）**
 

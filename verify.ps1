@@ -99,7 +99,7 @@ Chk "五个海鸥技能已落地" ($missingSkills.Count -eq 0) ("缺失 {0} 个"
 $cp = Get-Content "$Plug\cordis.patch.yml" -Raw
 Chk "hooksDenyBypass: true" ($cp -match "hooksDenyBypass:\s*true") "hook deny 旁路开"
 $idx = Get-Content "$Plug\lib\index.js" -Raw
-Chk "本地靶场检查已挂载" ($idx -match "installRegionGate\(ctx\)") "保留上游工具执行前检查"
+Chk "范围闸已移除" (-not ($idx -match "installRegionGate")) "不按目标地址拦截"
 
 Write-Host ""
 $color = if ($Fail -eq 0) { "Green" } else { "Yellow" }

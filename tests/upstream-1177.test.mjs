@@ -1,34 +1,72 @@
+// 上游回归 + 范围闸移除回归。
+//
+// 2026-10-30 按用户要求移除上游的「本地靶场范围闸」：
+//   - 插件不再注册 agent/pre-step / tools/pre-execute 拦截钩子；
+//   - 不再按目标地址、任务类别（渗透 / 外挂）或边界措辞拦任何请求；
+//   - net-scope.js 只保留自有服务器白名单的存储层。
+// 这里锁住「移除后仍然是移除状态」，避免后续合并上游时把闸门悄悄带回来。
+
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { isAttackTask, taskTargetHit, publicHostHit, installRegionGate } from '../vendor/dsh-purge/lib/net-scope.js';
+import { fileURLToPath } from 'node:url';
+import * as netScope from '../vendor/dsh-purge/lib/net-scope.js';
 import { EvidenceLedger, UnknownRegistry } from '../vendor/dsh-purge/lib/redteam/evidence-ledger.mjs';
 
-test('upstream local-lab gate allows private targets and rejects public and metadata targets', async () => {
-  for (const ip of ['127.0.0.1', '10.20.30.40', '172.16.0.2', '192.168.1.3']) assert.equal(await taskTargetHit('本地渗透测试 '+ip), null, ip);
-  for (const ip of ['8.8.8.8', '169.254.169.254']) assert.ok(await taskTargetHit('渗透测试 '+ip), ip);
-  assert.ok(await taskTargetHit('渗透测试，检查目标'));
-  assert.equal(await publicHostHit('读取本地文件 ./report.txt'), null);
+const root = fileURLToPath(new URL('..', import.meta.url));
+const pluginIndex = fs.readFileSync(path.join(root, 'vendor/dsh-purge/lib/index.js'), 'utf8');
+
+test('范围闸已移除：插件不再挂载任何目标判定钩子', () => {
+  assert.ok(!pluginIndex.includes('installRegionGate'), 'index.js 不应再引用 installRegionGate');
+  assert.ok(!pluginIndex.includes('regionGate'), 'index.js 不应再保留 regionGate 旧配置键');
+  assert.ok(!pluginIndex.includes('tools/pre-execute'), 'index.js 不应再注册工具执行前拦截');
 });
 
-test('long red-team tasks retain the upstream late-target check without blocking the event loop', async () => {
-  const text = '本地测试记录。'.repeat(12000) + '渗透测试 8.8.8.8';
-  assert.equal(isAttackTask(text), true);
-  assert.ok(await taskTargetHit(text));
+test('net-scope 只剩白名单存储层，不导出判定 API', () => {
+  const removed = [
+    'installRegionGate',
+    'publicHostHit',
+    'taskTargetHit',
+    'isAttackTask',
+    'isCheatTask',
+    'isBenignNetworkTopic',
+    'isLocalLabAddress',
+    'latestToolText',
+    'execArgText',
+    'currentTaskText',
+    'setScopeResolver',
+  ];
+  for (const name of removed) assert.equal(netScope[name], undefined, `${name} 不应再导出`);
+  for (const kept of ['allowFilePath', 'entryHost', 'normalizeAllowText', 'readAllowText', 'writeAllowText', 'ownServerNote']) {
+    assert.equal(typeof netScope[kept], 'function', `${kept} 应保留`);
+  }
 });
 
-test('tool pre-execution gate blocks public addresses before invoking the tool', async () => {
-  const hooks = new Map();
-  installRegionGate({ on(name, fn) { hooks.set(name, fn); } });
-  assert.ok(hooks.has('agent/pre-step'));
-  const hook = hooks.get('tools/pre-execute');
-  let invoked = 0;
-  const exec = { args: { command: 'curl http://8.8.8.8/' } };
-  const denied = await hook(exec, () => { invoked++; return 'ran'; });
-  assert.equal(denied.isError, true);
-  assert.equal(exec.blocked, true);
-  assert.equal(invoked, 0);
-  assert.equal(await hook({ args: { command: 'curl http://127.0.0.1/' } }, () => 'local'), 'local');
+test('白名单面板的提交会真实落盘，归一后丢弃非法条目', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'seagull-allow-'));
+  try {
+    const saved = await netScope.writeAllowText(home, [
+      '# 自有服务器',
+      'user@10.0.0.5',
+      '203.0.113.9',
+      'not a host',
+      '10.0.0.5',
+    ].join('\n'));
+    assert.equal(saved.dropped, 1);
+    assert.deepEqual(saved.hosts, ['10.0.0.5', '203.0.113.9']);
+    assert.equal(netScope.readAllowText(home), '# 自有服务器\nuser@10.0.0.5\n203.0.113.9\n');
+    await netScope.writeAllowText(home, '');
+    assert.equal(netScope.readAllowText(home), '');
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('ownServerNote 恒为空，不往人格里追加禁令', () => {
+  assert.equal(netScope.ownServerNote(), '');
 });
 
 test('evidence ledger deduplicates semantic records, verifies results and upgrades claims', () => {

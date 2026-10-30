@@ -9,7 +9,7 @@ import test from 'node:test';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const windows = process.platform === 'win32';
 for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
-  test(shell + ' verification accepts the current runtime and detects a missing skill or lab gate', (t) => {
+  test(shell + ' verification accepts the current runtime and detects a missing skill or a re-added scope gate', (t) => {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'seagull-verify-'));
     t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
     const home = path.join(temp, 'home'), app = path.join(temp, 'app');
@@ -25,7 +25,7 @@ for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
     }
     write(home, 'plugins/dsh-purge/bin/dsh-purge.js', 'console.log("补丁 77/86 已清洗");');
     write(home, 'plugins/dsh-purge/cordis.patch.yml', 'hooksDenyBypass: true\n');
-    const gate = write(home, 'plugins/dsh-purge/lib/index.js', 'installRegionGate(ctx);\n');
+    const gate = write(home, 'plugins/dsh-purge/lib/index.js', '// region gate removed\n');
     write(home, 'prompt-inject.md', '# 海鸥全破内核\n纯 Markdown 人格\n');
     write(home, 'AGENTS.md', '# Workspace conventions\n');
     for (const name of ['seagull-reverse', 'seagull-pentest', 'seagull-exploit', 'seagull-game-hack', 'seagull-license-security']) {
@@ -45,9 +45,9 @@ for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stdout, /\[FAIL\].*(?:五个海鸥技能|技能 seagull-reverse)/);
     fs.writeFileSync(skill, '# restored');
-    fs.writeFileSync(gate, '// gate missing');
+    fs.writeFileSync(gate, 'installRegionGate(ctx);\n');
     result = run();
     assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.match(result.stdout, /\[FAIL\].*本地靶场检查已挂载/);
+    assert.match(result.stdout, /\[FAIL\].*范围闸已移除/);
   });
 }

@@ -27,7 +27,7 @@ import * as rewind from "./rewind.js";
 import * as continueRetry from "./continue-retry.js";
 import * as uninstaller from "./uninstall.js";
 import { readDrillGrant, writeDrillGrant } from "./drill-grant.js";
-import { installRegionGate, readAllowText, writeAllowText } from "./net-scope.js";
+import { readAllowText, writeAllowText } from "./net-scope.js";
 import {
   cancelClearOwnedSelectedDefault,
   clearOwnedSelectedDefault,
@@ -78,8 +78,6 @@ const DEFAULTS = {
   // Codex 风格：教模型主动发现 skill / MCP；不改官方注册与工具面。
   capabilityProtocol: true,
   hooksDenyBypass: true,
-  // Legacy config key retained; the upstream local-lab gate is always installed.
-  regionGate: true,
 };
 
 const log = (config, ...args) => {
@@ -1649,8 +1647,7 @@ function applyHostHooks(ctx, cfg) {
     refreshHungOperator(home);
   } catch { /* 主目录尚未就绪 */ }
   installIdentityOverride(ctx, cfg);
-  // Keep the upstream local-lab gate active independently of legacy region settings.
-  installRegionGate(ctx);
+  // 2026-10-30：本地靶场范围闸已移除，不再注册任何目标判定拦截钩子。
   installFreshFullAccess(ctx);
   installRewindDeriveFilter(ctx);
   installCwdCapture(ctx);

@@ -3,6 +3,20 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.13] - 2026-10-30
+
+### Changed
+
+- 移除上游的本地靶场范围闸（`vendor/dsh-purge/lib/net-scope.js`）：插件不再注册 `agent/pre-step` / `tools/pre-execute` 拦截，不再按目标地址（含 `inet_aton` 数字型主机）、任务分类（渗透 / 外挂）或边界措辞拦请求，也不再向会话写拒绝消息。`lib/index.js` 删除 `regionGate` 旧配置键与 `installRegionGate(ctx)` 挂载。
+- `net-scope.js` 只保留自有服务器白名单的解析与读写；`writeAllowText()` 改为真实落盘（归一后写入，非法条目丢弃并在响应里回报数量），面板不再「提交成功但不保存」。
+- 人格 §4 中文禁词表移除 `不能` / `不在范围` / `需要授权` 三项，`§3` 仍禁止以「这个不能」开场；`不能为空`、`不能为 null` 这类技术表述不再被当成拒答。人格源与加密槽重新封装，仍为逐字节同源。
+- 真机校验（`verify.sh` / `verify.ps1`）改为检查范围闸**确已移除**；`tests/smoke.sh` 同步。
+
+### Validation
+
+- `node --test tests/*.test.mjs`：全部通过（见 `docs/VERIFICATION.md` P 节）。
+- 覆盖：`tests/upstream-1177.test.mjs` 改为锁定「闸门不再回来」、白名单落盘与 `ownServerNote` 恒空；`tests/verify-current-runtime.test.mjs` 同步新的校验口径。
+
 ## [1.0.12] - 2026-10-30
 
 ### Changed

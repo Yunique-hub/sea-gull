@@ -127,8 +127,8 @@ done
 CP="$PLUG/cordis.patch.yml"
 grep -q "hooksDenyBypass: *true" "$CP" 2>/dev/null && chk "hooksDenyBypass: true" 1 "hook deny 旁路开" \
   || chk "hooksDenyBypass: true" 0 ""
-grep -q 'installRegionGate(ctx)' "$PLUG/lib/index.js" 2>/dev/null && chk "本地靶场检查已挂载" 1 "保留上游工具执行前检查" \
-  || chk "本地靶场检查已挂载" 0 ""
+grep -q 'installRegionGate' "$PLUG/lib/index.js" 2>/dev/null && chk "范围闸已移除" 0 "仍挂载 installRegionGate" \
+  || chk "范围闸已移除" 1 "不按目标地址拦截"
 
 echo
 printf '通过 %d 项，失败 %d 项\n' "$PASS" "$FAIL"

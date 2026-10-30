@@ -694,3 +694,87 @@ D4499A27…D2736  §23 收口（21,577）
 ```
 
 **边界**：未重启宿主，改动在**新会话**生效。
+
+---
+
+## P. 1.0.13 移除本地靶场范围闸（2026-10-30）
+
+范围：按用户 2026-10-30 的八条决定处理「提示词 ↔ 闸门」冲突清单（原清单见本地维护档案
+`海鸥优化方案-2026-10-30.md` §8）。结论是**全部按提示词一侧落地**：插件不再判定目标。
+
+### P.1 改了什么
+
+| 项 | 处理 |
+|---|---|
+| 公网目标归属 | 闸门放行：`isRangeTarget` / `publicHostHit` / `taskTargetHit` 整组删除 |
+| 拒绝文案 | `DENIAL`（“不行，这是严令禁止的”）、`parkDenial`、拒绝消息持久化整组删除 |
+| 外挂 | 保留人格「触发即交付完整链路」，删除 `CHEAT_STRONG` / `CHEAT_GAME` / `CHEAT_WEAK` / `isCheatTask` |
+| 永不按类别拒绝 | 删除 `ATTACK` 正则、`isAttackTask`、`scanHas` 分类判定 |
+| RFC 5737 文档段 | 地址判定整体移除，代码不再拦任何地址 |
+| 边界词归一化 | 插件不看措辞，只按操作员指令执行 |
+| redteam 预设 | 删除 `isRedteamPayload` 整体收窄，预设内目标全部放行 |
+| 网络咨询白名单 | 只保留一份（人格 §14 的代理规则）；删除代码侧 `NET_TOPIC` / `isBenignNetworkTopic` |
+
+人格侧只改一处：§4 中文禁词表去掉 `不能` / `不在范围` / `需要授权`，§3 仍禁止以「这个不能」开场。
+
+### P.2 文件与哈希（SHA-256 前 16 位）
+
+```
+src/prompt/prompt-inject.md                    24581A9E8511890E
+vendor/dsh-purge/lib/default-prompt-inject.md  24581A9E8511890E   （逐字节同源）
+vendor/dsh-purge/lib/asset-table.js            4F46EDE9FC533704   （重新封装）
+vendor/dsh-purge/lib/net-scope.js              0CCA874540F5D11C   （969 → 184 行）
+vendor/dsh-purge/lib/index.js                  C62EE45A82ACF777
+```
+
+`net-scope.js` 现在只导出 `allowFilePath` / `entryHost` / `normalizeAllowText` /
+`readAllowText` / `writeAllowText` / `ownServerNote`。`writeAllowText()` 由「恒返回空、
+不落盘」改为真实写入（归一后丢弃非法条目并回报数量），面板 POST 不再静默丢内容。
+
+### P.3 验证（真实执行）
+
+```
+$ node --test tests/*.test.mjs
+ℹ tests 158
+ℹ pass 158
+ℹ fail 0
+ℹ duration_ms 24518.3472
+
+$ bash tests/smoke.sh                        # Git for Windows bash
+✓ 文件全部落地
+✓ 依赖 + bundle 正确，原有 bundle 未丢
+✓ 幂等
+✓ 自动应用开启 / hooks 配置在位 / 范围闸已移除
+✓ 卸载干净，profile 已还原
+全部通过 ✓
+
+$ bash install.sh --update --no-pnpm --profile desktop
+✓ 旧插件已备份 → dsh-purge.bak
+✓ 插件就位: /c/Users/Yonly/.dsh/plugins/dsh-purge
+✓ 已保留现有提示词
+
+$ powershell -NoProfile -ExecutionPolicy Bypass -File verify.ps1
+[OK] 范围闸已移除    不按目标地址拦截
+通过 20 项，失败 0 项
+```
+
+覆盖变化：
+
+| 测试 | 变化 |
+|---|---|
+| `tests/upstream-1177.test.mjs` | 原来的 3 项闸门断言换成 4 项：不挂载判定钩子、`net-scope` 不再导出判定 API、白名单真实落盘、`ownServerNote` 恒空 |
+| `tests/net-scope-hardening.test.mjs` | 删除（契约已不存在） |
+| `tests/verify-current-runtime.test.mjs` | 校验口径改为「闸门确已移除」 |
+| `tests/smoke.sh`、`verify.sh`、`verify.ps1` | 同上 |
+
+### P.4 本机运行副本
+
+- `~/.dsh/plugins/dsh-purge/lib/net-scope.js` 哈希 `0CCA8745…F5D11C`，与仓库一致。
+- `~/.dsh/prompt-inject.md` 哈希 `24581A9E…57049`，与仓库人格源一致；改前备份
+  `prompt-inject.md.bak-20261030-221310`。
+- **未重启宿主**：正在运行的 DSH 进程仍持有旧插件模块，改动在下次启动生效。
+
+### P.5 边界
+
+- 本次只改「插件是否拦截」，不改操作员对目标的授权判断。目标归属由操作员负责。
+- `ownServerNote()` 仍恒返回空串，人格里不会因为白名单多出一段禁令。

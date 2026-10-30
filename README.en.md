@@ -8,11 +8,11 @@ One-line install · idempotent · uninstallable · backed by evidence
 
 Version 1.0.10 fixes market verification of scoped packages and refreshes slash menus when skills are installed or removed, adds a chosen toolkit directory with verified official downloads, keeps Chinese as the default response language unless requested otherwise, and includes AgentTeams 0.1.26. Start a workspace conversation with `agent-teams` or `/agent-teams`, followed by a team goal; members and task dependencies run automatically unless the user explicitly requests plan review. Fresh installs require an explicit toolkit directory (`-ToolkitDir` / `--toolkit-dir`, or an interactive prompt); updates preserve the saved choice. The Windows desktop test found 13 of 15 tools: Nmap driver installation and Masscan's missing official Windows binaries remain explicitly reported manual steps. See [integration analysis](docs/INTEGRATION-1.0.10.md).
 
-Version 1.0.9 stops a prompt reset if its backup fails and gives every backup a unique filename. Runtime verification now accepts the current injection markers, plain Markdown persona and five native skills, and checks that the local-lab gate remains installed. See the [project review](docs/PROJECT-REVIEW-2026-10-25.md) and [desktop verification M](docs/VERIFICATION.md#m-109-全面审查与桌面回归2026-10-25).
+Version 1.0.9 stops a prompt reset if its backup fails and gives every backup a unique filename. Runtime verification now accepts the current injection markers, plain Markdown persona and five native skills, and checks that the local-lab scope gate has been removed. See the [project review](docs/PROJECT-REVIEW-2026-10-25.md) and [desktop verification M](docs/VERIFICATION.md#m-109-全面审查与桌面回归2026-10-25).
 
 Update mode also repairs an **existing** market installation to the verified 0.4.16: BOM settings, stale nested dependencies, bundle verification, and mixed profile listings. Users without the market do not receive it. Actual purge runtime files are checked after pnpm, including same-version updates. See [verification K](docs/VERIFICATION.md#k-插件市场与-purge-运行副本修复2026-10-24).
 
-The saved **Seagull persona**, five Seagull skills, project fixes, immediate steering, separate queue delivery, and installer/update protections are retained. The upstream local-lab and tool pre-execution checks remain active, with engineering additions including the evidence ledger. Upstream no longer ships the skill/knowledge library entry points; existing local data is preserved and the 23 earlier skills remain source archives without automatic deployment.
+The saved **Seagull persona**, five Seagull skills, project fixes, immediate steering, separate queue delivery, and installer/update protections are retained. Since 1.0.12 the upstream local-lab scope gate is removed: the plugin registers no pre-step or pre-execute interception and no longer judges targets, task classes or boundary wording. Engineering additions such as the evidence ledger remain. Upstream no longer ships the skill/knowledge library entry points; existing local data is preserved and the 23 earlier skills remain source archives without automatic deployment.
 
 Current upstream code is Apache-2.0, with its LICENSE, NOTICE and attribution retained. Local code and historical assets keep their respective licenses. There are 86 local patch definitions, including retained native-message compatibility patches #89–#92. See the [verification record](docs/VERIFICATION.md#j-harness-021-rc3--dsh-purge-1177-合并2026-10-24).
 
@@ -42,7 +42,7 @@ it removes the host-side policy gates one by one and replaces the persona layer.
 
 | Component | Provides |
 |---|---|
-| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.82 | Host compatibility, console, evidence ledger and local-lab checks; 86 local patch definitions |
+| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.82 | Host compatibility, console and evidence ledger (scope gate removed); 86 local patch definitions |
 | [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | Seagull persona + 5 domain skills |
 
 This is not a stack of two tarballs: `SOUL.md` cannot be used as a DSH prompt as-is

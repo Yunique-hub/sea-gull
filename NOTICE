@@ -9,7 +9,7 @@
 
 - 来源：https://github.com/YuJunZhiXue/dsh-purge
 - 作者：YuJunZhiXue。
-- 版本：1.1.82，正式版提交 6318442a88ea7459d0135d0a07f31776c5d6a7b1，2026-10-30 比对 104 个 Git blob：77 个一致、16 个保留海鸥差异、11 个图片附件不分发。
+- 版本：1.1.82，正式版提交 6318442a88ea7459d0135d0a07f31776c5d6a7b1，2026-10-30 比对 104 个 Git blob：76 个一致、17 个保留海鸥差异、11 个图片附件不分发。
 - 当前上游主体代码：Apache-2.0，原始 LICENSE、NOTICE 与 LICENSE-COMMERCIAL.md 原文保留。海鸥自身根 LICENSE 保持原样。
 
 本地新增与修改文件：
@@ -23,7 +23,8 @@
 | `vendor/dsh-purge/lib/default-prompt-inject.md` | 加密槽源文件，与 `src/prompt/prompt-inject.md` 逐字节同源（1.0.8 单源化；上游同名文件此前仅在构建期存在） |
 | `vendor/dsh-purge/.gitignore` | 仅新增一条例外规则，让上面那份槽源可以入库（上游默认忽略该文件） |
 | `vendor/dsh-purge/lib/identity.js` | 识别旧版执行者预设，保留子角色身份路径 |
-| `vendor/dsh-purge/lib/index.js` | 实际消息状态读取，保留原有扩展并始终安装新版本地靶场限制；1.0.9 起提示词恢复请求调用备份后恢复，普通保存保持原行为 |
+| `vendor/dsh-purge/lib/index.js` | 实际消息状态读取，保留原有扩展；1.0.12 起不再安装本地靶场范围闸，删除 `regionGate` 旧配置键与挂载调用；1.0.9 起提示词恢复请求调用备份后恢复，普通保存保持原行为 |
+| `vendor/dsh-purge/lib/net-scope.js` | 1.0.12 起移除范围闸：删掉 `agent/pre-step` / `tools/pre-execute` 拦截、地址与任务分类判定、拒绝文案与拒绝消息持久化；只保留自有服务器白名单的解析与读写（`writeAllowText` 改为真实落盘） |
 | `vendor/dsh-purge/lib/official-update-runtime.ps1` | 本地 Windows 更新保护脚本，仅处理已验证的 runtime 联接 |
 | `vendor/dsh-purge/lib/official-update.wscript` | 保留 Windows 更新联接保护、备份和失败恢复 |
 | `vendor/dsh-purge/lib/preset-default.js` | 精确处理插件预设；延迟清理固定原 DSH_HOME；不修改注释或相似 ID |
