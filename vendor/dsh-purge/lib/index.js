@@ -42,6 +42,15 @@ import {
   settleMayRestart,
   watchContextLife,
 } from "./settle-policy.js";
+import { ensureAllProfileInstall } from "./profile-insert.js";
+import {
+  beginApply,
+  beginJob,
+  endApply,
+  getApplyProgress,
+  resetApplyProgress,
+  setApplyProgress,
+} from "./apply-progress.js";
 
 export const name = "dsh-purge";
 
@@ -78,6 +87,7 @@ const log = (config, ...args) => {
 };
 
 let webTreeReady = false;
+let lastStatusPayload = null;
 
 function watchWebTreeReady(ctx) {
   // 必须挂在 connection 上再 await，与官方打印 URL 同一时刻。
@@ -415,7 +425,7 @@ export function registerPromptSections(ctx, config) {
         const redteam = isRedteamSession(context);
         return capabilityProtocolText({
           redteam,
-          redteamChild: redteam && context?.agent?.session?.header?.origin === "subagent",
+          redteamChild: false,
           enabled: true,
         });
       },
@@ -613,8 +623,27 @@ function permissionPresetsOf(ctx) {
   return null;
 }
 
+function parentPermissionPreset(ctx, session) {
+  const parentId = session?.header?.parentSession;
+  if (!parentId || !ctx) return "";
+  try {
+    const registry = ctx.agents || ctx.get?.("agents");
+    const parent = registry?.get?.(parentId);
+    let parentSession = parent?.session;
+    if (!parentSession) {
+      const store = ctx.get?.("sessions");
+      parentSession = typeof store?.get === "function" ? store.get(parentId) : null;
+    }
+    if (!parentSession) return "";
+    const svc = permissionPresetsOf(ctx);
+    const state = typeof svc?.permissionState === "function" ? svc.permissionState(parentSession) : null;
+    return state?.preset || parentSession?.header?.permissionPreset || "";
+  } catch {
+    return "";
+  }
+}
+
 function shouldKeepFreshFullAccess(session, svc) {
-  if (session?.header?.origin === "subagent") return false;
   const state = typeof svc.permissionState === "function" ? svc.permissionState(session) : null;
   const preset = state?.preset;
   if (preset === "danger-full-access" || preset === "auto" || preset === "custom") return false;
@@ -627,7 +656,14 @@ function shouldKeepFreshFullAccess(session, svc) {
 function upgradeFreshSessionAccess(ctx, session) {
   try {
     const svc = permissionPresetsOf(ctx);
-    if (!svc || !shouldKeepFreshFullAccess(session, svc)) return;
+    if (!svc) return;
+    const inherited = parentPermissionPreset(ctx, session);
+    if (inherited) {
+      const state = typeof svc.permissionState === "function" ? svc.permissionState(session) : null;
+      if (state?.preset !== inherited) svc.set(session, inherited);
+      return;
+    }
+    if (!shouldKeepFreshFullAccess(session, svc)) return;
     svc.set(session, "danger-full-access");
   } catch (error) {
     console.warn("[dsh-purge] full-access pin:", error instanceof Error ? error.message : String(error));
@@ -635,6 +671,16 @@ function upgradeFreshSessionAccess(ctx, session) {
 }
 
 /** 空会话界面按部署默认显示完全权限；建会话时若钉成 workspace-write，发消息后芯片会掉下去。 */
+function pinExistingSessionAccess(ctx) {
+  try {
+    const store = ctx.get?.("sessions");
+    const all = typeof store?.all === "function" ? store.all()
+      : typeof store?.list === "function" ? store.list()
+      : [];
+    for (const session of all || []) upgradeFreshSessionAccess(ctx, session);
+  } catch { /* 注册表还没起来时等 session/created */ }
+}
+
 function installFreshFullAccess(ctx) {
   if (typeof ctx.on !== "function" || ctx.__dshPurgeFullPin) return;
   ctx.__dshPurgeFullPin = true;
@@ -644,6 +690,7 @@ function installFreshFullAccess(ctx) {
     try { disposer = ctx.on("session/created", (session) => {
       queueMicrotask(() => upgradeFreshSessionAccess(ctx, session));
     }); } catch { /* ignore */ }
+    queueMicrotask(() => pinExistingSessionAccess(ctx));
     return () => {
       try { if (typeof disposer === "function") disposer(); } catch { /* ignore */ }
       delete ctx.__dshPurgeFullPin;
@@ -1518,6 +1565,15 @@ export function apply(ctx, config) {
     return;
   }
   log(cfg, "plugin enabled");
+  try {
+    const home = core.pinDshHome() || core.findDshHome();
+    const healed = ensureAllProfileInstall(home);
+    for (const item of healed) {
+      if (item.insert?.wrote || item.bundles?.wrote) {
+        log(cfg, "profile heal:", item.dir, item.insert?.wrote ? "insert" : "", item.bundles?.wrote ? "bundles" : "");
+      }
+    }
+  } catch { /* 自愈失败不挡主入口 */ }
   core.applyRuntimeEnv();
   try {
     const home = core.pinDshHome() || core.findDshHome();
@@ -1564,6 +1620,29 @@ export function apply(ctx, config) {
   }
 }
 
+function isDuplicateCommandError(error) {
+  return /is already registered|already registered/i.test(String(error && error.message || error));
+}
+
+/** 逐命令注册：撞名只丢那一条，可退到备用名（#162）。 */
+function tryRegisterCommand(commands, spec, fallbacks = []) {
+  const names = [spec.name, ...fallbacks];
+  for (const name of names) {
+    try {
+      commands.register({ ...spec, name });
+      if (name !== spec.name) {
+        console.warn(`[dsh-purge] /${spec.name} taken, registered /${name}`);
+      }
+      return name;
+    } catch (error) {
+      if (isDuplicateCommandError(error)) continue;
+      throw error;
+    }
+  }
+  console.warn(`[dsh-purge] skip /${spec.name}: already registered`);
+  return null;
+}
+
 function applyHostHooks(ctx, cfg) {
   try {
     const home = core.pinDshHome() || core.findDshHome();
@@ -1591,25 +1670,25 @@ function applyHostHooks(ctx, cfg) {
 
   const commands = ctx.get?.("commands");
   if (commands) {
-    commands.register({
+    tryRegisterCommand(commands, {
       name: "purge",
       description: "dsh 指令权威性清洗（status/apply/revert/uninstall/edit/help）",
       input: { hint: "status | apply | revert | uninstall | edit | help" },
       handler: async (invocation) => handlePurgeCommand(invocation.rawInput ?? "", cfg, ctx),
-    });
-    commands.register({
+    }, ["purge-cmd"]);
+    tryRegisterCommand(commands, {
       name: "rules",
       description: "规则集切换（写入 AGENTS.md/CLAUDE.md）: list | use <id> | create <id> [别名] [目标] | delete <id> | reset | help",
       input: { hint: "list | use <id> | create <id> [别名] [目标] | delete <id> | reset | help" },
       handler: async (invocation) => handleRulesCommand(invocation.rawInput ?? ""),
-    });
-    commands.register({
+    }, ["purge-rules"]);
+    tryRegisterCommand(commands, {
       name: "skills",
       description: "官方用户 Skill（$DSH_HOME/skills）：list | import <路径> | create <id> [说明] | delete <id> | help",
       input: { hint: "list | import <路径> | create <id> [说明] | delete <id> | help" },
       handler: async (invocation) => handleSkillsCommand(invocation.rawInput ?? ""),
-    });
-    commands.register({
+    }, ["purge-skills"]);
+    tryRegisterCommand(commands, {
       name: "rewind",
       description: "回退：子代理直接回退一次；主代理 /rewind once 或 /rewind round",
       input: { hint: "once | round" },
@@ -1633,7 +1712,7 @@ function applyHostHooks(ctx, cfg) {
             : "已回退一次。还在这条对话里，上一句已放回输入框。再发送时，之前的回复不会带上。",
         };
       },
-    });
+    }, ["purge-rewind"]);
   }
 
   if (ctx.tools) {
@@ -1799,14 +1878,25 @@ function installWebServer(ctx, cfg) {
             return;
           }
           try {
+            const progress = getApplyProgress();
+            if (progress.active) {
+              const base = lastStatusPayload || { ok: true };
+              sendJson(response, 200, {
+                ...base,
+                ok: true,
+                ready: webTreeReady || Boolean(lastStatusPayload),
+                apply_progress: progress,
+              });
+              return;
+            }
             if (!webTreeReady) {
-              sendJson(response, 503, { ok: false, ready: false });
+              sendJson(response, 503, { ok: false, ready: false, apply_progress: progress });
               return;
             }
             const state = await core.gatherState();
             const patch_names = {};
             for (const p of core.ALL_PATCHES) patch_names[String(p.id)] = p.name;
-            sendJson(response, 200, {
+            const payload = {
               ok: true,
               ready: true,
               surface: state.surface || hostctl.currentSurface(),
@@ -1844,9 +1934,11 @@ function installWebServer(ctx, cfg) {
               hooks_deny_bypass: core.getHooksDenySettings().hooksDenyBypass,
               system_field_extracted: core.systemFieldExtracted(state.ai_base),
               ...(await skills.skillsStatus(core.findDshHome()).catch(() => ({ skills: [] }))),
-            });
+            };
+            lastStatusPayload = payload;
+            sendJson(response, 200, { ...payload, apply_progress: progress });
           } catch (e) {
-            sendJson(response, 500, { ok: false, error: String(e) });
+            sendJson(response, 500, { ok: false, error: String(e), apply_progress: getApplyProgress() });
           }
         },
       }, "dsh-purge: status");
@@ -1998,6 +2090,7 @@ function installWebServer(ctx, cfg) {
             response.end();
             return;
           }
+          beginApply("home");
           try {
             const body = await readJsonBody(request);
             const incoming = typeof body?.content === "string" ? body.content : null;
@@ -2008,13 +2101,16 @@ function installWebServer(ctx, cfg) {
             const state = await core.gatherState();
             if (home) state.dsh_home = home;
             let located;
+            setApplyProgress({ stage: "locate" });
             try {
               located = await core.resolveOfficialAiBase(state.ai_base, { forApply: true });
             } catch (e) {
+              endApply({ stage: "locate", error: String(e && e.message ? e.message : e) });
               sendJson(response, 500, { ok: false, error: String(e && e.message ? e.message : e) });
               return;
             }
             if (!located.aiBase) {
+              endApply({ stage: "locate", error: "no_base" });
               sendJson(response, 500, { ok: false, error: core.missingAiBaseMessage() });
               return;
             }
@@ -2026,6 +2122,7 @@ function installWebServer(ctx, cfg) {
             const handoff = located.handoff && located.handoff.swapAsar ? located.handoff : null;
             const blocked = rejectIfNeedPrompt(state.dsh_home, incoming === null ? undefined : incoming);
             if (blocked) {
+              resetApplyProgress();
               const ui = await core.readOverrideForUi(state.dsh_home);
               sendJson(response, 400, {
                 ok: false,
@@ -2036,16 +2133,26 @@ function installWebServer(ctx, cfg) {
               });
               return;
             }
+            setApplyProgress({ stage: "override" });
             try {
               await core.commitOverrideOnApply(state.dsh_home, incoming);
             } catch (e) {
               console.warn("[dsh-purge] apply override:", String(e && e.message ? e.message : e));
             }
+            setApplyProgress({ stage: "patch" });
             const httpMulti = await core.applyPatchesAllHosts(core.ALL_PATCHES, {
               preserveClientBundles: false,
               forApply: true,
+              onHost(info) {
+                setApplyProgress({
+                  stage: "patch",
+                  applied: info.index || 0,
+                  detail: info.aiBase || "",
+                });
+              },
             });
             const report = httpMulti.report;
+            setApplyProgress({ stage: "shim" });
             const shim = await core.patchAllShims();
             let cliRepair = null;
             try {
@@ -2053,6 +2160,7 @@ function installWebServer(ctx, cfg) {
             } catch (e) {
               cliRepair = { ok: false, error: String(e && e.message ? e.message : e) };
             }
+            setApplyProgress({ stage: "flash" });
             const flash = core.silenceCmdFlash(httpMulti.hosts[0]?.aiBase || state.ai_base);
             const summary = core.summarizeApplyReport(report);
             const hostWritten =
@@ -2075,6 +2183,7 @@ function installWebServer(ctx, cfg) {
             else bootFullQuit = false;
             if (shouldRestart) reapply.markSettleRestart();
             let promptInjectInstall = "skipped";
+            setApplyProgress({ stage: "seed" });
             if (hostWritten && flash.ok === true) {
               // Apply → cleanup → restart 成功后，默认把加密提示词 seed 进 prompt-inject.md。
               // 用户自改过的内容保留；仅当文件不存在或仍是插件旧默认时才写。
@@ -2087,6 +2196,10 @@ function installWebServer(ctx, cfg) {
             }
             const hung = refreshHungOperator(state.dsh_home);
             const override = await core.readOverrideForUi(state.dsh_home);
+            endApply({
+              stage: "done",
+              error: complete || (promptReady && hostWritten) ? "" : "incomplete",
+            });
             sendJson(response, 200, {
               ok: true,
               complete,
@@ -2117,6 +2230,7 @@ function installWebServer(ctx, cfg) {
               cmd_flash: flash,
             });
           } catch (e) {
+            endApply({ error: String(e && e.message ? e.message : e) });
             sendJson(response, 500, { ok: false, error: String(e) });
           }
         },
@@ -2130,17 +2244,26 @@ function installWebServer(ctx, cfg) {
             response.end();
             return;
           }
+          beginJob("revert", "locate");
           try {
             const state = await core.gatherState();
             const result = {};
+            setApplyProgress({ kind: "revert", stage: "revert" });
             if (state.ai_base) {
               const { reverted, errors } = await core.revertAll(state.ai_base);
               result.reverted = reverted.length;
               result.errors = errors.length;
             }
+            setApplyProgress({ kind: "revert", stage: "shim" });
             result.shim = await core.revertAllShims();
+            endApply({
+              kind: "revert",
+              stage: "done",
+              error: result.errors ? "incomplete" : "",
+            });
             sendJson(response, 200, { ok: true, ...result, note: "重启 dsh 恢复; prompt-inject.md 保留" });
           } catch (e) {
+            endApply({ kind: "revert", error: String(e && e.message ? e.message : e) });
             sendJson(response, 500, { ok: false, error: String(e) });
           }
         },
@@ -2154,8 +2277,18 @@ function installWebServer(ctx, cfg) {
             response.end();
             return;
           }
+          beginJob("uninstall", "locate");
           try {
-            const result = await uninstaller.uninstallPurge();
+            const result = await uninstaller.uninstallPurge({
+              onStage(stage) {
+                setApplyProgress({ kind: "uninstall", stage });
+              },
+            });
+            endApply({
+              kind: "uninstall",
+              stage: "done",
+              error: result.ok ? "" : (result.errors && result.errors[0]) || "incomplete",
+            });
             sendJson(response, result.ok ? 200 : 500, {
               ...result,
               surface: hostctl.currentSurface(),
@@ -2170,6 +2303,7 @@ function installWebServer(ctx, cfg) {
               });
             }
           } catch (e) {
+            endApply({ kind: "uninstall", error: String(e && e.message ? e.message : e) });
             sendJson(response, 500, { ok: false, error: String(e && e.message ? e.message : e) });
           }
         },

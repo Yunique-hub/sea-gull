@@ -3,6 +3,23 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.12] - 2026-10-30
+
+### Changed
+
+- 合并 dsh-purge 最新正式版 1.1.82（固定 `6318442a88ea7459d0135d0a07f31776c5d6a7b1`）：pnpm allowBuilds URL 键、重复键和实际 lock URL 修复；桌面识别；ZIP 目录解压；软链启动器与文件权限保护；应用流程进度；主子会话能力协议一致。
+- 保留海鸥 rc.3 兼容、人格单源、恢复默认备份、首启须知隐藏、Steer/Queue、项目与工具目录功能、自有更新保护及许可署名。上游自身仍声明支持 rc.2，不能用原版更新覆盖海鸥适配。
+
+### Fixed
+
+- 上游挂载自愈会在海鸥已有 bundle insert 之外追加 profile insert。新增先失败后通过的回归，托管包已有本体时跳过追加，缺失本体时仍自愈。
+
+- 启动自愈在宿主明确指定 profile 时仅处理该环境，保留其他 profile 的配置。
+
+### Validation
+
+- 海鸥 157 项回归、上游 36 项测试与隔离安装冒烟通过；上游测试加入双平台 CI。实际桌面验证和部署边界见 [1.0.12 升级报告](docs/UPGRADE-1.0.12.md)。
+
 ## [1.0.11] - 2026-10-29
 
 ### Fixed

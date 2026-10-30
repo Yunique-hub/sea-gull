@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.11-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.12-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,7 +17,9 @@
 
 ---
 
-当前 **v1.0.11** 适配官方 Windows Harness **0.2.1-rc.3**，引擎为 dsh-purge **1.1.78**（固定上游 master 提交 [fd109e1](https://github.com/YuJunZhiXue/dsh-purge/tree/fd109e106ce5818b3c00524123a3431e4afc0e81)）。98 个上游 Git blob 已核验。
+当前 **v1.0.12** 适配官方 Windows Harness **0.2.1-rc.3**，引擎为 dsh-purge **1.1.82**（固定上游正式版提交 [6318442](https://github.com/YuJunZhiXue/dsh-purge/tree/6318442a88ea7459d0135d0a07f31776c5d6a7b1)）。采用最新正式版快照，保留海鸥 rc.3 兼容修改。
+
+1.0.12 合并 pnpm 配置修复、桌面识别、ZIP 解压与应用进度等上游工程改进，并处理海鸥 bundle 重复挂载及自愈跨 profile 写入问题。上游自身只声明支持 rc.2，海鸥的 rc.3 适配独立保留并验收；请继续使用海鸥更新入口。详见[升级分析与验证](docs/UPGRADE-1.0.12.md)。
 
 1.0.10 修复市场把 scoped 包误识别成短名称的校验失败及新装技能未刷新到 `/` 菜单，新增工具目录选择、缺失工具自动下载校验和中文回复约定，并整合 **AgentTeams 0.1.26**。在工作区新会话输入 `agent-teams 创建两名成员，分别实现和复核……` 或 `/agent-teams ……`，队长会创建成员及任务依赖并执行；明确要求先审阅时才等待确认。团队状态保存在当前工作区 `.agent-teams/`，更新保留存档。来源、改动与限制见[本轮整合分析](docs/INTEGRATION-1.0.10.md)。
 
@@ -51,7 +53,7 @@
 
 | 来源 | 提供什么 |
 |---|---|
-| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.78 | 宿主兼容、演练台、证据账本与本地靶场限制；保留 88 条本地补丁定义 |
+| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.82 | 宿主兼容、演练台、证据账本与本地靶场限制；保留 88 条本地补丁定义 |
 | [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | 海鸥人格（00a–00r 规则体系）+ 5 个领域技能 |
 
 合并不是拼盘——`SOUL.md` 不能直接当 DSH 提示词（插值白名单、ChatML 信封、技能目录协议

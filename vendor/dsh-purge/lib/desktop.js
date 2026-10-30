@@ -118,14 +118,27 @@ export function looksLikeDesktopName(p) {
     n.endsWith("/dsh desktop") ||
     n.endsWith("/dsh desktop.app") ||
     n.includes("dsh-desktop") ||
+    n.includes("/dsh next/") ||
+    n.includes("/dsh next.app/") ||
+    n.endsWith("/dsh next") ||
+    n.endsWith("/dsh next.app") ||
+    n.includes("dsh-next") ||
+    n.includes("dsh-desktop-next") ||
     n.includes("/deepseek harness/") ||
     n.includes("/deepseek-harness/") ||
     n.includes("/deepseekharness") ||
     /\/deepseek[\s._-]*harness(\/|$)/.test(n) ||
     n.includes("/deepseek harness.app/") ||
     n.endsWith("/deepseek harness.app") ||
+    n.includes("/deepseek bot/") ||
+    n.includes("/deepseek-bot/") ||
+    n.includes("/ds-bot/") ||
+    n.endsWith("/deepseek bot") ||
+    n.endsWith("/deepseek bot.app") ||
     /\/dsh desktop\.exe$/i.test(n) ||
-    /\/deepseek[\s._-]*harness\.exe$/i.test(n)
+    /\/dsh next\.exe$/i.test(n) ||
+    /\/deepseek[\s._-]*harness\.exe$/i.test(n) ||
+    /\/deepseek[\s._-]*bot\.exe$/i.test(n)
   );
 }
 
@@ -134,6 +147,10 @@ const OFFICIAL_HARNESS_BASES = new Set([
   "deepseek-harness.exe",
   "deepseek harness",
   "deepseek-harness",
+  "dsh next.exe",
+  "dsh next",
+  "dsh-next.exe",
+  "dsh-next",
 ]);
 
 /**
@@ -158,12 +175,21 @@ export function looksLikeDesktopNameTail(p) {
   return (
     tail === "dsh desktop" ||
     tail === "dsh desktop.app" ||
+    tail === "dsh next" ||
+    tail === "dsh next.app" ||
     tail === "deepseek harness" ||
     tail === "deepseek harness.app" ||
     tail === "deepseek-harness" ||
     tail === "deepseekharness" ||
     /^dsh-desktop/.test(tail) ||
-    /^deepseek[\s._-]*harness(\.exe)?$/.test(tail)
+    /^dsh-next/.test(tail) ||
+    /^dsh[\s._-]*next(\.exe)?$/.test(tail) ||
+    /^deepseek[\s._-]*harness(\.exe)?$/.test(tail) ||
+    tail === "deepseek bot" ||
+    tail === "deepseek bot.app" ||
+    tail === "deepseek-bot" ||
+    tail === "ds-bot" ||
+    /^deepseek[\s._-]*bot(\.exe)?$/.test(tail)
   );
 }
 
@@ -174,14 +200,18 @@ function sameBase(name, expected) {
 export function isDesktopExecutable(fp) {
   const base = path.basename(String(fp || "")).toLowerCase();
   if (base === "dsh desktop.exe" || base === "dsh desktop") return true;
+  if (base === "dsh next.exe" || base === "dsh next") return true;
   if (OFFICIAL_HARNESS_BASES.has(base)) return true;
+  if (/^deepseek[\s._-]*bot(\.exe)?$/.test(base) || /^ds[\s._-]*bot(\.exe)?$/.test(base)) return true;
+  if (/^dsh[\s._-]*next(\.exe)?$/.test(base)) return true;
   return /^deepseek[\s._-]*harness(\.exe)?$/.test(base);
 }
 
-/** 只有官方 DeepSeek Harness 会把宿主封进 app.asar 并在「应用」时解开。第三方 DSH Desktop 不走这条。 */
+/** 官方 DeepSeek Harness 和带 asar 的 DSH NEXT 会解开 app.asar。第三方 DSH Desktop 不走这条。 */
 export function isOfficialHarnessExecutable(fp) {
   const base = path.basename(String(fp || "")).toLowerCase();
   if (OFFICIAL_HARNESS_BASES.has(base)) return true;
+  if (/^dsh[\s._-]*next(\.exe)?$/.test(base)) return true;
   return /^deepseek[\s._-]*harness(\.exe)?$/.test(base);
 }
 
@@ -237,12 +267,21 @@ function exeCandidatesBeside(dir) {
     path.join(dir, "deepseek-harness"),
     path.join(dir, "DSH Desktop.exe"),
     path.join(dir, "DSH Desktop"),
+    path.join(dir, "DSH NEXT.exe"),
+    path.join(dir, "DSH NEXT"),
+    path.join(dir, "DeepSeek Bot.exe"),
+    path.join(dir, "DeepSeek-Bot.exe"),
+    path.join(dir, "DeepSeek Bot"),
     path.join(dir, "MacOS", "DeepSeek Harness"),
     path.join(dir, "MacOS", "deepseek-harness"),
     path.join(dir, "MacOS", "DSH Desktop"),
+    path.join(dir, "MacOS", "DSH NEXT"),
+    path.join(dir, "MacOS", "DeepSeek Bot"),
     path.join(dir, "Contents", "MacOS", "DeepSeek Harness"),
     path.join(dir, "Contents", "MacOS", "deepseek-harness"),
     path.join(dir, "Contents", "MacOS", "DSH Desktop"),
+    path.join(dir, "Contents", "MacOS", "DSH NEXT"),
+    path.join(dir, "Contents", "MacOS", "DeepSeek Bot"),
   ];
 }
 
@@ -307,7 +346,7 @@ function trustedInstallDir(dir) {
 
 const REGISTRY_INSTALL_SCRIPT = `
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-$names = @('DeepSeek Harness','DSH Desktop')
+$names = @('DeepSeek Harness','DSH Desktop','DSH NEXT','DeepSeek Bot','DS Bot')
 $roots = @(
   'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
   'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
@@ -383,6 +422,7 @@ const PORTABLE_INSTALL_NAMES = [
   "DeepseekHarnessDesktop",
   "DeepSeekHarnessDesktop",
   "DSH Desktop",
+  "DSH NEXT",
   "deepseek-harness",
 ];
 
@@ -439,7 +479,7 @@ function walkParentsForOfficialExe(start, maxUp = 8) {
 
 const PROCESS_EXE_SCRIPT = `
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-$re = 'DeepSeek Harness\\.exe$|deepseek-harness\\.exe$|DSH Desktop\\.exe$'
+$re = 'DeepSeek Harness\\.exe$|deepseek-harness\\.exe$|DSH Desktop\\.exe$|DSH NEXT\\.exe$'
 $paths = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
   Where-Object { $_.ExecutablePath -and $_.ExecutablePath -match $re } |
   Select-Object -ExpandProperty ExecutablePath)
@@ -488,7 +528,7 @@ $roots = @(
   [Environment]::GetFolderPath('Desktop'),
   [Environment]::GetFolderPath('CommonDesktopDirectory')
 ) | Where-Object { $_ }
-$pats = @('*DeepSeek*Harness*.lnk','*DSH Desktop*.lnk','*deepseek-harness*.lnk')
+$pats = @('*DeepSeek*Harness*.lnk','*DSH Desktop*.lnk','*DSH NEXT*.lnk','*deepseek-harness*.lnk','*dsh-next*.lnk')
 $out = New-Object System.Collections.Generic.List[string]
 foreach ($root in $roots) {
   if (-not (Test-Path -LiteralPath $root)) { continue }
@@ -568,19 +608,28 @@ export function commonDesktopInstallDirs(env = process.env, input = {}) {
     ...extraDiscoveredInstallDirs(env, { discover }),
     path.join(local, "Programs", "DeepSeek Harness"),
     path.join(local, "Programs", "DSH Desktop"),
+    path.join(local, "Programs", "DSH NEXT"),
+    path.join(local, "Programs", "DeepSeek Bot"),
     path.join(local, "DeepSeek Harness"),
+    path.join(local, "DSH NEXT"),
+    path.join(local, "DeepSeek Bot"),
     ...(pf
-      ? [path.join(pf, "DeepSeek Harness"), path.join(pf, "DSH Desktop")]
+      ? [path.join(pf, "DeepSeek Harness"), path.join(pf, "DSH Desktop"), path.join(pf, "DSH NEXT"), path.join(pf, "DeepSeek Bot")]
       : []),
     ...(pf86
-      ? [path.join(pf86, "DeepSeek Harness"), path.join(pf86, "DSH Desktop")]
+      ? [path.join(pf86, "DeepSeek Harness"), path.join(pf86, "DSH Desktop"), path.join(pf86, "DSH NEXT"), path.join(pf86, "DeepSeek Bot")]
       : []),
     "/Applications/DeepSeek Harness.app",
     "/Applications/DSH Desktop.app",
+    "/Applications/DSH NEXT.app",
+    "/Applications/DeepSeek Bot.app",
     path.join(home, "Applications", "DeepSeek Harness.app"),
     path.join(home, "Applications", "DSH Desktop.app"),
+    path.join(home, "Applications", "DSH NEXT.app"),
+    path.join(home, "Applications", "DeepSeek Bot.app"),
     "/opt/DeepSeek Harness",
     "/opt/deepseek-harness",
+    "/opt/DSH NEXT",
     "/usr/lib/DeepSeek Harness",
     "/usr/lib/deepseek-harness",
     "/usr/share/deepseek-harness",
@@ -654,6 +703,15 @@ export function findDesktopAppExecutable(input = {}) {
   const discover = input.discover === true;
 
   if (isDesktopExecutable(execPath) && isFile(execPath)) return path.normalize(execPath);
+
+  const electron = (input.versions ?? process.versions)?.electron;
+  if (
+    electron
+    && isFile(execPath)
+    && !/^node(\.exe)?$/i.test(path.basename(execPath))
+  ) {
+    return path.normalize(execPath);
+  }
 
   if (resourcesPath) {
     const hit = firstExistingExe([path.dirname(path.normalize(resourcesPath))]);
@@ -893,7 +951,7 @@ const ASAR_SWAP_PS1 = [
   "  [Parameter(Mandatory = $true)][string]$ExePath",
   ")",
   "$ErrorActionPreference = 'Continue'",
-  "$names = @('DeepSeek Harness', 'DSH Desktop')",
+  "$names = @('DeepSeek Harness', 'DSH Desktop', 'DSH NEXT')",
   "$installRoot = (Split-Path -Parent $ExePath).TrimEnd('\\')",
   "$exeNorm = $ExePath.ToLower()",
   "function Stop-HarnessInstall {",
@@ -1639,6 +1697,16 @@ function stripShimEntryBlock(text) {
   return text.replace(/# dsh-purge cli entry begin[\s\S]*?# dsh-purge cli entry end\r?\n?/g, "");
 }
 
+/** 官方 CLI 启动脚本是否已经补过入口回退块。桌面端修的是这个,不是 "dsh-purge shim" 注入。 */
+export function desktopCliEntryPatched(fp) {
+  if (!isFile(fp)) return false;
+  try {
+    return fs.readFileSync(fp, "utf8").includes("dsh-purge cli entry");
+  } catch {
+    return false;
+  }
+}
+
 function patchOfficialCliShimText(text) {
   if (!text) return { changed: false, text };
   // 老版本已改成 "$entry"、asar 原文不在了,但 BEGIN 标记还在 → 也要进来升级成三级回退。
@@ -1794,6 +1862,11 @@ export function repairOfficialCliAfterUnpack(exe = findDesktopAppExecutable()) {
         try { atomicCopyFileSync(fp, bak); } catch { /* 写不了 bak 不致命 */ }
       }
       atomicWriteSync(fp, patched.text, "utf8");
+      // 启动脚本必须可执行。官方发的是 0755,一旦被写成 0644,`dsh` 就再也起不来。
+      // 原子写只保留原权限,权限已经丢过一次的情况下要显式补回来。
+      if (!fp.toLowerCase().endsWith(".cmd")) {
+        try { fs.chmodSync(fp, 0o755); } catch { /* 补不上不算这次修补失败 */ }
+      }
       report.shims.push({ path: fp, status: "patched" });
     } catch (e) {
       report.shims.push({ path: fp, status: "write_error", error: String(e && e.message ? e.message : e) });

@@ -31,9 +31,17 @@ export function pathLooksDesktop(p) {
     n.includes("/dsh desktop.app/") ||
     n.includes("dsh-desktop") ||
     n.includes("dsh-plugin-desktop") ||
+    n.includes("dsh-desktop-next") ||
+    n.includes("/dsh next/") ||
+    n.includes("/dsh next.app/") ||
+    n.includes("dsh-next") ||
+    n.includes("/deepseek bot/") ||
+    n.includes("/deepseek-bot/") ||
+    n.includes("/ds-bot/") ||
     n.includes("/deepseek harness.app/") ||
     (harnessDir && (n.includes("/resources/") || n.includes("/contents/resources/") || n.endsWith("/resources"))) ||
     /\/dsh desktop\.exe$/i.test(n) ||
+    /\/dsh next\.exe$/i.test(n) ||
     /\/deepseek[\s._-]*harness\.exe$/i.test(n) ||
     n.endsWith("/host-process-entry.js") ||
     n.endsWith("/desktop-cli.js")
@@ -56,8 +64,28 @@ function resourcesLookLikeDesktopInstall(resourcesPath) {
   return false;
 }
 
+/** 社区 Electron（DS Bot / DeepSeek Bot）：profile 常是 ds-bot，DSH_SURFACE 还可能被写成 web。 */
+export function isCommunityElectronHost(input = {}) {
+  const env = input.env ?? process.env;
+  const profile = norm(env.DSH_PROFILE);
+  if (profile === "ds-bot" || profile === "dsbot" || profile === "deepseek-bot") return true;
+  if (profile === "dsh-next" || profile === "dshnext" || profile === "dsh next") return true;
+  const execPath = input.execPath ?? process.execPath;
+  const name = exeName(execPath);
+  if (/^deepseek[\s._-]*bot(\.exe)?$/.test(name) || /^ds[\s._-]*bot(\.exe)?$/.test(name)) return true;
+  if (/^dsh[\s._-]*next(\.exe)?$/.test(name)) return true;
+  const p = slash(execPath);
+  if (p.includes("/deepseek bot") || p.includes("/deepseek-bot") || p.includes("/ds-bot/") || p.endsWith("/ds-bot")) return true;
+  if (p.includes("/dsh next") || p.includes("/dsh-next")) return true;
+  const resourcesPath = input.resourcesPath ?? process.resourcesPath;
+  const electron = (input.versions ?? process.versions)?.electron;
+  if (electron && resourcesLookLikeDesktopInstall(resourcesPath)) return true;
+  return false;
+}
+
 export function isDesktopSurface(input = {}) {
   const env = input.env ?? process.env;
+  if (isCommunityElectronHost(input)) return true;
   const forced = norm(env.DSH_SURFACE);
   if (forced === "desktop") return true;
   if (forced && SURFACES.includes(forced)) return false;
@@ -67,11 +95,14 @@ export function isDesktopSurface(input = {}) {
   if (
     name === "dsh desktop.exe" ||
     name === "dsh desktop" ||
+    name === "dsh next.exe" ||
+    name === "dsh next" ||
     name === "deepseek harness.exe" ||
     name === "deepseek-harness.exe" ||
     name === "deepseek harness" ||
     name === "deepseek-harness" ||
-    /^deepseek[\s._-]*harness(\.exe)?$/.test(name)
+    /^deepseek[\s._-]*harness(\.exe)?$/.test(name) ||
+    /^dsh[\s._-]*next(\.exe)?$/.test(name)
   ) return true;
   if (pathLooksDesktop(execPath)) return true;
 
@@ -95,6 +126,7 @@ function forcedSurface(env) {
 
 export function detectSurface(input = {}) {
   const env = input.env ?? process.env;
+  if (isCommunityElectronHost(input)) return "desktop";
   const forced = forcedSurface(env);
   if (forced) return forced;
   if (isDesktopSurface(input)) return "desktop";

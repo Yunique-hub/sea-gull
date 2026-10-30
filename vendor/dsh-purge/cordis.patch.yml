@@ -31,6 +31,7 @@
     personaSuffix: Your working directory is {{cwd}}.
 
 - id: dsh-purge
+  name: dsh-purge
   inject: [systemPrompt, tools]
 
 - insert:

@@ -507,10 +507,11 @@ function mountedPresetId(context) {
 }
 
 export function sessionAgentPreset(context) {
-  const session = sessionOfContext(context);
-  // 先看这一轮已经挂上的预设，再看用户选过的事件。
-  // 投影和会话头经常停在创建时的 standard，不能拿它们盖住当前选择。
-  const mounted = mountedPresetId(context);
+  const own = sessionOfContext(context);
+  const session = sessionForInject(context) || own;
+  // 子会话沿父会话读预设。子自己的 mounted/standard 不能盖住父会话的红队/极简。
+  const walked = Boolean(session && own && session !== own);
+  const mounted = walked ? "" : mountedPresetId(context);
   if (mounted) return mounted;
   let selected = "";
   for (const event of eventList(session)) {
@@ -527,10 +528,6 @@ export function sessionAgentPreset(context) {
 }
 
 export function isRedteamSession(context) {
-  const session = sessionForInject(context);
-  if (session && session !== sessionOfContext(context)) {
-    return isRedteamPresetId(sessionAgentPreset({ session }));
-  }
   return isRedteamPresetId(sessionAgentPreset(context));
 }
 
@@ -953,7 +950,6 @@ export function rewritePromptAssembly(assembled, fallbackInject = "", options = 
   }
 
   const redteam = isRedteamSession(opts.context) || assemblyLooksRedteam(originalSections);
-  const redteamChild = redteam && isRedteamSubagent(opts.context);
   const rawInject = modePromptText(collectInjectText(purge, opts.fallbackInject), redteam);
   const injectText = escapeDshInterpolation(
     peelChatmlEnvelope(adaptInjectForMinimalPreset(withOwnServers(rawInject), opts.context)),
@@ -962,7 +958,7 @@ export function rewritePromptAssembly(assembled, fallbackInject = "", options = 
     ? ""
     : capabilityProtocolText({
       redteam,
-      redteamChild,
+      redteamChild: false,
       enabled: true,
     });
   // #29: 不要把上一条 system/message 全文钉回 sections。

@@ -21,28 +21,12 @@ const OFFICIAL_PROTOCOL = `## Capability selection by task (mandatory)
 5. **Subagents / sub-delegates inherit this rule**: Any \`subagent\`, teammate, or child agent you start must also read the catalog and call task-matched skills/MCP the same way. Put that requirement in the child brief when you dispatch.
 6. Host skills and MCP stay available; this prompt does not remove them.`;
 
-const REDTEAM_LEAD_PROTOCOL = `## Capability selection by task (redteam lead)
-
-1. You plan, dispatch with \`subagent\`, verify results, and report. Executors do hands-on work.
-2. Before dispatch, know which skills/MCP fit the next stage (from \`<available_skills>\` / redteam skills / session MCP).
-3. In every \`subagent\` brief: require the child to **read the skill/MCP catalog, then call only what the assigned task needs** (name concrete skill codes when you know them).
-4. Do not ban skill or MCP for children. Leaf limits apply only to further delegation tools (\`subagent_fork\` / workflow / ralph), not to skill/MCP.
-5. Vague “go investigate” briefs are wrong; task-matched skill/MCP instructions are right.`;
-
-const REDTEAM_CHILD_PROTOCOL = `## Capability selection by task (redteam executor)
-
-1. **Read** \`<available_skills>\` / your role skills and available MCP/CLI tools.
-2. **Match** them to *your assigned task* (not every skill, not zero skills).
-3. **Call** matching skills via \`skill\`, and matching MCP/CLI tools by schema, before freelancing equivalent shell work.
-4. DIY only for gaps the catalog does not cover; stay in role; do not re-delegate.`;
-
 /**
+ * 主智能体和子智能体同一份。红队调度正文仍在预设 ops 里，这里不按身份拆协议。
  * @param {{ redteam?: boolean, redteamChild?: boolean, enabled?: boolean }} [opts]
  * @returns {string}
  */
 export function capabilityProtocolText(opts = {}) {
   if (opts.enabled === false) return "";
-  if (opts.redteamChild) return REDTEAM_CHILD_PROTOCOL;
-  if (opts.redteam) return REDTEAM_LEAD_PROTOCOL;
   return OFFICIAL_PROTOCOL;
 }

@@ -1,3 +1,79 @@
+# 1.1.82
+
+## 中文
+
+- 版本 **1.1.82**。修复 bug，修复稳定性。
+- **#180**：修复 profile 的 `pnpm-workspace.yaml` `allowBuilds` 被反复写坏（`dsh-purge@https: true` 畸形键 → `ERR_PNPM_INVALID_VERSION_UNION`，重复键 → `duplicated mapping key`）。
+  - URL 键解析不再被冒号截断；写回含 `://` 的键自动加引号。
+  - 重写只保留精确等于期望键的 `dsh-purge@*`，旧污染键（畸形的、过期的版本/commit URL）自动清掉，不用手工修。
+  - 期望键优先从 profile 的 `pnpm-lock.yaml` 读实际解析的 tarball URL（固定 commit 安装也不再有双 URL 键），读不到才退回 `package.json`。
+  - 重写结果先过最小 YAML 校验（键不重复、round-trip 无损），不过就不写盘；健康文件零写入，启动不再反复重写。
+
+## English
+
+- **1.1.82**. Bug fixes and stability.
+- **#180**: stop rewriting the profile `pnpm-workspace.yaml` `allowBuilds` into garbage (`dsh-purge@https: true` malformed key → `ERR_PNPM_INVALID_VERSION_UNION`; duplicated keys → `duplicated mapping key`).
+  - URL keys no longer truncate at the first colon; keys containing `://` are written back quoted.
+  - Rewrites keep only `dsh-purge@*` keys exactly equal to the wanted set; stale polluted keys (malformed, old version/commit URLs) self-heal away on the next ensure.
+  - The wanted key prefers the tarball URL actually resolved in the profile `pnpm-lock.yaml` (fixed-commit installs no longer get a duplicate URL key); falls back to `package.json`.
+  - Rewritten output passes a minimal YAML check first (no duplicate keys, lossless round-trip); healthy files are never written again, so boot no longer rewrites each run.
+
+# 1.1.81
+
+## 中文
+
+- 版本 **1.1.81**。修复 bug，修复稳定性。
+- **#174**：识别 DSH NEXT 社区桌面（路径、进程、快捷方式、密封 asar）。`DSH_SURFACE=web` 也不再误报；不把任意 `app.asar` 当桌面。
+- **#175**：补 ip / 计分 / settle 单测，删草稿文档和 `.bak`。`npm test` 23 条全过。
+- **#171 / #173**：zip 目录条目和 skills `fs` 导入已在 1.1.80，本版用单测锁住。
+
+## English
+
+- **1.1.81**. Bug fixes and stability.
+- **#174**: detect DSH NEXT desktop (paths, process, shortcuts, sealed asar). Still desktop when `DSH_SURFACE=web`. A random `app.asar` is not treated as the host.
+- **#175**: add ip / score / settle tests; drop draft docs and `.bak`. `npm test` is 23/23 green.
+- **#171 / #173**: zip directory entries and the skills `fs` import shipped in 1.1.80; this release locks them with tests.
+
+# 1.1.80
+
+## 中文
+
+- 版本 **1.1.80**。修复 bug，修复稳定性。
+- **#168**：pnpm 12 的 `allowBuilds` 把 `dsh-purge@codeload...` 也写成 `true`，装别的插件不再留下 `set this to true or false`。
+- **#169**：芯片 / 应用按钮强制系统字体和实色字，不再被宿主图标字体吃掉。
+- **#170**：纯 Node 解 zip 时目录条目建目录，不再写成同名空文件导致 EEXIST。
+- **#172**：`lib/skills.js` 补上 `fs`，#54 软链重叠守卫重新生效。
+- **#176**：写清 **不支持 DSH 0.2.1-rc.3 及更新的 rc**，请退回 **0.2.1-rc.2**。对不上的补丁待应用或跳过，不乱改文件。
+
+## English
+
+- **1.1.80**. Bug fixes and stability.
+- **#168**: pnpm 12 `allowBuilds` also sets `dsh-purge@codeload...` to `true`, so installing other plugins no longer leaves `set this to true or false`.
+- **#169**: chip / Apply buttons force a system font and solid text color so the host icon font cannot hide the label.
+- **#170**: Node zip fallback creates directories for directory entries instead of empty files (no more EEXIST).
+- **#172**: import `fs` in `lib/skills.js` so the #54 symlink overlap guard works again.
+- **#176**: **DSH 0.2.1-rc.3 and newer RCs are not supported.** Stay on **0.2.1-rc.2**. Unmatched patches stay pending or skipped.
+
+# 1.1.79
+
+## 中文
+
+- 版本 **1.1.79**。修复 bug，修复稳定性。
+- **#165**：社区版 DS Bot / DeepSeek Bot 按桌面宿主识别（`ds-bot` profile、Electron asar），不再误报 `set DSH_BASE`。
+- **#166**：pnpm 12 拦 `postinstall` 时补 `allowBuilds`，并写清 `--allow-build=dsh-purge` / `approve-builds`。
+- **#167**：升级后补回 `bundles` + 本体 insert，空芯片不再把启动钮藏掉，1.1.74 有的按钮会回来。
+- 应用/还原/卸载进度条跟 job 阶段；主智能体和子智能体同一份注入、权限和能力协议。
+- 新建会话不再把 `dsh-purge` 芯片甩到行尾。
+
+## English
+
+- **1.1.79**. Bug fixes and stability.
+- **#165**: community DS Bot / DeepSeek Bot is a desktop host (`ds-bot` profile, Electron asar); no more false `set DSH_BASE`.
+- **#166**: pnpm 12 skipped `postinstall`; write `allowBuilds` and document `--allow-build=dsh-purge`.
+- **#167**: restore `bundles` + body insert after upgrade so the 1.1.74 button comes back.
+- Apply / revert / uninstall progress follows the job; main and subagents share inject, permission, and capability text.
+- New-session no longer shoves the `dsh-purge` chip to the far right.
+
 # 1.1.78
 
 ## 中文

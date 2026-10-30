@@ -12,6 +12,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readPresetDefinition, preparePresetDefinitions } from './preset-composition.js'
 import { scheduleClearOwnedSelectedDefault } from '../preset-default.js'
+import { ensureAllProfileBodyInserts } from '../profile-insert.js'
 
 /** Cordis 插件名。 */
 export const name = 'dsh-purge-redteam'
@@ -426,6 +427,16 @@ export function installPreset(options = {}) {
  * @param ctx - 插件上下文。
  */
 export function apply(ctx) {
+  try {
+    const home = process.env.DSH_HOME || join(homedir(), '.dsh')
+    const healed = ensureAllProfileBodyInserts(home)
+    for (const item of healed) {
+      if (item.wrote) {
+        ctx.logger?.info?.('redteam-mode: 已补本体 insert %s（下次启动加载主插件）', item.path)
+      }
+    }
+  } catch { /* 自愈失败不挡预设落地 */ }
+
   const paths = packagePaths()
   let result
   try {

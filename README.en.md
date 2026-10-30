@@ -4,7 +4,7 @@
 
 One-line install · idempotent · uninstallable · backed by evidence
 
-**v1.0.11 targets the official Windows Harness 0.2.1-rc.3** with **dsh-purge 1.1.78**, pinned to upstream master commit [fd109e1](https://github.com/YuJunZhiXue/dsh-purge/tree/fd109e106ce5818b3c00524123a3431e4afc0e81). All 98 upstream Git blobs were verified.
+**v1.0.12 targets the official Windows Harness 0.2.1-rc.3** with **dsh-purge 1.1.82**, pinned to release commit [6318442](https://github.com/YuJunZhiXue/dsh-purge/tree/6318442a88ea7459d0135d0a07f31776c5d6a7b1). Upstream supports rc.2; Seagull retains and tests its own rc.3 compatibility changes. The merge includes pnpm allowBuilds repair, profile recovery without duplicate Seagull inserts, progress UI, desktop detection and ZIP fixes. See [upgrade verification](docs/UPGRADE-1.0.12.md).
 
 Version 1.0.10 fixes market verification of scoped packages and refreshes slash menus when skills are installed or removed, adds a chosen toolkit directory with verified official downloads, keeps Chinese as the default response language unless requested otherwise, and includes AgentTeams 0.1.26. Start a workspace conversation with `agent-teams` or `/agent-teams`, followed by a team goal; members and task dependencies run automatically unless the user explicitly requests plan review. Fresh installs require an explicit toolkit directory (`-ToolkitDir` / `--toolkit-dir`, or an interactive prompt); updates preserve the saved choice. The Windows desktop test found 13 of 15 tools: Nmap driver installation and Masscan's missing official Windows binaries remain explicitly reported manual steps. See [integration analysis](docs/INTEGRATION-1.0.10.md).
 
@@ -42,7 +42,7 @@ it removes the host-side policy gates one by one and replaces the persona layer.
 
 | Component | Provides |
 |---|---|
-| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.78 | Host compatibility, console, evidence ledger and local-lab checks; 86 local patch definitions |
+| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.82 | Host compatibility, console, evidence ledger and local-lab checks; 86 local patch definitions |
 | [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | Seagull persona + 5 domain skills |
 
 This is not a stack of two tarballs: `SOUL.md` cannot be used as a DSH prompt as-is

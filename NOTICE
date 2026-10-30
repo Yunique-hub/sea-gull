@@ -9,7 +9,7 @@
 
 - 来源：https://github.com/YuJunZhiXue/dsh-purge
 - 作者：YuJunZhiXue。
-- 版本：1.1.78，master 提交 fd109e106ce5818b3c00524123a3431e4afc0e81，2026-10-24 核验 98 个 Git blob。
+- 版本：1.1.82，正式版提交 6318442a88ea7459d0135d0a07f31776c5d6a7b1，2026-10-30 比对 104 个 Git blob：77 个一致、16 个保留海鸥差异、11 个图片附件不分发。
 - 当前上游主体代码：Apache-2.0，原始 LICENSE、NOTICE 与 LICENSE-COMMERCIAL.md 原文保留。海鸥自身根 LICENSE 保持原样。
 
 本地新增与修改文件：
@@ -34,8 +34,10 @@
 | `vendor/dsh-purge/lib/seagull-language.js` | 1.0.10 新增独立中文回复约定，注册于 lib/index.js；不改用户人格 |
 | `vendor/dsh-purge/lib/update.js` | 海鸥托管标记阻止原版更新覆盖定制，提示海鸥更新入口 |
 | `vendor/dsh-purge/package.json` | 适配 rc.3、海鸥托管标记；安装器管理 bundle，因此不启用重复 postinstall |
+| `vendor/dsh-purge/lib/profile-insert.js` | 1.0.12 合并上游自愈；海鸥 bundle 已插入本体时不再追加 profile insert，避免重复入队；明确指定 profile 时只处理当前环境 |
+| `vendor/dsh-purge/lib/asset-table.js` | 加密人格槽与海鸥人格源一致，不替换为上游默认人格 |
 
-未分发的附属文件：`docs/notice/image.png`、`docs/notice/laozhang-live-1.jpg`、`docs/notice/laozhang-live-2.jpg`、`docs/notice/laozhang-wechat-1.jpg`、`docs/preview/dock-auth.png`、`docs/preview/dock-clean.png`、`docs/preview/dock-drill.png`、`docs/preview/own-servers-en.png`、`docs/preview/own-servers.png`、`docs/preview/rules.png`、`docs/preview/settings.png`、`lib/default-prompt-inject.md.bak`。其余当前 vendor 文件与固定快照逐字节一致。
+未分发的附属文件：`docs/notice/image.png`、`docs/notice/laozhang-live-1.jpg`、`docs/notice/laozhang-live-2.jpg`、`docs/notice/laozhang-wechat-1.jpg`、`docs/preview/dock-auth.png`、`docs/preview/dock-clean.png`、`docs/preview/dock-drill.png`、`docs/preview/own-servers-en.png`、`docs/preview/own-servers.png`、`docs/preview/rules.png`、`docs/preview/settings.png`。除上述海鸥新增/修改项，其余当前 vendor 文件与固定快照逐字节一致。
 
 历史 1.1.72 的 23 个技能保留在 src/skills/redteam 作源码存档，原 MIT 许可保留于 src/skills/redteam/LICENSE-legacy-MIT；本次安装器不自动复制它们到运行目录。现有用户数据不删除。
 

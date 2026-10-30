@@ -48,30 +48,51 @@ const HIDDEN_EXEC = {
 // H19:原子写。write-to-tmp + rename。EBUSY/ENOSPC 都不会半写坏原文件。
 // 不走 FileHandle:hostFs.promises 只包了 readFile/writeFile/mkdir/unlink/rm/copyFile,无 open。
 // 不显式 fsync:原子性靠 rename;KB 级配置文件断电丢最新一次写入可接受,下一次 apply 会补。
+// H21:新临时文件默认 0644,rename 会把原权限吃掉。官方 CLI 的 dsh 原本 0755,
+// 写一次就变成 0644 → Permission denied（#155 / #157）。写前记下,写完补回。
+function existingMode(fp) {
+  try {
+    return fs.statSync(fp).mode & 0o7777;
+  } catch {
+    return undefined;
+  }
+}
+
+function restoreMode(fp, mode) {
+  if (mode === undefined) return;
+  try { fs.chmodSync(fp, mode); } catch { /* 权限补不回来不该让整次写入失败 */ }
+}
+
 export function atomicWriteSync(fp, content, encoding = "utf8") {
   const dir = path.dirname(fp);
   fs.mkdirSync(dir, { recursive: true });
   const tmp = `${fp}.${process.pid}.${Date.now()}.tmp`;
+  const mode = existingMode(fp);
   fs.writeFileSync(tmp, content, encoding);
+  restoreMode(tmp, mode);
   try {
     fs.renameSync(tmp, fp);
   } catch (e) {
     try { fs.unlinkSync(tmp); } catch { /* ignore */ }
     throw e;
   }
+  restoreMode(fp, mode);
 }
 
 export async function atomicWriteFile(fp, content, encoding = "utf8") {
   const dir = path.dirname(fp);
   await fsp.mkdir(dir, { recursive: true });
   const tmp = `${fp}.${process.pid}.${Date.now()}.tmp`;
+  const mode = existingMode(fp);
   await fsp.writeFile(tmp, content, encoding);
+  restoreMode(tmp, mode);
   try {
     await fsp.rename(tmp, fp);
   } catch (e) {
     try { await fsp.unlink(tmp); } catch { /* ignore */ }
     throw e;
   }
+  restoreMode(fp, mode);
 }
 
 export async function atomicCopyFile(src, dst) {
@@ -1987,6 +2008,13 @@ export async function applyPatchesAllHosts(patches = ALL_PATCHES, options = {}) 
       hostWritten: hostCleanMarkersPresent(aiBase),
       flash: silenceCmdFlash(aiBase),
     });
+    if (typeof options.onHost === "function") {
+      try {
+        options.onHost({ index: hosts.length, aiBase });
+      } catch {
+        /* 进度回调失败不能中断清洗 */
+      }
+    }
   }
   return {
     hosts,
@@ -2032,9 +2060,9 @@ export function missingAiBaseMessage() {
       }
       return `已找到桌面应用 ${exe}，但其 resources/app（或 app.asar.unpacked）下没有 @deepseek-ai`;
     }
-    return "未定位到当前桌面应用的 @deepseek-ai。官方客户端点「应用」会解开 app.asar 并重启；第三方 DSH Desktop 直接点「应用」。安装目录任意盘符。";
+    return "未定位到当前桌面应用的 @deepseek-ai。官方客户端点「应用」会解开 app.asar 并重启；第三方 DSH Desktop / DS Bot 直接点「应用」。安装目录任意盘符。";
   }
-  return "插件根未找到 / set DSH_BASE";
+  return "插件根未找到 / set DSH_BASE。社区 Electron（DS Bot）若报这句，点「应用」解开 app.asar，或把 DSH_BASE 指到 resources/app 下的 @deepseek-ai。";
 }
 
 function aiBaseUnderAppDir(appDir) {
@@ -2344,8 +2372,10 @@ export function desktopAsarStillSealed(input = {}) {
 
 export function findAiBase() {
   return remember("ai", () => {
-    if (adapterFor(detectSurface()) === "desktop") return findAiBaseDesktop();
-    return findAiBaseWeb();
+    const desktopFirst = adapterFor(detectSurface()) === "desktop";
+    const primary = desktopFirst ? findAiBaseDesktop() : findAiBaseWeb();
+    if (primary) return primary;
+    return desktopFirst ? findAiBaseWeb() : findAiBaseDesktop();
   });
 }
 
@@ -2537,7 +2567,7 @@ const COMPLETE_PROMPT_WATERFALL_INJECT_HEAD =
   "\t\t\t\treturn [...purge, base, ...tail]; // [dsh-purge] fold-complete inject first\n" +
   "\t\t\t})(completeSection, dshPurgeSections, dshPurgeRest, transformed.sections),\n" +
   "\t\t\tcontexts: runtimeContextSuppressed ? [] : transformed.contexts\n" +
-  "\t\t};";
+	"\t\t};";
 
 // 0.2.1 keeps required runtime facts even when ordinary contexts are suppressed.
 const COMPLETE_PROMPT_REQUIRED_CONTEXTS_INJECT_PREV = COMPLETE_PROMPT_WATERFALL_INJECT
@@ -7789,7 +7819,14 @@ export function shimIsPatched(fp) {
 export function shimFileStatus(fp) {
   if (!isFile(fp)) return "missing";
   if (!isTextShim(fp)) return "binary";
-  return shimIsPatched(fp) ? "patched" : "original";
+  try {
+    const text = fs.readFileSync(fp, "utf8");
+    if (text.includes("dsh-purge shim")) return "patched";
+    if (text.includes("dsh-purge cli entry")) return "patched";
+  } catch {
+    return "original";
+  }
+  return "original";
 }
 
 function scrubInBinBak(dir, name, cleaned) {
@@ -7893,6 +7930,91 @@ async function stripWinCmdShim(fp, text) {
   return "stripped_win_cmd";
 }
 
+function isSymlinkPath(fp) {
+  try {
+    return fs.lstatSync(fp).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+function canResolveAppBoot(fromFile) {
+  let dir = path.dirname(fromFile);
+  for (let i = 0; i < 8; i += 1) {
+    const hit = path.join(dir, "node_modules", "@deepseek-ai", "dsh-app-boot");
+    if (isFile(path.join(hit, "package.json")) || isDir(hit)) return true;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return false;
+}
+
+function looksLikeCopiedBinJs(text) {
+  return /@deepseek-ai\/dsh-app-boot/.test(String(text || ""));
+}
+
+function officialBinJsNearLauncher(fp) {
+  const dir = path.dirname(fp);
+  const cands = [
+    path.join(dir, "..", "lib", "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js"),
+    path.join(dir, "..", "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js"),
+    path.join(dir, "..", "..", "lib", "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js"),
+  ];
+  for (const cand of cands) {
+    if (isFile(cand) && canResolveAppBoot(cand)) return cand;
+  }
+  return "";
+}
+
+function posixRelLink(fromDir, toFile) {
+  let rel = path.relative(fromDir, toFile);
+  if (!rel) return toFile;
+  rel = rel.split(path.sep).join("/");
+  if (!rel.startsWith(".") && !path.isAbsolute(rel)) rel = `./${rel}`;
+  return rel;
+}
+
+/** apply 曾把软链 launcher 覆盖成 bin.js 拷贝。能找到官方入口就还原软链（#157）。 */
+function healCopiedLauncher(fp) {
+  const official = officialBinJsNearLauncher(fp);
+  if (!official) return "";
+  const rel = posixRelLink(path.dirname(fp), official);
+  try {
+    fs.unlinkSync(fp);
+    fs.symlinkSync(rel, fp);
+    return official;
+  } catch {
+    return "";
+  }
+}
+
+async function resolveShimWriteTarget(fp, fname, text) {
+  if (isSymlinkPath(fp)) {
+    try {
+      return { writeFp: fs.realpathSync(fp), text, healed: false };
+    } catch (e) {
+      return { error: `symlink:${e}` };
+    }
+  }
+  if (process.platform === "win32" || fname !== "dsh") {
+    return { writeFp: fp, text, healed: false };
+  }
+  if (looksLikeCopiedBinJs(text) && !canResolveAppBoot(fp)) {
+    const healed = healCopiedLauncher(fp);
+    if (!healed) return { skip: "skipped_no_module_root" };
+    try {
+      return { writeFp: healed, text: await loadText(healed), healed: true };
+    } catch (e) {
+      return { error: String(e) };
+    }
+  }
+  if (shimKindOf(fp) === "node" && !canResolveAppBoot(fp)) {
+    return { skip: "skipped_no_module_root" };
+  }
+  return { writeFp: fp, text, healed: false };
+}
+
 export async function patchShim(shimDir) {
   const result = {};
   if (!shimDir) return { error: "no_shim_dir" };
@@ -7930,21 +8052,37 @@ export async function patchShim(shimDir) {
       continue;
     }
 
-    if (shimIsPatched(fp) && shimInjectCurrent(text)) {
+    const target = await resolveShimWriteTarget(fp, fname, text);
+    if (target.error) {
+      result[fname] = `error:${target.error}`;
+      continue;
+    }
+    if (target.skip) {
+      result[fname] = target.skip;
+      continue;
+    }
+    const writeFp = target.writeFp;
+    text = target.text;
+
+    if (shimIsPatched(writeFp) && shimInjectCurrent(text)) {
       result[fname] = "already_patched";
       continue;
     }
-    if (shimIsPatched(fp) || hasLegacyPermissionPin(text)) text = stripShimInject(text);
+    if (shimIsPatched(writeFp) || hasLegacyPermissionPin(text)) text = stripShimInject(text);
 
-    const bak = shimBackupPath(fp);
+    const bak = shimBackupPath(writeFp);
     if (!fs.existsSync(bak)) {
       try {
         await fsp.mkdir(path.dirname(bak), { recursive: true });
-        await fsp.copyFile(fp, bak);
+        await fsp.copyFile(writeFp, bak);
       } catch {}
     }
     try {
-      await saveText(fp, insertShimInject(text, shimInjectFor(shimKindOf(fp))));
+      await saveText(writeFp, insertShimInject(text, shimInjectFor(shimKindOf(writeFp))));
+      if (shimKindOf(writeFp) === "node" && !canResolveAppBoot(writeFp)) {
+        result[fname] = "error:module_root_lost";
+        continue;
+      }
       result[fname] = isDesktopCommandRuntimeDir(shimDir) ? "patched_desktop" : "patched";
     } catch (e) {
       result[fname] = `error:${e}`;
@@ -7990,15 +8128,19 @@ export async function revertShim(shimDir, { scrubDesktop = true } = {}) {
   if (!shimDir) return result;
   for (const fname of SHIM_NAMES) {
     const fp = path.join(shimDir, fname);
-    const bak = shimBackupPath(fp);
-    const legacyBak = fp + ".dshpurge.bak";
+    let writeFp = fp;
+    if (isSymlinkPath(fp)) {
+      try { writeFp = fs.realpathSync(fp); } catch { writeFp = fp; }
+    }
+    const bak = shimBackupPath(writeFp);
+    const legacyBak = writeFp + ".dshpurge.bak";
     try {
       if (fs.existsSync(bak)) {
-        result[fname] = await restoreFromBak(fp, bak, "reverted");
+        result[fname] = await restoreFromBak(writeFp, bak, "reverted");
       } else if (fs.existsSync(legacyBak)) {
-        result[fname] = await restoreFromBak(fp, legacyBak, "reverted_legacy_in_bin");
-      } else if (shimIsPatched(fp)) {
-        await saveText(fp, stripShimInject(await loadText(fp)));
+        result[fname] = await restoreFromBak(writeFp, legacyBak, "reverted_legacy_in_bin");
+      } else if (shimIsPatched(writeFp)) {
+        await saveText(writeFp, stripShimInject(await loadText(writeFp)));
         result[fname] = "stripped_inject";
       } else if (!isFile(fp)) {
         result[fname] = "missing";
@@ -8390,6 +8532,9 @@ export async function gatherState() {
       shim_cmd = shimFileStatus(path.join(desktopShim, "dsh.cmd"));
       shim_ps1 = shimFileStatus(path.join(desktopShim, "dsh.ps1"));
       shim_bin = shimFileStatus(path.join(desktopShim, "dsh"));
+      // 桌面官方 CLI 的补丁是入口回退块(dsh-purge cli entry),不是 "dsh-purge shim" 注入。
+      if (shim_bin === "original" && desktop.desktopCliEntryPatched(path.join(desktopShim, "dsh"))) shim_bin = "patched";
+      if (shim_cmd === "original" && desktop.desktopCliEntryPatched(path.join(desktopShim, "dsh.cmd"))) shim_cmd = "patched";
     }
   } else if (shimDir) {
     shim_cmd = shimFileStatus(path.join(shimDir, "dsh.cmd"));

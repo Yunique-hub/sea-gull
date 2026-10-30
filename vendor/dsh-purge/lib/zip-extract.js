@@ -73,12 +73,23 @@ function localDataOffset(buf, localOffset) {
   return localOffset + 30 + nameLen + extraLen;
 }
 
+function isZipDirectoryEntry(name) {
+  return /[/\\]$/.test(String(name || ""));
+}
+
 export function extractZipBuffer(buf, dest) {
   fs.mkdirSync(dest, { recursive: true });
   const root = path.resolve(dest);
+  const prefix = root.endsWith(path.sep) ? root : root + path.sep;
   for (const entry of readZipEntries(buf)) {
     const rel = safeZipName(entry.name);
     if (!rel) continue;
+    const out = path.resolve(root, rel);
+    if (out !== root && !out.startsWith(prefix)) throw new Error("Invalid zip path");
+    if (isZipDirectoryEntry(entry.name)) {
+      fs.mkdirSync(out, { recursive: true });
+      continue;
+    }
     if (entry.compSize === 0xffffffff || entry.localOffset === 0xffffffff) {
       throw new Error("zip64 is not supported");
     }
@@ -90,9 +101,6 @@ export function extractZipBuffer(buf, dest) {
     if (end > buf.length) throw new Error("Truncated zip data");
     const compressed = buf.subarray(start, end);
     const body = entry.method === 0 ? compressed : zlib.inflateRawSync(compressed);
-    const out = path.resolve(root, rel);
-    const prefix = root.endsWith(path.sep) ? root : root + path.sep;
-    if (out !== root && !out.startsWith(prefix)) throw new Error("Invalid zip path");
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, body);
   }

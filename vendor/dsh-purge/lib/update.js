@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { atomicWriteSync, findDshHome } from "./core.js";
+import { ensureAllProfileInstall } from "./profile-insert.js";
 import { extractZipArchive } from "./zip-extract.js";
 
 const REPO = "YuJunZhiXue/dsh-purge";
@@ -1029,6 +1030,7 @@ async function _applyUpdateImpl(jobs, options) {
     vias.add("zip");
   }
   for (const dir of specProfiles) pinInstalledSpec(dir, ref);
+  try { ensureAllProfileInstall(findDshHome()); } catch { /* 升级后补 insert，失败不挡这次覆盖 */ }
   const sha = (gitOk() ? gitHead(PLUGIN_ROOT) : "") || (await remoteHeadSha(ref).catch(() => ""));
   const via = vias.size > 1 ? "mixed" : [...vias][0] || detectVia();
   const saved = writeChannelState({ channel, pin });

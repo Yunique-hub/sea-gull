@@ -205,7 +205,9 @@ function unregisterProfiles(profiles) {
   return { stripped, errors };
 }
 
-export async function uninstallPurge() {
+export async function uninstallPurge(options = {}) {
+  const onStage = typeof options.onStage === "function" ? options.onStage : () => {};
+  onStage("locate");
   const state = await core.gatherState();
   const applied = wasApplied(state);
   const dshHome = state.dsh_home || core.findDshHome();
@@ -225,6 +227,7 @@ export async function uninstallPurge() {
   };
 
   try {
+    onStage("revert");
     if (state.ai_base) {
       report.patches = await core.revertAll(state.ai_base);
       if (applied) report.reverted = true;
@@ -240,6 +243,7 @@ export async function uninstallPurge() {
   }
 
   try {
+    onStage("shim");
     report.shim = await core.revertAllShims();
     if (state.shim_cmd === "patched" || state.shim_ps1 === "patched" || state.shim_bin === "patched") {
       report.reverted = true;
@@ -248,6 +252,7 @@ export async function uninstallPurge() {
     report.errors.push(`revert shims: ${e.message || e}`);
   }
 
+  onStage("flash");
   try {
     report.flash = core.revertCmdFlash(state.ai_base, dshHome);
   } catch (e) {
@@ -297,7 +302,9 @@ export async function uninstallPurge() {
     return report;
   }
 
+  onStage("cleanup");
   report.cleanup = collectCleanupDirs(profiles, dshHome);
+  onStage("done");
   return report;
 }
 
