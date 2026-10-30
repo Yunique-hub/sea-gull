@@ -8,28 +8,30 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.12-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.14-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
-[中文](README.md) · [English](README.en.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
+[中文](README.md) · [English](README.en.md) · [当前状态](docs/CURRENT.md) · [文档索引](docs/README.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
 
 </div>
 
 ---
 
-当前 **v1.0.12** 适配官方 Windows Harness **0.2.1-rc.3**，引擎为 dsh-purge **1.1.82**（固定上游正式版提交 [6318442](https://github.com/YuJunZhiXue/dsh-purge/tree/6318442a88ea7459d0135d0a07f31776c5d6a7b1)）。采用最新正式版快照，保留海鸥 rc.3 兼容修改。
+当前 **v1.0.14** 适配官方 Windows Harness **0.2.1-rc.3**，引擎为 dsh-purge **1.1.82**（固定上游正式版提交 [6318442](https://github.com/YuJunZhiXue/dsh-purge/tree/6318442a88ea7459d0135d0a07f31776c5d6a7b1)）。采用最新正式版快照，保留海鸥 rc.3 兼容修改。
 
-1.0.12 合并 pnpm 配置修复、桌面识别、ZIP 解压与应用进度等上游工程改进，并处理海鸥 bundle 重复挂载及自愈跨 profile 写入问题。上游自身只声明支持 rc.2，海鸥的 rc.3 适配独立保留并验收；请继续使用海鸥更新入口。详见[升级分析与验证](docs/UPGRADE-1.0.12.md)。
+1.0.14 修复运行副本与人格热更新：`--no-pnpm` 更新也会执行 `--sync-plugin`；外部替换 `prompt-inject.md` 会清掉进程内旧 pin；`overrideStatus` 改为读取磁盘；`verify` 增加 profile 副本版本、范围闸、人格槽与 `net-scope` 检查。插件模块与宿主 system 段缓存仍以重启后的桌面验收为准。详见[1.0.14 发布说明](docs/releases/UPGRADE-1.0.14.md)。
 
-1.0.10 修复市场把 scoped 包误识别成短名称的校验失败及新装技能未刷新到 `/` 菜单，新增工具目录选择、缺失工具自动下载校验和中文回复约定，并整合 **AgentTeams 0.1.26**。在工作区新会话输入 `agent-teams 创建两名成员，分别实现和复核……` 或 `/agent-teams ……`，队长会创建成员及任务依赖并执行；明确要求先审阅时才等待确认。团队状态保存在当前工作区 `.agent-teams/`，更新保留存档。来源、改动与限制见[本轮整合分析](docs/INTEGRATION-1.0.10.md)。
+1.0.12 合并 pnpm 配置修复、桌面识别、ZIP 解压与应用进度等上游工程改进，并处理海鸥 bundle 重复挂载及自愈跨 profile 写入问题。上游自身只声明支持 rc.2，海鸥的 rc.3 适配独立保留并验收；请继续使用海鸥更新入口。详见[升级分析与验证](docs/releases/UPGRADE-1.0.12.md)。
+
+1.0.10 修复市场把 scoped 包误识别成短名称的校验失败及新装技能未刷新到 `/` 菜单，新增工具目录选择、缺失工具自动下载校验和中文回复约定，并整合 **AgentTeams 0.1.26**。在工作区新会话输入 `agent-teams 创建两名成员，分别实现和复核……` 或 `/agent-teams ……`，队长会创建成员及任务依赖并执行；明确要求先审阅时才等待确认。团队状态保存在当前工作区 `.agent-teams/`，更新保留存档。来源、改动与限制见[本轮整合分析](docs/reviews/INTEGRATION-1.0.10.md)。
 
 首次安装必须自行设置工具安装目录；已有用户更新沿用保存值。在「dsh-purge → 演练台 → 环境适配」选择文件夹后，点「一键安装并配置」。现有工具优先保留，缺失工具使用固定官方发布文件及 SHA-256；Impacket 安装在独立 Python 环境。Nmap 的驱动安装、没有官方 Windows 二进制的 Masscan 会明确列为待处理。Windows x64 桌面实测识别 **13/15** 项，不能把这个结果解释为 15 项全部自动安装成功。
 
-1.0.9 修复「恢复默认」的备份失败和同秒备份覆盖问题：备份失败即停止，每次备份使用唯一文件名。真机校验脚本同步支持当前注入标记、纯 Markdown 人格、五个原生技能，并检查范围闸确已移除。分析与本轮桌面结果见[项目审查](docs/PROJECT-REVIEW-2026-10-25.md)及[验证记录 M](docs/VERIFICATION.md#m-109-全面审查与桌面回归2026-10-25)。
+1.0.9 修复「恢复默认」的备份失败和同秒备份覆盖问题：备份失败即停止，每次备份使用唯一文件名。真机校验脚本同步支持当前注入标记、纯 Markdown 人格、五个原生技能，并检查范围闸确已移除。分析与本轮桌面结果见[项目审查](docs/reviews/PROJECT-REVIEW-2026-10-25.md)及[验证记录 M](docs/VERIFICATION.md#m-109-全面审查与桌面回归2026-10-25)。
 
 一键更新同时修复**已安装**的插件市场：升级至已验证的 0.4.16，修复 BOM 设置导致错误回退到 `web`、旧 core 遮蔽新依赖、bundle 校验误报重启，以及跨 profile 混列旧版本。没有市场的用户不会被额外安装。pnpm 完成后还会逐文件校验 purge 运行副本，避免同版本陈旧代码被误报为更新成功。详见[本次验证记录](docs/VERIFICATION.md#k-插件市场与-purge-运行副本修复2026-10-24)。
 
-保留用户保存的**海鸥人格**、5 个海鸥技能、项目创建与切换修复、立即插话、独立排队、安装/更新和回退保护。1.0.12 起移除上游的本地靶场范围闸：插件不再注册 `agent/pre-step` / `tools/pre-execute` 拦截，也不按目标地址、任务类别或边界措辞拦请求；证据账本等工程功能保留。上游已下架随包技能库与知识库入口；本机已有数据保留，旧 23 个技能仅在源码中作历史存档，不再自动分发。
+保留用户保存的**海鸥人格**、5 个海鸥技能、项目创建与切换修复、立即插话、独立排队、安装/更新和回退保护。1.0.13 起移除上游的本地靶场范围闸：插件不再注册 `agent/pre-step` / `tools/pre-execute` 拦截，也不按目标地址、任务类别或边界措辞拦请求；证据账本等工程功能保留。上游已下架随包技能库与知识库入口；本机已有数据保留，旧 23 个技能仅在源码中作历史存档，不再自动分发。
 
 上游主体代码现为 **Apache-2.0**；原始 LICENSE、NOTICE 与来源均保留，海鸥自身及历史资产分别按原有许可标注。当前本地维护 88 条补丁定义，其中 #89–#92 保留原生消息路径，#93–#94 接通技能目录变化与菜单刷新。验证范围见[本次验证记录](docs/VERIFICATION.md#j-harness-021-rc3--dsh-purge-1177-合并2026-10-24)。
 
@@ -54,7 +56,7 @@
 | 来源 | 提供什么 |
 |---|---|
 | [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.82 | 宿主兼容、演练台、证据账本（范围闸已移除）；保留 88 条本地补丁定义 |
-| [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | 海鸥人格（00a–00r 规则体系）+ 5 个领域技能 |
+| [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | 海鸥人格（整合版 §0–§23）+ 5 个领域技能 |
 
 合并不是拼盘——`SOUL.md` 不能直接当 DSH 提示词（插值白名单、ChatML 信封、技能目录协议
 三处都会让它失效），本项目做了重写；上游那个 `seagull-armor-break` Hermes 插件是半成品
@@ -141,7 +143,7 @@ curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh
 | 审批门 `user-approval` / `permission-presets` | 中和 |
 | 沙箱 `sandbox` / `sandbox-policy` / `fs-sandbox` / `fs-observation-policy` | 中和 |
 | hooks（Claude Code / Codex）的 `deny` / `ask` | 改放行 |
-| 本地靶场检查 | **已移除**（1.0.12）：不再注册 `agent/pre-step` / `tools/pre-execute` 拦截，目标与任务类别都不再由插件判定 |
+| 本地靶场检查 | **已移除**（1.0.13）：不再注册 `agent/pre-step` / `tools/pre-execute` 拦截，目标与任务类别都不再由插件判定 |
 | 官方身份段 | 剥掉（全树 0 处） |
 | 工具面裁剪（minimal / standard / ptc） | 放宽 |
 | 提示词组装顺序（inject 被吞） | 保留注入 |
@@ -178,7 +180,7 @@ adapter:  dsh-llm-deepseek  /  dsh-llm-pi-ai（多厂商）
 
 ## 验证
 
-2026-10-29 的 1.0.11 全面复核：155 项回归通过，真实 Windows 客户端验证人格、恢复默认备份、Steer/Queue、项目管理、市场生效与重启持久化。具体证据、部署修正和未覆盖范围见[本轮分析与桌面验收](docs/PROJECT-REVIEW-2026-10-29.md)。
+2026-10-29 的 1.0.11 全面复核：155 项回归通过，真实 Windows 客户端验证人格、恢复默认备份、Steer/Queue、项目管理、市场生效与重启持久化。具体证据、部署修正和未覆盖范围见[本轮分析与桌面验收](docs/reviews/PROJECT-REVIEW-2026-10-29.md)。
 
 三套，全部可复跑。**下面每个数字都来自真实命令输出。**
 
@@ -229,7 +231,7 @@ bash verify-e2e.sh       # 端到端：金丝雀注入 + 出活 + A/B 对照（�
 | 宿主 | DeepSeek Harness（桌面版 / `dsh web` 均可） |
 | 系统 | Windows 10+ / Linux / macOS |
 | 运行时 | 宿主内置 node ≥18 + pnpm（安装器自动用内置的；系统级仅兜底） |
-| 其他 | 安装脚本需要 `python3`（改 JSON）+ `curl`（远程安装） |
+| 其他 | 安装脚本需要 `python3` / `py -3`（改 JSON）+ `curl`（远程安装） |
 
 ---
 
@@ -238,17 +240,29 @@ bash verify-e2e.sh       # 端到端：金丝雀注入 + 出活 + A/B 对照（�
 ```
 .
 ├── install.sh / install.ps1      通用一键安装（本地 / 管道）
-├── verify.sh / verify.ps1        真机安装校验
+├── verify.sh / verify.ps1        真机安装校验（plugins + profile 运行副本）
 ├── verify-e2e.sh                 端到端行为验证
 ├── src/
 │   ├── prompt/prompt-inject.md   全破内核提示词（唯一人格源，会话注入正文）
-│   ├── skills/                   5 海鸥 + 23 红队 = 28 个技能
-│   └── tools/patch_profile.py    profile JSON 幂等改写/摘出
-├── vendor/dsh-purge/             上游宿主层引擎（保留其 LICENSE，改动见 NOTICE）
-├── tests/smoke.sh                CI 冒烟（假 DSH_HOME）
-├── docs/                         架构 / 部署 / 验证报告
-└── .github/workflows/ci.yml      shellcheck + py_compile + node --check + 双平台冒烟
+│   ├── skills/                   5 个部署技能 + redteam 23 个历史存档
+│   └── tools/patch_profile.py    profile JSON 幂等改写 / 运行副本同步
+├── vendor/dsh-purge/             上游宿主层引擎（保留 LICENSE，改动见 NOTICE）
+├── vendor/dsh-agent-teams/       AgentTeams 运行快照（MIT，见 NOTICE）
+├── tests/                        Node 回归 + 冒烟（假 DSH_HOME）
+├── docs/
+│   ├── CURRENT.md                当前版本 / 哈希 / 验证边界（先读这个）
+│   ├── README.md                 文档索引
+│   ├── ARCHITECTURE.md           架构与关键机制
+│   ├── DEPLOY.md                 安装、更新、卸载、回滚
+│   ├── VERIFICATION.md           按版本积累的实测记录
+│   ├── RELEASE.md                发布清单
+│   ├── releases/                 每个版本的发布说明
+│   ├── reviews/                  评审、整合、上游对照
+│   └── archive/                  历史规则集与归档
+└── .github/                       CI、issue / PR 模板、CODEOWNERS
 ```
+
+`_src/` 与 `_verify/` 是本机快照/证据，已在 `.gitignore` 中排除；`make clean` 不删，`make clean-local` 才删。
 
 ---
 

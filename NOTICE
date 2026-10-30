@@ -19,12 +19,13 @@
 | `vendor/dsh-purge/NOTICE.md` | 海鸥快照、兼容修复与验证范围说明 |
 | `vendor/dsh-purge/client.js` | 保留项目创建、错误反馈、操作互斥与项目页面隔离；不挂载首启用户须知弹窗；1.0.8 起面板提示「恢复默认」会先备份提示词；1.0.9 起按钮显式发送恢复操作，接通备份路径 |
 | `vendor/dsh-purge/cordis.patch.yml` | 海鸥 file 安装显式挂载一个主模块并启用自动应用 |
-| `vendor/dsh-purge/lib/core.js` | 保留上下文迁移、消息/子代理适配、插话与人格持久化修复；88 条本地定义；1.0.10 新增 #93–#94 技能变更事件转发与菜单缓存刷新；1.0.8 起「恢复默认」前自动备份，并让显式保存优先于血统战标记判定；1.0.9 起备份失败停止覆盖，备份名添加唯一标识避免同秒覆盖 |
+| `vendor/dsh-purge/lib/core.js` | 保留上下文迁移、消息/子代理适配、插话与人格持久化修复；88 条本地定义；1.0.10 新增 #93–#94 技能变更事件转发与菜单缓存刷新；1.0.8 起「恢复默认」前自动备份，并让显式保存优先于血统战标记判定；1.0.9 起备份失败停止覆盖，备份名添加唯一标识避免同秒覆盖；1.0.14 起外部改稿清进程内旧 pin，`overrideStatus` 读磁盘 |
 | `vendor/dsh-purge/lib/default-prompt-inject.md` | 加密槽源文件，与 `src/prompt/prompt-inject.md` 逐字节同源（1.0.8 单源化；上游同名文件此前仅在构建期存在） |
 | `vendor/dsh-purge/.gitignore` | 仅新增一条例外规则，让上面那份槽源可以入库（上游默认忽略该文件） |
 | `vendor/dsh-purge/lib/identity.js` | 识别旧版执行者预设，保留子角色身份路径 |
-| `vendor/dsh-purge/lib/index.js` | 实际消息状态读取，保留原有扩展；1.0.12 起不再安装本地靶场范围闸，删除 `regionGate` 旧配置键与挂载调用；1.0.9 起提示词恢复请求调用备份后恢复，普通保存保持原行为 |
-| `vendor/dsh-purge/lib/net-scope.js` | 1.0.12 起移除范围闸：删掉 `agent/pre-step` / `tools/pre-execute` 拦截、地址与任务分类判定、拒绝文案与拒绝消息持久化；只保留自有服务器白名单的解析与读写（`writeAllowText` 改为真实落盘） |
+| `vendor/dsh-purge/lib/index.js` | 实际消息状态读取，保留原有扩展；1.0.13 起不再安装本地靶场范围闸，删除 `regionGate` 旧配置键与挂载调用；1.0.14 起 mtime 变化时清掉进程内旧人格 pin；1.0.9 起提示词恢复请求调用备份后恢复，普通保存保持原行为 |
+| `vendor/dsh-purge/lib/rules.js` | 1.0.14 起外部改稿时磁盘正文优先于旧 pin；同一份稿仍走 pin，避免重复 IO |
+| `vendor/dsh-purge/lib/net-scope.js` | 1.0.13 起移除范围闸：删掉 `agent/pre-step` / `tools/pre-execute` 拦截、地址与任务分类判定、拒绝文案与拒绝消息持久化；只保留自有服务器白名单的解析与读写（`writeAllowText` 改为真实落盘） |
 | `vendor/dsh-purge/lib/official-update-runtime.ps1` | 本地 Windows 更新保护脚本，仅处理已验证的 runtime 联接 |
 | `vendor/dsh-purge/lib/official-update.wscript` | 保留 Windows 更新联接保护、备份和失败恢复 |
 | `vendor/dsh-purge/lib/preset-default.js` | 精确处理插件预设；延迟清理固定原 DSH_HOME；不修改注释或相似 ID |
@@ -71,7 +72,7 @@
 - 作者：程序员阿江（Relakkes）；MIT，原始许可证保留在 `vendor/dsh-agent-teams/LICENSE`。
 - 复用运行 JS、类型、前端和内置团队资源；完整 TypeScript 源码及开发构建工具见固定上游提交。
 - 本地修改：`lib/command.js` 支持裸命令、默认自动执行与中文激活说明；`lib/index.js` 同步 usage 提示；`package.json` 增加托管标记与 rc.3 peer 范围；`compatibility.json` 把 `recommendedHost` 与实际适配宿主 0.2.1-rc.3 对齐（此前停留在 rc.2，rc.3 落在「未声明但能跑」区间），由 `tests/agent-teams-compat.test.mjs` 保证它不再与 `vendor/dsh-purge/package.json` 的 `dshTarget` 漂移。其余快照文件保持上游内容。
-- 安装器挂载独立 bundle，不复制上游人格；卸载保留工作区团队档案。详情见 `docs/INTEGRATION-1.0.10.md`。
+- 安装器挂载独立 bundle，不复制上游人格；卸载保留工作区团队档案。详情见 `docs/reviews/INTEGRATION-1.0.10.md`。
 
 ---
 
@@ -89,7 +90,7 @@
 - 快照：0.4.3 / ab86ddcd169f0f13bc74923b6ed95eda55224931
 - 上游文件标注许可：CC BY-NC-SA 4.0；其来源说明指向 Minglink/dsh-infinite-gen-4。
 - 本仓库在既有安装器和配置工具中独立实现安装检查、失败反馈及配置保护，未复制富江代码、提示词、题库或品牌资产。
-- 分析、采用范围及验证证据：`docs/FUJIANG-REVIEW.md`。本说明不对富江原作作重新许可。
+- 分析、采用范围及验证证据：`docs/reviews/FUJIANG-REVIEW.md`。本说明不对富江原作作重新许可。
 
 ## 6. DSH Market 运行时兼容修复
 

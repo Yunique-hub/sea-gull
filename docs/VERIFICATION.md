@@ -66,6 +66,8 @@ bash verify-e2e.sh      # C. 端到端（真跑模型）
 
 ### 被修改的 44 个宿主文件
 
+> 1.0.14 用 PowerShell 唯一文件口径实测 43 个；下面 44 是 2026-10-17 的历史记录，阅读时按日期区分。
+
 按模块列出（`grep -rl "dsh-purge" resources/app/dsh/node_modules/@deepseek-ai/`）：
 
 ```
@@ -353,7 +355,7 @@ bash tests/smoke.sh
 
 ## H. 富江工程功能整合与安装可靠性（2026-10-18）
 
-版本：海鸥 1.0.4。用户选择保留海鸥人格，整合安装、配置保护及状态反馈方面的工程功能。完整源文件清单、固定上游提交、问题证据与采用范围见 [FUJIANG-REVIEW.md](FUJIANG-REVIEW.md)。
+版本：海鸥 1.0.4。用户选择保留海鸥人格，整合安装、配置保护及状态反馈方面的工程功能。完整源文件清单、固定上游提交、问题证据与采用范围见 [FUJIANG-REVIEW.md](reviews/FUJIANG-REVIEW.md)。
 
 | 检查 | 结果 |
 |---|---|
@@ -495,7 +497,7 @@ bash tests/smoke.sh
 
 ## M. 1.0.9 全面审查与桌面回归（2026-10-25）
 
-基线为 1.0.8 / `6be0f16`，官方 Windows 宿主仍为 0.2.1-rc.3，purge 1.1.78、市场 0.4.16 / core 0.4.13。本轮未升级独立依赖。详细代码分析、发现及边界见 [项目审查](PROJECT-REVIEW-2026-10-25.md)。
+基线为 1.0.8 / `6be0f16`，官方 Windows 宿主仍为 0.2.1-rc.3，purge 1.1.78、市场 0.4.16 / core 0.4.13。本轮未升级独立依赖。详细代码分析、发现及边界见 [项目审查](reviews/PROJECT-REVIEW-2026-10-25.md)。
 
 ### 发现与修复
 
@@ -530,7 +532,7 @@ bash tests/smoke.sh
 
 ## N. 1.0.10 市场、工具与团队整合（2026-10-25）
 
-环境：官方 Windows x64 Harness 0.2.1-rc.3，dsh-purge 1.1.78，市场 plugin 0.4.16 / core 0.4.13，AgentTeams 0.1.26。分析与固定上游提交见 [INTEGRATION-1.0.10.md](INTEGRATION-1.0.10.md)。
+环境：官方 Windows x64 Harness 0.2.1-rc.3，dsh-purge 1.1.78，市场 plugin 0.4.16 / core 0.4.13，AgentTeams 0.1.26。分析与固定上游提交见 [INTEGRATION-1.0.10.md](reviews/INTEGRATION-1.0.10.md)。
 
 ### 缺陷复现
 
@@ -778,3 +780,49 @@ $ powershell -NoProfile -ExecutionPolicy Bypass -File verify.ps1
 
 - 本次只改「插件是否拦截」，不改操作员对目标的授权判断。目标归属由操作员负责。
 - `ownServerNote()` 仍恒返回空串，人格里不会因为白名单多出一段禁令。
+
+## Q. 1.0.14 运行副本、人格热更新与验证加固（2026-10-30）
+
+### Q.1 修复
+
+- `install.ps1` / `install.sh`：`--sync-plugin` 移出 pnpm 分支；`--NoPnpm` / `--no-pnpm` 下只要 profile `node_modules/dsh-purge` 存在，仍同步运行副本。
+- `core.js`：新增 `clearCommittedOverride(home)`；`overrideStatus` 改为读磁盘，返回 `custom` / `default` / `missing`。
+- `index.js`：`prompt-inject.md` mtime 变化时清掉进程内旧 pin；`rules.js` 在 pin 与磁盘哈希不一致时优先磁盘。
+- `verify.ps1` / `verify.sh`：增加 profile 运行副本的版本、范围闸、人格槽、`net-scope` 检查。
+- `tests/verify-current-runtime.test.mjs`：增加“profile 带闸必须失败”的反例；新增 `tests/prompt-external-change.test.mjs`、`tests/docs-consistency.test.mjs`。
+
+### Q.2 本机运行副本
+
+同步工具报告 **103 个运行文件一致**，旧副本保留在 `node_modules/.dsh-purge-previous-*`。
+
+| 文件 | 结果 |
+|---|---|
+| `profiles/desktop/node_modules/dsh-purge/package.json` | `seagull.version = 1.0.14` |
+| `lib/net-scope.js` | `0CCA874540F5D11C…`，6,027B |
+| `lib/default-prompt-inject.md` | `24581A9E8511890E…`，34,138B |
+| `lib/asset-table.js` | `4F46EDE9FC533704…` |
+| `lib/index.js` | `installRegionGate` 0 命中 |
+
+### Q.3 验证
+
+```
+$ node --test tests/*.test.mjs
+ℹ tests 165
+ℹ pass 165
+ℹ fail 0
+
+$ bash tests/smoke.sh
+全部通过 ✓
+
+$ powershell -NoProfile -ExecutionPolicy Bypass -File verify.ps1
+通过 25 项，失败 0 项
+
+$ bash verify.sh
+通过 28 项，失败 0 项
+```
+
+### Q.4 边界
+
+- 本机 DSH 进程在写入时仍未重启；插件模块更新需要下一次启动。1.0.14 的刷新路径会清掉旧 pin，但宿主 system 段缓存是否立即刷新仍以重启后的桌面验收为准。
+- 真实桌面点击、重启后的 UI 行为由操作员按 `docs/RELEASE.md` 验收；自动化结果不替代桌面结论。
+- P.4 记录的“未重启宿主”是 1.0.13 当时的边界；1.0.14 已补 profile 同步与验证脚本检查。

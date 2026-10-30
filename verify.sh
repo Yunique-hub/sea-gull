@@ -53,6 +53,27 @@ VER="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$PLUG/package.json" 2>/dev/n
 chk "插件目录" "$([ -f "$PLUG/package.json" ] && echo 1 || echo 0)" "$PLUG"
 chk "插件版本" "$([ -n "$VER" ] && echo 1 || echo 0)" "v${VER:-?}"
 
+PP="$PD/node_modules/$PLUGIN_ID"
+chk "profile 运行副本" "$([ -f "$PP/package.json" ] && echo 1 || echo 0)" "$PP"
+if [ -f "$PP/package.json" ]; then
+  PVER="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$PP/package.json" 2>/dev/null | head -1)"
+  chk "profile 版本" "$([ "$PVER" = "$VER" ] && echo 1 || echo 0)" "profile=${PVER:-?} plugin=${VER:-?}"
+  grep -q 'installRegionGate' "$PP/lib/index.js" 2>/dev/null \
+    && chk "profile 范围闸已移除" 0 "仍挂载 installRegionGate" \
+    || chk "profile 范围闸已移除" 1 "不按目标地址拦截"
+  cmp -s "$PP/lib/default-prompt-inject.md" "$PLUG/lib/default-prompt-inject.md" \
+    && chk "profile 人格槽同源" 1 "profile/plugins 一致" \
+    || chk "profile 人格槽同源" 0 "profile/plugins 不一致"
+  cmp -s "$PP/lib/net-scope.js" "$PLUG/lib/net-scope.js" \
+    && chk "profile net-scope 同源" 1 "profile/plugins 一致" \
+    || chk "profile net-scope 同源" 0 "profile/plugins 不一致"
+else
+  chk "profile 版本" 0 "profile 副本缺失"
+  chk "profile 范围闸已移除" 0 "profile 副本缺失"
+  chk "profile 人格槽同源" 0 "profile 副本缺失"
+  chk "profile net-scope 同源" 0 "profile 副本缺失"
+fi
+
 # 4. profile 挂载
 PY="$(command -v python || command -v python3 || true)"
 PY_ARGS=""
@@ -85,7 +106,7 @@ if [ -n "$APP" ]; then
   fi
   AI="$APPD/dsh/node_modules/@deepseek-ai"
   if [ -d "$AI" ]; then
-    N=$(grep -rl "dsh-purge" "$AI" 2>/dev/null | wc -l | tr -d ' ')
+    N=$(grep -rl --include='*.js' --include='*.yml' "dsh-purge" "$AI" 2>/dev/null | wc -l | tr -d ' ')
     chk "被改宿主文件 > 30" "$([ "${N:-0}" -gt 30 ] && echo 1 || echo 0)" "${N} 个"
     SP="$AI/dsh-system-prompt/lib/index.js"
     if [ -f "$SP" ]; then

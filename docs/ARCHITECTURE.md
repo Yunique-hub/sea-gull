@@ -1,6 +1,6 @@
 # 架构
 
-当前 1.0.13 使用 Harness 0.2.1-rc.3 / purge 1.1.82；本地靶场范围闸已移除（不再注册 `agent/pre-step` / `tools/pre-execute` 拦截），旧技能仅源码存档。当前差异见根 NOTICE，分析见 PROJECT-REVIEW-2026-10-25，验证见 VERIFICATION 的 M 节与 P 节。以下保留设计演进记录。
+当前 1.0.14 使用 Harness 0.2.1-rc.3 / purge 1.1.82；本地靶场范围闸已移除（不再注册 `agent/pre-step` / `tools/pre-execute` 拦截），旧技能仅源码存档。当前差异见根 NOTICE，评审见 `docs/reviews/`，发布记录见 `docs/releases/`，验证见 `docs/VERIFICATION.md`。以下 2.1/2.2 保留上游与 hermes 的历史快照，当前补丁数与人格结构以 [CURRENT](CURRENT.md) 为准。
 
 ## 1. 为什么是「合并」而不是「选一个」
 
@@ -8,7 +8,7 @@
 
 | 层 | 谁负责 | 产物 |
 |---|---|---|
-| 宿主层（审批/沙箱/hook/身份段/提示词组装） | dsh-purge | 86 条补丁定义 |
+| 宿主层（审批/沙箱/hook/身份段/提示词组装） | dsh-purge | 88 条补丁定义 |
 | 行为层（人格/输出契约/领域技能） | hermes-seagull | SOUL + 5 技能 |
 | 工具层（红队打法/隧道/凭据/横向） | dsh-purge | 23 红队技能 + 演练台 |
 
@@ -16,7 +16,9 @@
 
 ## 2. 上游分析
 
-### 2.1 dsh-purge 1.1.72
+### 2.1 dsh-purge 1.1.72（历史快照）
+
+> 下面写的是 1.1.72 快照的 86 条定义；当前 1.0.14 为 88 条，见 [CURRENT](CURRENT.md)。
 
 ```
 bin/dsh-purge.js       CLI：--status/--apply/--revert/--uninstall/--edit
@@ -64,7 +66,7 @@ client.js               右侧 dock 前端（Clean / Drill）
 ### 2.2 hermes-seagull
 
 ```
-SOUL.md          350 行   海鸥人格（00a–00r 十一条铁律 + 问候 + 触发词）  ← 有效成分
+SOUL.md          350 行   海鸥人格（00a–00r 十一条铁律 + 问候 + 触发词，历史结构；当前为整合版 §0–§23）  ← 有效成分
 skills/*          5 个     领域技能（reverse/pentest/exploit/game-hack/license）  ← 有效成分
 seagull-armor-break/       自研 Hermes 插件（88 行 python）              ← 无效
 install.sh / README        指向 laoshu666/hermes-seagull（不是本仓）      ← 无效

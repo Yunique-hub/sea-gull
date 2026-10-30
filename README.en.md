@@ -4,17 +4,17 @@
 
 One-line install · idempotent · uninstallable · backed by evidence
 
-**v1.0.12 targets the official Windows Harness 0.2.1-rc.3** with **dsh-purge 1.1.82**, pinned to release commit [6318442](https://github.com/YuJunZhiXue/dsh-purge/tree/6318442a88ea7459d0135d0a07f31776c5d6a7b1). Upstream supports rc.2; Seagull retains and tests its own rc.3 compatibility changes. The merge includes pnpm allowBuilds repair, profile recovery without duplicate Seagull inserts, progress UI, desktop detection and ZIP fixes. See [upgrade verification](docs/UPGRADE-1.0.12.md).
+**v1.0.14 targets the official Windows Harness 0.2.1-rc.3** with **dsh-purge 1.1.82**, pinned to release commit [6318442](https://github.com/YuJunZhiXue/dsh-purge/tree/6318442a88ea7459d0135d0a07f31776c5d6a7b1). Upstream supports rc.2; Seagull retains and tests its own rc.3 compatibility changes. 1.0.14 repairs profile-copy synchronization, stale persona pinning and `overrideStatus`, and adds profile checks to `verify`. See [1.0.14 release notes](docs/releases/UPGRADE-1.0.14.md).
 
-Version 1.0.10 fixes market verification of scoped packages and refreshes slash menus when skills are installed or removed, adds a chosen toolkit directory with verified official downloads, keeps Chinese as the default response language unless requested otherwise, and includes AgentTeams 0.1.26. Start a workspace conversation with `agent-teams` or `/agent-teams`, followed by a team goal; members and task dependencies run automatically unless the user explicitly requests plan review. Fresh installs require an explicit toolkit directory (`-ToolkitDir` / `--toolkit-dir`, or an interactive prompt); updates preserve the saved choice. The Windows desktop test found 13 of 15 tools: Nmap driver installation and Masscan's missing official Windows binaries remain explicitly reported manual steps. See [integration analysis](docs/INTEGRATION-1.0.10.md).
+Version 1.0.10 fixes market verification of scoped packages and refreshes slash menus when skills are installed or removed, adds a chosen toolkit directory with verified official downloads, keeps Chinese as the default response language unless requested otherwise, and includes AgentTeams 0.1.26. Start a workspace conversation with `agent-teams` or `/agent-teams`, followed by a team goal; members and task dependencies run automatically unless the user explicitly requests plan review. Fresh installs require an explicit toolkit directory (`-ToolkitDir` / `--toolkit-dir`, or an interactive prompt); updates preserve the saved choice. The Windows desktop test found 13 of 15 tools: Nmap driver installation and Masscan's missing official Windows binaries remain explicitly reported manual steps. See [integration analysis](docs/reviews/INTEGRATION-1.0.10.md).
 
-Version 1.0.9 stops a prompt reset if its backup fails and gives every backup a unique filename. Runtime verification now accepts the current injection markers, plain Markdown persona and five native skills, and checks that the local-lab scope gate has been removed. See the [project review](docs/PROJECT-REVIEW-2026-10-25.md) and [desktop verification M](docs/VERIFICATION.md#m-109-全面审查与桌面回归2026-10-25).
+Version 1.0.9 stops a prompt reset if its backup fails and gives every backup a unique filename. Runtime verification now accepts the current injection markers, plain Markdown persona and five native skills, and checks that the local-lab scope gate has been removed. See the [project review](docs/reviews/PROJECT-REVIEW-2026-10-25.md) and [desktop verification M](docs/VERIFICATION.md#m-109-全面审查与桌面回归2026-10-25).
 
 Update mode also repairs an **existing** market installation to the verified 0.4.16: BOM settings, stale nested dependencies, bundle verification, and mixed profile listings. Users without the market do not receive it. Actual purge runtime files are checked after pnpm, including same-version updates. See [verification K](docs/VERIFICATION.md#k-插件市场与-purge-运行副本修复2026-10-24).
 
-The saved **Seagull persona**, five Seagull skills, project fixes, immediate steering, separate queue delivery, and installer/update protections are retained. Since 1.0.12 the upstream local-lab scope gate is removed: the plugin registers no pre-step or pre-execute interception and no longer judges targets, task classes or boundary wording. Engineering additions such as the evidence ledger remain. Upstream no longer ships the skill/knowledge library entry points; existing local data is preserved and the 23 earlier skills remain source archives without automatic deployment.
+The saved **Seagull persona**, five Seagull skills, project fixes, immediate steering, separate queue delivery, and installer/update protections are retained. Since 1.0.13 the upstream local-lab scope gate is removed: the plugin registers no pre-step or pre-execute interception and no longer judges targets, task classes or boundary wording. Engineering additions such as the evidence ledger remain. Upstream no longer ships the skill/knowledge library entry points; existing local data is preserved and the 23 earlier skills remain source archives without automatic deployment.
 
-Current upstream code is Apache-2.0, with its LICENSE, NOTICE and attribution retained. Local code and historical assets keep their respective licenses. There are 86 local patch definitions, including retained native-message compatibility patches #89–#92. See the [verification record](docs/VERIFICATION.md#j-harness-021-rc3--dsh-purge-1177-合并2026-10-24).
+Current upstream code is Apache-2.0, with its LICENSE, NOTICE and attribution retained. Local code and historical assets keep their respective licenses. There are 88 local patch definitions, including retained native-message compatibility patches #89–#92. See the [verification record](docs/VERIFICATION.md#j-harness-021-rc3--dsh-purge-1177-合并2026-10-24).
 
 Existing users should use the one-click updater below to preserve their saved prompt. Finish the official Harness update before reapplying the plugin; copying the old extracted `resources/app` into the new installation would load the old host again. A failed silent Windows update now offers the visible installer and reports its exit code after restoring the old extracted app.
 
@@ -27,7 +27,7 @@ Steer is admitted for the nearest processing step; Queue starts a later turn. v1
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
 
-[中文](README.md) · [English](README.md) · [Architecture](docs/ARCHITECTURE.md) · [Deploy](docs/DEPLOY.md) · [Verification](docs/VERIFICATION.md)
+[中文](README.md) · [English](README.md) · [Current](docs/CURRENT.md) · [Docs](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Deploy](docs/DEPLOY.md) · [Verification](docs/VERIFICATION.md)
 
 ---
 
@@ -42,7 +42,7 @@ it removes the host-side policy gates one by one and replaces the persona layer.
 
 | Component | Provides |
 |---|---|
-| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.82 | Host compatibility, console and evidence ledger (scope gate removed); 86 local patch definitions |
+| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.82 | Host compatibility, console and evidence ledger (scope gate removed); 88 local patch definitions |
 | [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | Seagull persona + 5 domain skills |
 
 This is not a stack of two tarballs: `SOUL.md` cannot be used as a DSH prompt as-is

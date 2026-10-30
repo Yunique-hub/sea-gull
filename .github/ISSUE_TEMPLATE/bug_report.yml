@@ -1,0 +1,45 @@
+name: Bug report
+description: 报告安装、更新、运行副本或桌面行为问题
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先看 `docs/CURRENT.md` 和 `docs/RELEASE.md`。安全漏洞不要开公开 issue，见 `SECURITY.md`。
+  - type: input
+    id: version
+    attributes:
+      label: 海鸥版本
+      description: 贴 `VERSION` 与 `dsh-purge` 版本
+      placeholder: "1.0.14 / dsh-purge 1.1.82"
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: 宿主与系统
+      placeholder: "DeepSeek Harness 0.2.1-rc.3 / Windows 11 x64"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 写清命令、点击路径、实际输出与预期
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据
+      description: 哈希、日志、截图；请先脱敏，不要贴账号/凭据/对话原文
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 已确认
+      options:
+        - label: 已阅读 docs/CURRENT.md 与 docs/RELEASE.md
+          required: true
+        - label: 已移除私密信息
+          required: true

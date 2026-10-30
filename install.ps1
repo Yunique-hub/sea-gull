@@ -19,7 +19,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 if ($Update -and $Uninstall) { throw "-Update 和 -Uninstall 不能同时使用" }
-$VERSION = "1.0.13"
+$VERSION = "1.0.14"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -239,9 +239,16 @@ if (-not $NoPnpm -and $Node -and $Pnpm) {
     if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败：检查 registry / file: 路径后重试；备份已保留" }
   } finally { Pop-Location }
   if (-not (Test-Path -LiteralPath (Join-Path $ProfDir "node_modules\$PluginId\package.json"))) { Die "依赖未就位: node_modules/$PluginId" }
+  $DependenciesReady = $true
+}
+
+# ── 3b. 运行副本同步（--NoPnpm 也要做）────────────────────────────
+$ProfPlugin = Join-Path $ProfDir "node_modules\$PluginId\package.json"
+if (Test-Path -LiteralPath $ProfPlugin) {
   & $Py @PyArgs (Join-Path $Here "src\tools\patch_profile.py") --sync-plugin $DH $Profile
   if ($LASTEXITCODE -ne 0) { Die "插件运行副本校验失败，备份已保留" }
-  if (Test-Path (Join-Path $TeamsSource "package.json")) {
+  $TeamsTarget = Join-Path $ProfDir "node_modules\@nanmicoder\dsh-agent-teams\package.json"
+  if ((Test-Path (Join-Path $TeamsSource "package.json")) -and (Test-Path -LiteralPath $TeamsTarget)) {
     & $Py @PyArgs (Join-Path $Here "src\tools\managed_teams.py") sync $DH $Profile
     if ($LASTEXITCODE -ne 0) { Die "AgentTeams 运行副本校验失败" }
   }
@@ -250,6 +257,8 @@ if (-not $NoPnpm -and $Node -and $Pnpm) {
     if ($LASTEXITCODE -ne 0) { Die "插件市场运行校验修复失败，备份已保留" }
   }
   $DependenciesReady = $true
+} else {
+  Warn "profile 运行副本不存在（node_modules\$PluginId），已跳过同步；先在该 profile 执行 pnpm install"
 }
 
 # ── 4. 资产 ─────────────────────────────────────────────────────

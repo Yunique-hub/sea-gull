@@ -242,11 +242,17 @@ export async function setActive(dshHome, id) {
  */
 export function resolveInjectText(dshHome) {
   const home = path.normalize(String(dshHome || findDshHome() || ""));
-  const pinned = peekCommittedOverride(home);
-  if (typeof pinned === "string" && normalizeOverride(pinned)) {
-    return { text: normalizeOverride(pinned), source: "prompt", ruleId: null };
-  }
+  const pinned = normalizeOverride(peekCommittedOverride(home));
   const diskNorm = normalizeOverride(readPromptInjectFileSync(home));
+  // 外部替换磁盘正文时，磁盘优先于进程内旧 pin；同一份稿则 pin 优先，
+  // 避免每次组装都重复做 hash/IO。
+  if (pinned && diskNorm && hashOverride(pinned) !== hashOverride(diskNorm)) {
+    const source = hashOverride(diskNorm) === defaultOverrideHash() ? "default" : "prompt";
+    return { text: diskNorm, source, ruleId: null };
+  }
+  if (pinned) {
+    return { text: pinned, source: "prompt", ruleId: null };
+  }
   if (diskNorm) {
     const source = hashOverride(diskNorm) === defaultOverrideHash() ? "default" : "prompt";
     return { text: diskNorm, source, ruleId: null };

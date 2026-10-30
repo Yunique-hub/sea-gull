@@ -1,0 +1,12 @@
+# 默认由仓库所有者复核
+* @Yunique-hub
+
+# 发布与文档
+/docs/ @Yunique-hub
+/VERSION @Yunique-hub
+/CHANGELOG.md @Yunique-hub
+/NOTICE @Yunique-hub
+/install.ps1 @Yunique-hub
+/install.sh @Yunique-hub
+/verify.ps1 @Yunique-hub
+/verify.sh @Yunique-hub

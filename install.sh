@@ -8,7 +8,7 @@
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.0.13"
+VERSION="1.0.14"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
@@ -304,9 +304,15 @@ if [ "$NO_PNPM" = 0 ] && [ -n "$NODE_EMB" ] && [ -n "$PNPM_EMB" ]; then
   ( cd "$PROFILE_DIR" && "$NODE_EMB" "$PNPM_EMB" install --reporter=append-only ) \
     || die "pnpm install 失败：检查 registry / file: 路径后重试；备份已保留"
   [ -f "$PROFILE_DIR/node_modules/$PLUGIN_ID/package.json" ] || die "依赖未就位: node_modules/$PLUGIN_ID"
+  DEPENDENCIES_READY=1
+  ok "依赖已链接"
+fi
+
+# ── 3b. 运行副本同步（--no-pnpm 也要做）────────────────────────────
+if [ -f "$PROFILE_DIR/node_modules/$PLUGIN_ID/package.json" ]; then
   "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/patch_profile.py")" --sync-plugin "$(winpath "$DSH_HOME")" "$PROFILE" \
     || die "插件运行副本校验失败，备份已保留"
-  if [ -f "$TEAMS_SOURCE/package.json" ]; then
+  if [ -f "$TEAMS_SOURCE/package.json" ] && [ -f "$PROFILE_DIR/node_modules/@nanmicoder/dsh-agent-teams/package.json" ]; then
     "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/managed_teams.py")" sync "$(winpath "$DSH_HOME")" "$PROFILE" || die "AgentTeams 运行副本校验失败"
   fi
   if [ "$UPDATE" = 1 ]; then
@@ -314,7 +320,9 @@ if [ "$NO_PNPM" = 0 ] && [ -n "$NODE_EMB" ] && [ -n "$PNPM_EMB" ]; then
       || die "插件市场运行校验修复失败，备份已保留"
   fi
   DEPENDENCIES_READY=1
-  ok "依赖已链接"
+  ok "运行副本已同步"
+else
+  warn "profile 运行副本不存在（node_modules/$PLUGIN_ID），已跳过同步；先在该 profile 执行 pnpm install"
 fi
 
 # ── 4. 资产落地（幂等 + 备份）──────────────────────────────────────

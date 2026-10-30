@@ -2440,6 +2440,16 @@ export function rememberCommittedOverride(dshHome, text) {
   committedOverride = { home, text: typeof text === "string" ? text : "" };
 }
 
+/**
+ * 外部改稿（编辑器/更新器直接替换 prompt-inject.md）时清掉进程内钉住的旧正文。
+ * 只清指定 home，避免多 profile 场景互相踩。
+ */
+export function clearCommittedOverride(dshHome) {
+  if (!committedOverride) return;
+  const home = path.normalize(String(dshHome || ""));
+  if (!home || committedOverride.home === home) committedOverride = null;
+}
+
 /** $DSH_HOME/prompt-inject.md 正文（应用/解包后由加密槽落下；注入与设置框以它为准）。 */
 export function readPromptInjectFileSync(dshHome) {
   const fp = findOverrideFile(dshHome);
@@ -8277,9 +8287,11 @@ export async function isUserCustomizedOverride(dshHome) {
   return isUserCustomizedOverrideSync(dshHome);
 }
 
-export async function overrideStatus(_dshHome) {
-  if (normalizeOverride(defaultOverrideText())) return "default";
-  return "missing";
+export async function overrideStatus(dshHome) {
+  const home = path.normalize(String(dshHome || findDshHome() || ""));
+  const disk = normalizeOverride(readPromptInjectFileSync(home));
+  if (!disk) return "missing";
+  return hashOverride(disk) === defaultOverrideHash() ? "default" : "custom";
 }
 
 /** 设置框显示 $DSH_HOME/prompt-inject.md；尚未落下时预览加密默认。 */

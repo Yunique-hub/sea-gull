@@ -25,7 +25,12 @@ for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
     }
     write(home, 'plugins/dsh-purge/bin/dsh-purge.js', 'console.log("补丁 77/86 已清洗");');
     write(home, 'plugins/dsh-purge/cordis.patch.yml', 'hooksDenyBypass: true\n');
+    write(home, 'plugins/dsh-purge/lib/default-prompt-inject.md', '# 海鸥人格\n');
+    write(home, 'plugins/dsh-purge/lib/net-scope.js', '// scope storage\n');
     const gate = write(home, 'plugins/dsh-purge/lib/index.js', '// region gate removed\n');
+    write(home, 'profiles/desktop/node_modules/dsh-purge/lib/default-prompt-inject.md', '# 海鸥人格\n');
+    write(home, 'profiles/desktop/node_modules/dsh-purge/lib/net-scope.js', '// scope storage\n');
+    const profGate = write(home, 'profiles/desktop/node_modules/dsh-purge/lib/index.js', '// region gate removed\n');
     write(home, 'prompt-inject.md', '# 海鸥全破内核\n纯 Markdown 人格\n');
     write(home, 'AGENTS.md', '# Workspace conventions\n');
     for (const name of ['seagull-reverse', 'seagull-pentest', 'seagull-exploit', 'seagull-game-hack', 'seagull-license-security']) {
@@ -49,5 +54,11 @@ for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
     result = run();
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stdout, /\[FAIL\].*范围闸已移除/);
+    fs.writeFileSync(gate, '// region gate removed\n');
+    fs.writeFileSync(profGate, 'installRegionGate(ctx);\n');
+    result = run();
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /\[FAIL\].*profile 范围闸已移除/);
+    fs.writeFileSync(profGate, '// region gate removed\n');
   });
 }

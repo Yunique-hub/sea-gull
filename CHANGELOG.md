@@ -3,6 +3,28 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.14] - 2026-10-30
+
+### Fixed
+
+- **`--no-pnpm` 更新不同步 profile**：`install.ps1` / `install.sh` 的 `--sync-plugin` 从 pnpm 分支移出；只要 `profiles/<profile>/node_modules/dsh-purge` 存在，文件部署后仍会同步运行副本。1.0.13 的本机 profile 已补同步。
+- **外部改人格后新会话仍读旧 pin**：`core.js` 新增 `clearCommittedOverride()`；`index.js` 在 `prompt-inject.md` mtime 变化时清 pin；`rules.js` 在 pin 与磁盘哈希不一致时优先磁盘。宿主 system 段缓存是否立即刷新仍以重启验收为准。
+- **`overrideStatus` 恒 `default`**：改为读取磁盘，返回 `custom` / `default` / `missing`。
+- **验证只看 plugins**：`verify.ps1` / `verify.sh` 增加 profile 运行副本的版本、范围闸、人格槽与 `net-scope` 检查；`tests/verify-current-runtime.test.mjs` 增加 profile 带闸必须失败的反例。
+
+### Changed
+
+- 文档结构：新增 `docs/CURRENT.md`、`docs/README.md`、`docs/RELEASE.md`；发布记录移入 `docs/releases/`，评审记录移入 `docs/reviews/`。
+- README / README.en / NOTICE / ARCHITECTURE 的版本、补丁数、范围闸归因统一到 1.0.14 / 88 / 1.0.13；NOTICE 的 104 blob 比对保留实测 76/17/11，UPGRADE-1.0.12 的 77/16 改为以 NOTICE 为准。
+- 新增 `.github` issue / PR 模板与 `CODEOWNERS`。
+
+### Validation
+
+- `node --test tests/*.test.mjs`：165 通过 / 0 失败。
+- `bash tests/smoke.sh`：全部通过。
+- `verify.ps1` / `verify.sh`：25/25、28/28，包含 profile 检查。
+- 本机 profile 已同步：`net-scope` `0CCA8745`、人格槽 `24581A9E`、`index.js` 无 `installRegionGate`。
+
 ## [1.0.13] - 2026-10-30
 
 ### Changed
@@ -32,7 +54,7 @@
 
 ### Validation
 
-- 海鸥 157 项回归、上游 36 项测试与隔离安装冒烟通过；上游测试加入双平台 CI。实际桌面验证和部署边界见 [1.0.12 升级报告](docs/UPGRADE-1.0.12.md)。
+- 海鸥 157 项回归、上游 36 项测试与隔离安装冒烟通过；上游测试加入双平台 CI。实际桌面验证和部署边界见 [1.0.12 升级报告](docs/releases/UPGRADE-1.0.12.md)。
 
 ## [1.0.11] - 2026-10-29
 
@@ -84,7 +106,7 @@
 ### Added
 
 - 备份失败、同时间戳重复恢复及双脚本当前运行态的正反例回归。
-- 本轮项目审查及桌面验收记录，见 `docs/PROJECT-REVIEW-2026-10-25.md`、`docs/VERIFICATION.md` M 节。
+- 本轮项目审查及桌面验收记录，见 `docs/reviews/PROJECT-REVIEW-2026-10-25.md`、`docs/VERIFICATION.md` M 节。
 
 ## [1.0.8] - 2026-10-24
 

@@ -207,6 +207,11 @@ function refreshHungOperator(dshHome = core.findDshHome()) {
   ) {
     return hungCache.resolved;
   }
+  // 文件被外部替换（编辑器 / 更新器 / 手动覆盖）时，先丢掉进程内旧 pin，
+  // 否则 resolveInjectText 会一直返回启动时钉住的那一版。
+  if (hungCache.home === home && hungCache.mtime !== mtimeBefore) {
+    try { core.clearCommittedOverride(home); } catch { /* 旧宿主没有该导出时保持兼容 */ }
+  }
   try { core.syncPromptInjectOnDiskSync(home); } catch { /* 同步失败仍按 resolve 走 */ }
   const resolved = rules.resolveInjectText(home);
   // 兜底顺序:resolved.text > 加密默认 > 永不空串(避免二轮 fallbackInject 为空走 purge[] 残留)。

@@ -39,6 +39,27 @@ if (Test-Path "$Plug\package.json") {
 Chk "插件目录" (Test-Path "$Plug\package.json") $Plug
 Chk "插件版本" ([bool]$ver) "v$ver"
 
+$ProfPlug = Join-Path $ProfDir "node_modules\$PluginId"
+$profOk = Test-Path -LiteralPath (Join-Path $ProfPlug "package.json")
+Chk "profile 运行副本" $profOk $ProfPlug
+if ($profOk) {
+  $profVer = (Get-Content (Join-Path $ProfPlug "package.json") -Raw -Encoding UTF8 | ConvertFrom-Json).version
+  Chk "profile 版本" ($profVer -eq $ver) "profile=$profVer plugin=$ver"
+  $profIdx = Get-Content (Join-Path $ProfPlug "lib\index.js") -Raw -Encoding UTF8
+  Chk "profile 范围闸已移除" (-not ($profIdx -match "installRegionGate")) "不按目标地址拦截"
+  $profSlot = (Get-FileHash (Join-Path $ProfPlug "lib\default-prompt-inject.md") -Algorithm SHA256).Hash
+  $plugSlot = (Get-FileHash (Join-Path $Plug "lib\default-prompt-inject.md") -Algorithm SHA256).Hash
+  Chk "profile 人格槽同源" ($profSlot -eq $plugSlot) "profile/plugins 必须逐字节一致"
+  $profScope = (Get-FileHash (Join-Path $ProfPlug "lib\net-scope.js") -Algorithm SHA256).Hash
+  $plugScope = (Get-FileHash (Join-Path $Plug "lib\net-scope.js") -Algorithm SHA256).Hash
+  Chk "profile net-scope 同源" ($profScope -eq $plugScope) "profile/plugins 必须逐字节一致"
+} else {
+  Chk "profile 版本" $false "profile 副本缺失"
+  Chk "profile 范围闸已移除" $false "profile 副本缺失"
+  Chk "profile 人格槽同源" $false "profile 副本缺失"
+  Chk "profile net-scope 同源" $false "profile 副本缺失"
+}
+
 $pj = Get-Content (Join-Path $ProfDir "package.json") -Raw -Encoding UTF8 | ConvertFrom-Json
 $hasDep = $pj.dependencies.$PluginId
 $hasBundle = $pj.dsh.profile.bundles -contains $PluginId

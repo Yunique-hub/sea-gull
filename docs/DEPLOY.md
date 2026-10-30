@@ -52,7 +52,7 @@ v1.0.4 对 Apply / revert 子进程传递选定的 `DSH_HOME`、`DSH_PROFILE` �
 
 失败停止不等于整次安装全部回滚：依赖安装失败时，已复制的插件及依赖声明可能保留，旧插件和 profile 备份仍在，后续人格资产不会继续覆盖。修复网络或配置后重跑即可。卸载时 revert 或 profile 移除失败会停止并保留插件文件。
 
-`--no-pnpm` / `-NoPnpm` 不验证新文件已进入 node_modules；完成依赖同步、重启及加载检查后才能确认更新生效。详细工程整合记录见 [fujiang-dsh 分析报告](FUJIANG-REVIEW.md)。
+`--no-pnpm` / `-NoPnpm` 不重建依赖，但 1.0.14 起会在 profile `node_modules/dsh-purge` 已存在时同步运行副本；仍要完成重启及加载检查后才能确认更新生效。详细工程整合记录见 [fujiang-dsh 分析报告](reviews/FUJIANG-REVIEW.md)。
 
 ## 3. Apply —— 最容易卡的一步
 
