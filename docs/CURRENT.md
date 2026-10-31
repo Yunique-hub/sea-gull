@@ -41,7 +41,7 @@
 | `bash tests/smoke.sh` | 全绿 |
 | `verify.ps1` / `verify.sh` | **25/25、28/28**，均包含 profile 副本检查 |
 | `--no-pnpm` 更新 | 只要 profile `node_modules/dsh-purge` 存在，仍执行 `--sync-plugin` |
-| 真实桌面点击 / 重启 | 由操作员按 [发布流程](RELEASE.md) 执行；自动化结果不替代桌面结论 |
+| 真实桌面点击 / 重启 | 2026-10-31 已执行重启、问候、项目、Steer/Queue、市场和须知场景；未覆盖项与界面说明问题见[客户端验证补充](releases/DESKTOP-1.0.14-2026-10-31.md)，不代表发布清单全部通过 |
 
 ## 已知边界
 
