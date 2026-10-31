@@ -35,3 +35,12 @@ test("当前状态页存在且指向当前版本", () => {
   assert.match(read("docs/CURRENT.md"), new RegExp(version.replace(/\./g, "\\.")));
   assert.match(read("docs/CURRENT.md"), /profile/i);
 });
+
+test("面板文案与版本展示不再回退到旧的本地靶场说明", () => {
+  const client = read("vendor/dsh-purge/client.js");
+  assert.doesNotMatch(client, /开源版攻击任务只放行本机/);
+  assert.match(client, /channel\.seagull/);
+  assert.match(client, /seagull_version/);
+  assert.match(read("vendor/dsh-purge/lib/index.js"), /海鸥版本 \/ seagull/);
+  assert.match(read("vendor/dsh-purge/lib/core.js"), /export function seagullVersion/);
+});

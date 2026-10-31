@@ -8503,6 +8503,18 @@ export function patchStatusReady(status, patch = null) {
   return false;
 }
 
+/**
+ * 当前 vendored 插件的海鸥版本；面板/状态用它和 purge 版本分开展示。
+ */
+export function seagullVersion() {
+  try {
+    const pkg = JSON.parse(nodeFs.readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"));
+    return String(pkg?.seagull?.version || "");
+  } catch {
+    return "";
+  }
+}
+
 export async function gatherState() {
   const dshHome = findDshHome();
   const aiBase = findAiBase();
@@ -8556,6 +8568,7 @@ export async function gatherState() {
   return {
     surface: detectSurface(),
     dsh_home: dshHome,
+    seagull_version: seagullVersion(),
     ai_base: aiBase,
     desktop_exe: adapterFor(detectSurface()) === "desktop"
       ? (desktop.findDesktopAppExecutable() || "")

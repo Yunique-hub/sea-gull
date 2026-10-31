@@ -137,6 +137,7 @@ function renderStatus(state) {
   const out = [];
   out.push("dsh-purge 状态 / Status");
   out.push(line("宿主 / surface", state.surface || hostctl.currentSurface()));
+  out.push(line("海鸥版本 / seagull", state.seagull_version || "未定位 / not found", !!state.seagull_version));
   out.push(line("DSH_HOME", state.dsh_home));
   if (state.desktop_install) out.push(line("桌面安装 / desktop", state.desktop_install));
   if (state.ai_base) {
@@ -1929,6 +1930,7 @@ function installWebServer(ctx, cfg) {
               override_status: state.override_status,
               override_path: state.override_path,
               dsh_home: state.dsh_home,
+              seagull_version: state.seagull_version,
               plugin_version: updater.localVersion(),
               boot_full_quit: bootFullQuit,
               update: updater.lastUpdateResult(),

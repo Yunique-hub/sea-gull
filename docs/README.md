@@ -14,6 +14,7 @@
 
 | 版本 | 文档 |
 |---|---|
+| 1.0.15 | [UPGRADE-1.0.15](releases/UPGRADE-1.0.15.md) |
 | 1.0.14 | [UPGRADE-1.0.14](releases/UPGRADE-1.0.14.md) |
 | 1.0.13 | [UPGRADE-1.0.13](releases/UPGRADE-1.0.13.md) |
 | 1.0.12 | [UPGRADE-1.0.12](releases/UPGRADE-1.0.12.md) |

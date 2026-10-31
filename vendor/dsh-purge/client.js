@@ -175,7 +175,7 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 			"purge.title": "补丁",
 			"override.title": "提示词",
 			"own.title": "本地靶场",
-			"own.hint": "开源版攻击任务只放行本机/内网 IP。域名会先解析，解析到的每一个地址都必须是私网或回环；hosts 把 .lab 指到公网 IP 也会拦。解析失败或混有公网地址一律拦截。",
+			"own.hint": "插件不再按目标地址或任务类别拦截；这里只维护自有服务器名单，用于记录/展示，不参与放行判定。",
 			"own.save": "保存名单",
 			"saved.own": "已保存自己的服务器",
 			"saved.own.dropped": "已保存。有 {n} 行不是单个 IP 或主机名，已丢掉",
@@ -246,6 +246,8 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 			"channel.useStable": "切换到正式版",
 			"channel.useBeta": "切换到测试版",
 			"channel.local": "本机",
+			"channel.seagull": "海鸥",
+			"channel.purge": "purge",
 			"update.checking": "正在检测更新…",
 			"update.applying": "正在更新…",
 			"update.switching": "正在切换版本…",
@@ -604,6 +606,8 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 			"channel.useStable": "Switch to stable",
 			"channel.useBeta": "Switch to beta",
 			"channel.local": "This copy",
+			"channel.seagull": "Seagull",
+			"channel.purge": "purge",
 			"update.checking": "Checking for updates…",
 			"update.applying": "Updating…",
 			"update.switching": "Switching version…",
@@ -2059,6 +2063,7 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 			const versions = (updateInfo && updateInfo.versions) || [];
 			const channelNow = (updateInfo && updateInfo.channel) || channel || "stable";
 			const localVer = (s && s.plugin_version) || (updateInfo && updateInfo.localVersion) || "";
+			const seaVer = (s && s.seagull_version) || "";
 			const renderEdition = (id) => {
 				const lane = (updateInfo && updateInfo.lanes && updateInfo.lanes[id]) || {};
 				const ceiling = listedCeiling(versions, localVer || (updateInfo && updateInfo.localVersion));
@@ -2126,9 +2131,9 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 				),
 				h("div", { className: "dshp-rel" },
 					h("div", { className: "dshp-now" },
-						h("span", { className: "dshp-now-label" }, t("channel.local")),
-						h("b", { className: "dshp-now-ver" }, localVer ? "v" + localVer : "—"),
-						h("em", { className: "dshp-now-mark" }, t("update.current")),
+						h("span", { className: "dshp-now-label" }, t("channel.seagull")),
+						h("b", { className: "dshp-now-ver" }, seaVer ? "v" + seaVer : "—"),
+						h("em", { className: "dshp-now-mark" }, t("channel.purge") + " v" + (localVer || "—") + " · " + t("update.current")),
 					),
 					h("div", { className: "dshp-editions" },
 						renderEdition("stable"),
@@ -7714,7 +7719,8 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
 
       const openEngagement = (nameArg) => {
         const name = String(nameArg || newName).trim()
-        if (!name || creating) return
+        if (!name) { setErr('项目名称不能为空'); return }
+        if (creating) return
         return runProjectOperation(async () => {
           const r = await api({ op: 'openEngagement', name: name, createOnly: true })
           if (!r || r.ok === false) throw new Error((r && r.error) || '创建失败')

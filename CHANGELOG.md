@@ -3,6 +3,22 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.15] - 2026-10-31
+
+### Fixed
+
+- **清洗面板本地靶场旧文案**：`client.js` 不再宣称“攻击任务只放行本机/内网 IP”，改为“插件不再按目标地址或任务类别拦截；名单只用于记录/展示，不参与放行判定”。
+- **空项目名无可见反馈**：项目创建表单在名称为空时显示“项目名称不能为空”，不再静默 `return`；后端拒绝逻辑保持不变。
+- **面板版本口径**：状态/面板增加海鸥版本；面板并列显示“海鸥 v1.0.15”和“purge v1.1.82”，不再把 purge 版本当成海鸥版本。
+- `purge_status` 增加“海鸥版本 / seagull”行；`gatherState()` 返回 `seagull_version`。
+
+### Validation
+
+- `node --test tests/*.test.mjs`：167 通过 / 0 失败。
+- `bash tests/smoke.sh`：全部通过。
+- `verify.ps1` / `verify.sh`：通过（含 profile 检查）。
+- 新增空项目名可见错误回归；面板文案/版本字段由 `tests/docs-consistency.test.mjs` 锁定。
+
 ## [1.0.14] - 2026-10-30
 
 ### Fixed

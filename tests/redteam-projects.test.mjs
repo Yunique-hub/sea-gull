@@ -173,3 +173,21 @@ test('project pages reset their state on a change while global pages retain thei
   await host.render().find(node => node.type === 'select').props.onChange({ target: { value: 'third' } });
   assert.equal(pageKey(), globalKey);
 });
+
+test('empty project name shows a visible error and does not call openEngagement', async () => {
+  const calls = [];
+  const host = panelHost(request => {
+    calls.push(request);
+    return Promise.resolve({ ok: true, engagements: [{ id: 'existing', name: '已有项目' }], current: 'existing' });
+  });
+  host.render().find(node => node.type === 'button' && node.children.includes('新建项目')).props.onClick();
+  const form = host.render().find(node => node.type === 'form');
+  assert.ok(form, 'creation form should be visible');
+  await form.props.onSubmit({ preventDefault() {} });
+  await new Promise(resolve => setImmediate(resolve));
+  const nodes = host.render();
+  const error = nodes.find(node => node.props && node.props.className === 'rt-err');
+  assert.ok(error, 'empty name must produce a visible error');
+  assert.match(String(error.children.join('')), /项目名称不能为空/);
+  assert.equal(calls.filter(row => row.op === 'openEngagement').length, 0);
+});

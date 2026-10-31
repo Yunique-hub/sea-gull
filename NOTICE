@@ -9,7 +9,7 @@
 
 - 来源：https://github.com/YuJunZhiXue/dsh-purge
 - 作者：YuJunZhiXue。
-- 版本：1.1.82，正式版提交 6318442a88ea7459d0135d0a07f31776c5d6a7b1，2026-10-30 比对 104 个 Git blob：76 个一致、17 个保留海鸥差异、11 个图片附件不分发。
+- 版本：1.1.82，正式版提交 6318442a88ea7459d0135d0a07f31776c5d6a7b1，2026-10-31 比对 104 个 Git blob：75 个一致、18 个保留海鸥差异、11 个图片附件不分发。
 - 当前上游主体代码：Apache-2.0，原始 LICENSE、NOTICE 与 LICENSE-COMMERCIAL.md 原文保留。海鸥自身根 LICENSE 保持原样。
 
 本地新增与修改文件：
@@ -17,13 +17,13 @@
 | 文件 | 差异 |
 |---|---|
 | `vendor/dsh-purge/NOTICE.md` | 海鸥快照、兼容修复与验证范围说明 |
-| `vendor/dsh-purge/client.js` | 保留项目创建、错误反馈、操作互斥与项目页面隔离；不挂载首启用户须知弹窗；1.0.8 起面板提示「恢复默认」会先备份提示词；1.0.9 起按钮显式发送恢复操作，接通备份路径 |
+| `vendor/dsh-purge/client.js` | 保留项目创建、错误反馈、操作互斥与项目页面隔离；不挂载首启用户须知弹窗；1.0.8 起面板提示「恢复默认」会先备份提示词；1.0.9 起按钮显式发送恢复操作，接通备份路径；1.0.15 修正本地靶场旧文案、面板双版本显示、空项目名可见错误 |
 | `vendor/dsh-purge/cordis.patch.yml` | 海鸥 file 安装显式挂载一个主模块并启用自动应用 |
-| `vendor/dsh-purge/lib/core.js` | 保留上下文迁移、消息/子代理适配、插话与人格持久化修复；88 条本地定义；1.0.10 新增 #93–#94 技能变更事件转发与菜单缓存刷新；1.0.8 起「恢复默认」前自动备份，并让显式保存优先于血统战标记判定；1.0.9 起备份失败停止覆盖，备份名添加唯一标识避免同秒覆盖；1.0.14 起外部改稿清进程内旧 pin，`overrideStatus` 读磁盘 |
+| `vendor/dsh-purge/lib/core.js` | 保留上下文迁移、消息/子代理适配、插话与人格持久化修复；88 条本地定义；1.0.10 新增 #93–#94 技能变更事件转发与菜单缓存刷新；1.0.8 起「恢复默认」前自动备份，并让显式保存优先于血统战标记判定；1.0.9 起备份失败停止覆盖，备份名添加唯一标识避免同秒覆盖；1.0.14 起外部改稿清进程内旧 pin，`overrideStatus` 读磁盘；1.0.15 增加 `seagullVersion()` |
 | `vendor/dsh-purge/lib/default-prompt-inject.md` | 加密槽源文件，与 `src/prompt/prompt-inject.md` 逐字节同源（1.0.8 单源化；上游同名文件此前仅在构建期存在） |
 | `vendor/dsh-purge/.gitignore` | 仅新增一条例外规则，让上面那份槽源可以入库（上游默认忽略该文件） |
 | `vendor/dsh-purge/lib/identity.js` | 识别旧版执行者预设，保留子角色身份路径 |
-| `vendor/dsh-purge/lib/index.js` | 实际消息状态读取，保留原有扩展；1.0.13 起不再安装本地靶场范围闸，删除 `regionGate` 旧配置键与挂载调用；1.0.14 起 mtime 变化时清掉进程内旧人格 pin；1.0.9 起提示词恢复请求调用备份后恢复，普通保存保持原行为 |
+| `vendor/dsh-purge/lib/index.js` | 实际消息状态读取，保留原有扩展；1.0.13 起不再安装本地靶场范围闸，删除 `regionGate` 旧配置键与挂载调用；1.0.14 起 mtime 变化时清掉进程内旧人格 pin；1.0.15 状态输出增加海鸥版本；1.0.9 起提示词恢复请求调用备份后恢复，普通保存保持原行为 |
 | `vendor/dsh-purge/lib/rules.js` | 1.0.14 起外部改稿时磁盘正文优先于旧 pin；同一份稿仍走 pin，避免重复 IO |
 | `vendor/dsh-purge/lib/net-scope.js` | 1.0.13 起移除范围闸：删掉 `agent/pre-step` / `tools/pre-execute` 拦截、地址与任务分类判定、拒绝文案与拒绝消息持久化；只保留自有服务器白名单的解析与读写（`writeAllowText` 改为真实落盘） |
 | `vendor/dsh-purge/lib/official-update-runtime.ps1` | 本地 Windows 更新保护脚本，仅处理已验证的 runtime 联接 |
