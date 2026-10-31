@@ -7696,7 +7696,6 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
         api({ op: 'snapshot', engagement: id }).then((r) => {
           if (seq !== snapshotSeq.current) return
           if (!r || r.ok === false) { setErr((r && r.error) || '加载失败'); return }
-          setErr(null)
           setSnapshot(r)
         }, (e) => { if (seq === snapshotSeq.current) setErr(String((e && e.message) || e)) })
       }
@@ -7925,10 +7924,10 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
           h('button', { className: 'rt-btn', title: '刷新名册、快照与当前页面数据', disabled: projectBusy, onClick: refreshAll }, '刷新'),
           (full || embedded) ? null : h('button', { className: 'rt-btn', title: '在新浏览器窗口打开完整控制台', onClick: openFull }, '全面浏览'),
           (full || embedded) ? null : h('button', { className: 'rt-btn', title: '收起面板', onClick: () => setUI({ open: false }) }, '收起')),
-        (showCreate || !eng) ? h('form', { className: 'rt-pane', onSubmit: e => { e.preventDefault(); return openEngagement() }, style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
+        (showCreate || !eng) ? h('form', { className: 'rt-pane', noValidate: true, onSubmit: e => { e.preventDefault(); return openEngagement() }, style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
           h('input', { className: 'rt-input', 'aria-label': '项目名称', placeholder: '项目名称', maxLength: 100, required: true, disabled: projectBusy,
             style: { flex: '1 1 160px', minWidth: 0 }, value: newName, onChange: e => setNewName(e.target.value) }),
-          h('button', { className: 'rt-btn rt-btn-primary', type: 'submit', disabled: projectBusy || !newName.trim() }, creating ? '创建中…' : '创建项目'),
+          h('button', { className: 'rt-btn rt-btn-primary', type: 'submit', disabled: projectBusy }, creating ? '创建中…' : '创建项目'),
           eng ? h('button', { className: 'rt-btn', type: 'button', disabled: projectBusy, onClick: () => { setShowCreate(false); setNewName(''); setErr(null) } }, '取消') : null) : null,
         err ? h('div', { className: 'rt-err', role: 'alert' }, err) : null,
         /* 页签栏用标准 tablist/tab 角色：读屏软件据此播报「第几个页签、是否选中」。

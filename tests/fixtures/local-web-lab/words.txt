@@ -1,0 +1,10 @@
+api
+admin
+api/note
+api/search
+api/fetch
+api/ping
+api/delete
+backup
+.git
+robots.txt

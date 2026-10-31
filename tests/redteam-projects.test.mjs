@@ -183,6 +183,9 @@ test('empty project name shows a visible error and does not call openEngagement'
   host.render().find(node => node.type === 'button' && node.children.includes('新建项目')).props.onClick();
   const form = host.render().find(node => node.type === 'form');
   assert.ok(form, 'creation form should be visible');
+  assert.equal(form.props.noValidate, true, 'native required validation must not bypass the application error');
+  const submit = host.render().find(node => node.type === 'button' && node.props.type === 'submit');
+  assert.equal(submit.props.disabled, false, 'empty names must reach visible validation through a real click');
   await form.props.onSubmit({ preventDefault() {} });
   await new Promise(resolve => setImmediate(resolve));
   const nodes = host.render();
@@ -190,4 +193,7 @@ test('empty project name shows a visible error and does not call openEngagement'
   assert.ok(error, 'empty name must produce a visible error');
   assert.match(String(error.children.join('')), /项目名称不能为空/);
   assert.equal(calls.filter(row => row.op === 'openEngagement').length, 0);
+  nodes.find(node => node.type === 'AssetsTab').props.onData();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(host.render().find(node => node.props.className === 'rt-err'), 'background snapshot success must not erase form validation');
 });

@@ -1,0 +1,14 @@
+{
+  "results": {
+    "api": 404,
+    "admin": 404,
+    "api/note": 404,
+    "api/search": 200,
+    "api/fetch": 403,
+    "api/delete": 404,
+    "backup": 404,
+    ".git": 404,
+    "robots.txt": 404,
+    "api/ping": 200
+  }
+}

@@ -13,6 +13,7 @@ node_modules/
 dist/
 build/
 *.log
+!docs/validation/local-web-lab-2026-10-31/access.log
 
 # ── 编辑器 / 系统 ───────────────────────────────────────────
 .vscode/
