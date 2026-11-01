@@ -2754,7 +2754,12 @@ const PATCHES = [
     // （rollupPatchStatus 只在 notFound>0 时判失败，missing 计数会被 applied 吃掉，静默变绿）。
     // 它改由 #76 以软补丁单独兜底。
     file: ["preset-standard", "preset-ptc", "preset-cordis", "preset-minimal"],
-    strictFiles: true,
+    // preset-* 这个 key 会同时命中 presets/*.patch.yml 和 dsh-config/agent-presets/*.cordis.yml。
+    // 后者是 Markdown 注释结构的 agent preset，根本没有 prefix 字段，永远匹配不上；
+    // 而同一台机器常并存第二份 DSH 安装（例：D:\DeepSeek-Harness），strictFiles 会让那份副本
+    // 把整次 Apply 判成 pattern_not_found 并回滚，连主宿主已改好的 60+ 条一起作废。
+    // 这里改成软补丁：命中的 patch.yml 照改，没命中的副本不阻断。
+    optional: true,
     replacements: [
       // 缩进随宿主版本漂移：rc.3 的普通标量是 14 空格，rc.5 的 cordis 块标量内容缩到 18 空格。
       // 写死缩进会让 strictFiles 判 pattern_not_found 并让整次 Apply 回滚，所以按行首缩进无关匹配；

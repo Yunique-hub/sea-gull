@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.16-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.17-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [当前状态](docs/CURRENT.md) · [文档索引](docs/README.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,7 +17,7 @@
 
 ---
 
-当前 **v1.0.16** 适配官方 Windows Harness **0.2.1-rc.3**（rc.5 的 preset 缩进漂移已在 #43 兼容），引擎为 dsh-purge **1.1.82**（固定上游正式版提交 [6318442](https://github.com/YuJunZhiXue/dsh-purge/tree/6318442a88ea7459d0135d0a07f31776c5d6a7b1)）。采用最新正式版快照，保留海鸥 rc.3 兼容修改。
+当前 **v1.0.17** 适配官方 Windows Harness **0.2.1-rc.3**（rc.5 的 preset 缩进漂移已在 #43 兼容），引擎为 dsh-purge **1.1.82**（固定上游正式版提交 [6318442](https://github.com/YuJunZhiXue/dsh-purge/tree/6318442a88ea7459d0135d0a07f31776c5d6a7b1)）。采用最新正式版快照，保留海鸥 rc.3 兼容修改。
 
 1.0.15 修正面板显示与项目创建反馈：本地靶场旧文案改为“不参与放行判定”；面板同时显示海鸥版本与 purge 版本；空项目名提交给出可见错误。详见[1.0.15 发布说明](docs/releases/UPGRADE-1.0.15.md)。
 

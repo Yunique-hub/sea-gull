@@ -3,6 +3,17 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.17] - 2026-11-01
+
+### Fixed
+
+- **Apply 在多份 DSH 安装并存时整次回滚**：`preset-*` 这个 key 会同时命中 `presets/*.patch.yml` 和 `dsh-config/agent-presets/*.cordis.yml`；后者是 Markdown 注释结构的 agent preset，没有 `prefix` 字段，永远匹配不上 #43 的 pattern。同一台机器并存第二份 DSH（实测 `D:\DeepSeek-Harness`）时，那份副本被 `strictFiles` 判成 `pattern_not_found`，`mergeApplyReports` 取最差后又把主宿主已改好的 60+ 条一起回滚。改成 `optional: true` 软补丁：命中的 `patch.yml` 照改，未命中的副本不阻断。
+
+### Validation
+
+- 构造「旧副本 `pattern_not_found` + 主宿主 `applied`」双宿主 report：`mergeApplyReports` 取最差后 `summarizeApplyReport` 把 #43 归入 `soft`，`failed` 为空。
+- `node --check vendor/dsh-purge/lib/core.js` 通过；`node --test tests/*.test.mjs` 167 通过 / 0 失败。
+
 ## [1.0.16] - 2026-11-01
 
 ### Fixed
