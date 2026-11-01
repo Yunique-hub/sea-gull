@@ -7,7 +7,7 @@
 | 项 | 当前值 |
 |---|---|
 | 海鸥 | **1.0.17** |
-| 官方 Harness | 0.2.1-rc.3（Windows 桌面） |
+| 官方 Harness | 0.2.1-rc.3（Windows 桌面）；rc.5 文件补丁可落地但插件不加载，见 [VERIFICATION S](VERIFICATION.md) |
 | dsh-purge | 1.1.82（固定上游 `6318442a88ea7459d0135d0a07f31776c5d6a7b1`） |
 | AgentTeams | 0.1.26 |
 | 插件市场 | plugin 0.4.16 / core 0.4.13 |

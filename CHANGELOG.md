@@ -3,6 +3,12 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Known Issues
+
+- **Harness 0.2.1-rc.5 上插件不加载**：`-Apply` 返回 `ok:true / applied:61 / failed:0`，文件级补丁全部落地，但插件页把 `dsh-purge` 与 `@nanmicoder/dsh-agent-teams` 标成「异常 / 包不可用」，详情为 `dsh: cannot resolve profile bundle "dsh-purge" from the dsh installation or <profile>`。profile 的 `bundles`、`node_modules`、直接 `import()` 都正常；`dsh-client-runtime` / `dsh-client-ui-slots` 在 rc.3 与 rc.5 都缺，不是原因。首要嫌疑是 pnpm `file:` 依赖生成符号链接、rc.5 的 bundle 解析不跟随（**未确认**，见 [VERIFICATION S](docs/VERIFICATION.md)）。rc.3 不受影响。
+
 ## [1.0.17] - 2026-11-01
 
 ### Fixed

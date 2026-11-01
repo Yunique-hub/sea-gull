@@ -883,3 +883,55 @@ iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps
 - 验证到的是“命令能解析并进入安装流程”，不是另一台机器上的完整装机；真实装机仍由操作员完成并按 `docs/RELEASE.md` 验收。
 - `iex` 模式下脚本内的 `exit` 会结束当前 PowerShell 会话（成功路径 `exit 0`、失败路径 `Die` 的 `exit 1`）。这是既有行为，本次未改。
 - 若有人重新给这两个脚本“清理” BOM，PS 5.1 的 `-File` 用法会立刻坏；R.3 的 CI 闸就是拦这个。
+
+## S. Harness 0.2.1-rc.5：文件补丁通过，插件加载未通过（2026-11-01）
+
+### S.1 背景
+
+操作员在另一台机器上使用 **0.2.1-rc.5**（项目验收基线是 rc.3）。安装根是非默认的 `D:\dsh`，同机另有 `D:\DeepSeek-Harness` 一份旧副本。以下按“已修复 / 未解决”分开记录。
+
+### S.2 已修复
+
+| 版本 | 现象 | 根因 | 修法 |
+|---|---|---|---|
+| 1.0.16 | `Apply` 报 `pattern_not_found`，整次回滚 | `dsh-web-app/presets/cordis.patch.yml` 的块标量内容缩进由 16 空格变 18，`#43` 的 pattern 把缩进写死 | 三条 pattern 改行首缩进无关正则，替换时把捕获到的缩进原样写回 |
+| 1.0.17 | 同上，且 `applied` 从 61 掉到 60 | `preset-*` key 同时命中 `presets/*.patch.yml` 与 `dsh-config/agent-presets/*.cordis.yml`；后者是 Markdown 注释结构、没有 `prefix` 字段。第二份 DSH 的副本让 #43 判 `pattern_not_found`，`mergeApplyReports` 取最差后回滚主宿主已改好的补丁 | #43 去掉 `strictFiles`、改 `optional: true` 软补丁：命中的 `patch.yml` 照改，未命中的副本不阻断 |
+
+修完后 rc.5 上的 `-Apply` 返回：
+
+```json
+{"ok":true,"error":"","version":"1.1.82","reverted":3,"applied":61,"failed":0,"renamed":false,"needsFullQuit":false,"cmdFlashOk":true}
+```
+
+### S.3 未解决：rc.5 不加载插件
+
+宿主文件补丁全部落地，但插件页面显示：
+
+```
+dsh-purge                      异常  包不可用
+@nanmicoder/dsh-agent-teams    异常  包不可用
+```
+
+详情原文：
+
+```
+dsh: cannot resolve profile bundle "dsh-purge" from the dsh installation
+or C:\Users\gxy12\.dsh\profiles\desktop;
+run `dsh plugin --profile desktop install` if its dependency is not installed
+```
+
+**已排除**：
+
+- profile `package.json` 的 `dsh.profile.bundles` 含 `dsh-purge`、`@nanmicoder/dsh-agent-teams`
+- `profiles/desktop/node_modules/dsh-purge/lib/index.js` 存在；用宿主自带 node 直接 `import()` 返回 `LOAD OK`，依赖可解析
+- `dsh.client.inject` 列出的 `dsh-client-runtime`、`dsh-client-ui-slots` 在 rc.3 与 rc.5 的 `@deepseek-ai` 下都不存在，rc.3 照常加载，因此不是原因
+- 运行进程是 `D:\dsh\DeepSeek Harness.exe`，profile 为 `desktop`
+- `resources/app` 已解包、`app.asar` 已改名为 `.sealed.bak`，Electron 加载的是带补丁的目录
+
+**首要嫌疑（未确认）**：pnpm 对 `file:../../plugins/dsh-purge` 生成的是符号链接，rc.5 的 bundle 解析可能不跟随符号链接，或对 realpath 后的位置有额外约束。确认方法是看 `Get-Item <profile>\node_modules\dsh-purge` 的 `LinkType`；若为 `SymbolicLink`，替换成实体目录后重启即可验证。**操作员尚未回传该字段，因此这是线索，不是结论。**
+
+### S.4 结论与边界
+
+- rc.3 仍是唯一验收基线。rc.5 上文件级补丁可落地，插件加载未通过。
+- 确认 S.3 的解析规则之前，不把 rc.5 写进支持矩阵，也不建议在 rc.5 上依赖插件面板。
+- 1.0.16 / 1.0.17 都是向后兼容修复：167 项 `node --test`、`tests/smoke.sh`、`node --check` 全过，rc.3 路径未受影响。
