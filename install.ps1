@@ -1,7 +1,9 @@
 ﻿# 海鸥 · DeepSeek Harness 全破 harness —— 通用一键安装（Windows PowerShell）
 #
 #   本地:   powershell -ExecutionPolicy Bypass -File install.ps1
-#   远程:   irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 | iex
+#   远程:   iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))
+#           本文件带 UTF-8 BOM（PS 5.1 -File 解码中文需要）；裸 `irm | iex` 会把 BOM 当作首个字符送进 iex，
+#           导致 param() 块失配并报「赋值表达式无效」。远程管道必须先用 TrimStart 剥掉 BOM。
 #   卸载:   powershell -File install.ps1 -Uninstall
 param(
   [ValidateSet("desktop", "web", "")]

@@ -54,8 +54,16 @@ was rewritten. Upstream's `seagull-armor-break` Hermes plugin is a stub (its hoo
 
 ```powershell
 # Windows
-irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 | iex
+iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))
 ```
+
+> Do not use a bare `irm ... | iex`. `install.ps1` is stored as UTF-8 **with BOM**
+> (PowerShell 5.1 needs it to decode the Chinese text correctly when reading the file),
+> and `irm` does not strip that BOM. The BOM becomes the first character (U+FEFF) of the
+> string handed to `iex`; the parser treats it as the start of an expression, the `param()`
+> block no longer matches, and it fails with `Invalid assignment expression`.
+> `TrimStart([char]0xFEFF)` removes it before evaluation. `powershell -File install.ps1`
+> reads the file directly, so the host strips the BOM and is unaffected.
 
 ```bash
 # Linux / macOS / WSL / Git Bash
@@ -81,7 +89,7 @@ bundled node/pnpm are auto-detected; without an install root it degrades to file
 Finish active tasks and fully exit Harness first. The updater fetches the latest main snapshot on every run, refreshes the plugin and the five bundled skills, and preserves the saved prompt, client preferences, project databases, and extra skills. The persona ships as a single file (`prompt-inject.md`); the installer also removes the legacy `rules/seagull-fullbreak.*` copy left by 1.0.7 and earlier, because that copy was written into `AGENTS.md` and injected a second persona. Restart Harness afterwards and follow the Apply instructions. This updates Seagull; official Harness upgrades still use the official installer.
 
 ```powershell
-irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 | iex
+iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))
 ```
 
 ```bash

@@ -71,8 +71,10 @@
 **Windows**
 
 ```powershell
-irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 | iex
+iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))
 ```
+
+> 不要写成裸的 `irm ... | iex`。`install.ps1` 存为 UTF-8 **带 BOM**（PowerShell 5.1 用 `-File` 读文件时靠它正确解码中文），而 `irm` 不剥 BOM：BOM 会作为第一个字符 U+FEFF 进入 `iex`，解析器把它当成表达式起点，`param()` 块随之失配，报 `赋值表达式无效。赋值运算符的输入必须是可接受赋值的对象，例如变量或属性`。`TrimStart([char]0xFEFF)` 就是在执行前剥掉它。`powershell -File install.ps1` 由宿主读文件、BOM 自剥，不受影响。
 
 **Linux / macOS / WSL / Git Bash**
 
@@ -103,7 +105,7 @@ bash install.sh            # 或 powershell -File install.ps1
 **Windows PowerShell**
 
 ```powershell
-irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 | iex
+iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))
 ```
 
 **Linux / macOS / WSL / Git Bash**

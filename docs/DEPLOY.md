@@ -6,7 +6,7 @@
 
 ```powershell
 # Windows PowerShell
-irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 | iex
+iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))
 ```
 
 ```bash
@@ -167,7 +167,7 @@ mv "$APP_ROOT/resources/app.asar.sealed.bak" "$APP_ROOT/resources/app.asar"
 
 ## 一键更新（1.0.5 起）
 
-Windows：`irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 | iex`。
+Windows：`iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))`。
 
 Bash：`curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh | bash`。
 

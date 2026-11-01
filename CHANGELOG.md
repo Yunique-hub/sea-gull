@@ -3,6 +3,19 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Fixed
+
+- **Windows 一键安装报「赋值表达式无效」**：`install.ps1` / `update.ps1` 是 UTF-8 **带 BOM**（PS 5.1 用 `-File` 读文件时靠它正确解码中文），而 `irm` 不剥 BOM——BOM 作为第一个字符 U+FEFF 进入 `iex`，解析器把它当成表达式起点，`param()` 块失配。README、英文 README、`docs/DEPLOY.md`、两个脚本的头注释、`vendor/dsh-purge/lib/update.js` 的面板提示统一改为 `iex ((irm <url> -UseBasicParsing).TrimStart([char]0xFEFF))`。
+- CI 增加两道闸：`install.ps1` / `update.ps1` 必须保留 UTF-8 BOM；文档禁止出现裸 `irm ... | iex`。
+
+### Validation
+
+- PowerShell 7.6.8 与 Windows PowerShell 5.1 分别执行新命令，均完成下载、剥 BOM、解析并运行到 `DSH_HOME` 校验；同环境下旧命令稳定复现 `The assignment expression is not valid`。
+- `install.ps1 -DryRun -DshHome <tmp> -AppRoot <tmp>\nope -Profile desktop -NoPnpm` 在 5.1 / 7.6 均 exit 0，计划输出与中文正常。
+- PyYAML 解析 `.github/workflows/ci.yml` 通过；两道新闸在 Git Bash 本地实跑通过；`node --check vendor/dsh-purge/lib/update.js` 通过。
+
 ## [1.0.15] - 2026-10-31
 
 ### Fixed

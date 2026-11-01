@@ -826,3 +826,60 @@ $ bash verify.sh
 - 本机 DSH 进程在写入时仍未重启；插件模块更新需要下一次启动。1.0.14 的刷新路径会清掉旧 pin，但宿主 system 段缓存是否立即刷新仍以重启后的桌面验收为准。
 - 真实桌面点击、重启后的 UI 行为由操作员按 `docs/RELEASE.md` 验收；自动化结果不替代桌面结论。
 - P.4 记录的“未重启宿主”是 1.0.13 当时的边界；1.0.14 已补 profile 同步与验证脚本检查。
+
+## R. 一键安装 `irm | iex` 报“赋值表达式无效”（2026-11-01）
+
+### R.1 现象与根因
+
+另一台机器执行 README 的 `irm .../install.ps1 | iex`，`iex` 直接抛：
+
+```
+Invoke-Expression: 赋值表达式无效。赋值运算符的输入必须是可接受赋值的对象，例如变量或属性。
+```
+
+根因是编码，不是脚本语法：
+
+- `install.ps1` / `update.ps1` 存为 UTF-8 **带 BOM**（`EF BB BF`）。带 BOM 是刻意选择：去掉后 PS 5.1 用 `-File` 会按 ANSI(cp936) 解码，中文字节吞掉引号边界，解析直接崩（实测 `The string is missing the terminator: "`）。
+- `Invoke-RestMethod` 不剥 BOM：PS 7.6.8 与 5.1 实测拿到的字符串首字符都是 `U+FEFF`。
+- `iex` 收到以 `U+FEFF` 开头的文本，解析器把它当成表达式起点，`param()` 块不再匹配，`[string]$Profile = "",` 被当作非法左值赋值。
+
+`powershell -File install.ps1` 由宿主读文件、BOM 自剥，所以本地 checkout 路径一直正常，只有管道模式必挂。
+
+### R.2 修复
+
+一键命令统一改成显式剥 BOM：
+
+```powershell
+iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))
+```
+
+`update.ps1` 用同一形式。同步修改：`README.md`、`README.en.md`、`docs/DEPLOY.md`、`install.ps1` 与 `update.ps1` 的头注释、`vendor/dsh-purge/lib/update.js` 的面板更新提示。`update.js` 只改源码仓库，运行副本随下次 `install.ps1 -Update` 同步。
+
+### R.3 防回归
+
+`.github/workflows/ci.yml` 的 `smoke` 作业新增两道闸：
+
+- `install.ps1` / `update.ps1` 首三字节必须是 `ef bb bf`；
+- `README.md` / `README.en.md` / `docs/DEPLOY.md` 不得出现裸 `(install|update).ps1 ... | iex`。
+
+两道闸都在本地 Git Bash 实跑过（通过）。
+
+### R.4 验证
+
+| 场景 | 结果 |
+|---|---|
+| PS 7.6.8 执行新命令 | 打印 `海鸥 harness v1.0.15`，运行到 `✗ 指定的 DSH 主目录无效`（预定分支，exit 1） |
+| PS 5.1 执行新命令 | 同上 |
+| PS 7.6.8 执行旧命令 | 复现 `The assignment expression is not valid. The input to an assignment operator ...` |
+| `install.ps1 -File -DryRun`（5.1 / 7.6） | exit 0，计划输出完整、中文正常 |
+| `node --check vendor/dsh-purge/lib/update.js` | 通过 |
+| PyYAML 解析 `ci.yml` | 通过，`smoke` 共 11 步 |
+| 两道 CI 闸（Git Bash） | 通过 |
+
+新命令的执行环境是临时目录 + `VERSION` 占位（本地模式），`DSH_HOME` 指向不存在的路径，因此没有下载 tarball、没有落盘到真实 `.dsh`。旧命令在同一环境复现原报错，作为对照。
+
+### R.5 边界
+
+- 验证到的是“命令能解析并进入安装流程”，不是另一台机器上的完整装机；真实装机仍由操作员完成并按 `docs/RELEASE.md` 验收。
+- `iex` 模式下脚本内的 `exit` 会结束当前 PowerShell 会话（成功路径 `exit 0`、失败路径 `Die` 的 `exit 1`）。这是既有行为，本次未改。
+- 若有人重新给这两个脚本“清理” BOM，PS 5.1 的 `-File` 用法会立刻坏；R.3 的 CI 闸就是拦这个。

@@ -39,6 +39,33 @@ jobs:
           for f in install.sh update.sh verify.sh verify-e2e.sh tests/smoke.sh tests/run-bash.sh; do bash -n "$f"; echo "OK $f"; done
           python -m py_compile src/tools/patch_profile.py src/tools/managed_teams.py src/tools/configure_toolkit.py vendor/dsh-purge/lib/redteam/extract-tools.py
 
+      - name: Windows 脚本必须保留 UTF-8 BOM
+        shell: bash
+        run: |
+          set -e
+          # install.ps1 / update.ps1 里有中文字面量。去掉 BOM 后 PS 5.1 会按 ANSI(cp936) 解码，
+          # 中文字节吞掉引号边界 → 解析直接崩。BOM 是这两个文件的不变量，别"顺手清理"。
+          for f in install.ps1 update.ps1; do
+            head -c 3 "$f" | od -An -tx1 | tr -d ' \n' | grep -q '^efbbbf$' \
+              || { echo "✗ $f 缺 UTF-8 BOM：PS 5.1 -File 会按 ANSI 解码中文并报解析错误"; exit 1; }
+            echo "OK $f UTF-8 BOM"
+          done
+
+      - name: 一键安装文档禁止裸 irm | iex
+        shell: bash
+        run: |
+          set -e
+          # 脚本带 BOM，而 irm 不剥 BOM：裸管道会把 U+FEFF 送进 iex，
+          # param() 块失配，报「赋值表达式无效」。远程管道必须 TrimStart([char]0xFEFF)。
+          hits="$(grep -rnE '(install|update)\.ps1[^|]*\|\s*iex' README.md README.en.md docs/DEPLOY.md | grep -vE '不要写成|Do not use' || true)"
+          if [ -n "$hits" ]; then
+            echo "✗ 文档里出现裸 irm ... | iex："
+            echo "$hits"
+            echo "改用：iex ((irm <url> -UseBasicParsing).TrimStart([char]0xFEFF))"
+            exit 1
+          fi
+          echo "一键安装命令均为 BOM 安全形式"
+
       - name: 禁止裸 python 调用（Windows 只装 py 启动器时整批假失败）
         shell: bash
         run: |

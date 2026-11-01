@@ -1,5 +1,6 @@
 ﻿# 海鸥一键更新：获取最新源码，保留现有提示词与配置。
-# irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 | iex
+# iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))
+# 本文件带 UTF-8 BOM，裸 `irm | iex` 会因 BOM 触发「赋值表达式无效」；远程管道须先 TrimStart。
 param(
   [ValidateSet("desktop", "web", "")][string]$Profile = "",
   [string]$DshHome = "",
