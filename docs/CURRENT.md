@@ -6,7 +6,7 @@
 
 | 项 | 当前值 |
 |---|---|
-| 海鸥 | **1.0.15** |
+| 海鸥 | **1.0.16** |
 | 官方 Harness | 0.2.1-rc.3（Windows 桌面） |
 | dsh-purge | 1.1.82（固定上游 `6318442a88ea7459d0135d0a07f31776c5d6a7b1`） |
 | AgentTeams | 0.1.26 |
@@ -19,7 +19,7 @@
 
 | 文件 | 期望 |
 |---|---|
-| `package.json` → `seagull.version` | 1.0.15 |
+| `package.json` → `seagull.version` | 1.0.16 |
 | `lib/net-scope.js` | SHA-256 前 16 位 `0CCA874540F5D11C`，约 6,027B |
 | `lib/default-prompt-inject.md` | `24581A9E8511890E`，34,138B，与 `src/prompt/prompt-inject.md` 逐字节一致 |
 | `lib/asset-table.js` | `4F46EDE9FC533704` |

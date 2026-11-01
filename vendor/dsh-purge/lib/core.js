@@ -2756,19 +2756,20 @@ const PATCHES = [
     file: ["preset-standard", "preset-ptc", "preset-cordis", "preset-minimal"],
     strictFiles: true,
     replacements: [
+      // 缩进随宿主版本漂移：rc.3 的普通标量是 14 空格，rc.5 的 cordis 块标量内容缩到 18 空格。
+      // 写死缩进会让 strictFiles 判 pattern_not_found 并让整次 Apply 回滚，所以按行首缩进无关匹配；
+      // 捕获到的那段缩进原样写回，避免把 YAML 层级打平。
       {
-        pattern: "              prefix: You are a coding agent powered by the {{model}} model.",
-        replace: '              prefix: ""',
+        pattern: /(^|\n)([ \t]*)prefix: You are a coding agent powered by the \{\{model\}\} model\./,
+        replace: '$1$2prefix: ""',
       },
       {
-        pattern:
-          "              prefix: >-\n" +
-          "                You are a coding agent powered by the {{model}} model.",
-        replace: '              prefix: ""',
+        pattern: /(^|\n)([ \t]*)prefix: >-\n[ \t]*You are a coding agent powered by the \{\{model\}\} model\./,
+        replace: '$1$2prefix: ""',
       },
       {
-        pattern: "              prefix: You are a helpful software engineer assistant.",
-        replace: '              prefix: ""',
+        pattern: /(^|\n)([ \t]*)prefix: You are a helpful software engineer assistant\./,
+        replace: '$1$2prefix: ""',
       },
     ],
     markers: ['              prefix: ""'],

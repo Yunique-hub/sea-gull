@@ -3,18 +3,20 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [1.0.16] - 2026-11-01
 
 ### Fixed
 
 - **Windows 一键安装报「赋值表达式无效」**：`install.ps1` / `update.ps1` 是 UTF-8 **带 BOM**（PS 5.1 用 `-File` 读文件时靠它正确解码中文），而 `irm` 不剥 BOM——BOM 作为第一个字符 U+FEFF 进入 `iex`，解析器把它当成表达式起点，`param()` 块失配。README、英文 README、`docs/DEPLOY.md`、两个脚本的头注释、`vendor/dsh-purge/lib/update.js` 的面板提示统一改为 `iex ((irm <url> -UseBasicParsing).TrimStart([char]0xFEFF))`。
 - CI 增加两道闸：`install.ps1` / `update.ps1` 必须保留 UTF-8 BOM；文档禁止出现裸 `irm ... | iex`。
+- **Harness 0.2.1-rc.5 上 Apply 整次回滚**：`WEB_PRESET_IDENTITY_STRIP`（#43）把 `dsh-web-app/presets/cordis.patch.yml` 身份句的块标量内容写死成 16 空格缩进，rc.5 改成 18 空格后判 `pattern_not_found`；`strictFiles` 让已成功的 61 条补丁一起回滚。改成行首缩进无关的正则，并把捕获到的缩进原样写回，rc.3（14/16 空格）与 rc.5（14/18 空格）都覆盖。
 
 ### Validation
 
 - PowerShell 7.6.8 与 Windows PowerShell 5.1 分别执行新命令，均完成下载、剥 BOM、解析并运行到 `DSH_HOME` 校验；同环境下旧命令稳定复现 `The assignment expression is not valid`。
 - `install.ps1 -DryRun -DshHome <tmp> -AppRoot <tmp>\nope -Profile desktop -NoPnpm` 在 5.1 / 7.6 均 exit 0，计划输出与中文正常。
 - PyYAML 解析 `.github/workflows/ci.yml` 通过；两道新闸在 Git Bash 本地实跑通过；`node --check vendor/dsh-purge/lib/update.js` 通过。
+- #43 新正则分别喂 rc.3 与 rc.5 的真实文本（普通标量 14 空格、块标量 16/18 空格），全部命中且替换后 YAML 缩进不变；`ALL_PATCHES` 仍为 88 条。
 
 ## [1.0.15] - 2026-10-31
 
