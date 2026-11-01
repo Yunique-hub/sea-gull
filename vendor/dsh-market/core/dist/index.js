@@ -1,0 +1,32 @@
+/**
+ * DSH Market 插件端核心层 · 公共入口
+ * 纯 Node 模块，零 DSH API 依赖。UI 层（cordis 插件）通过此入口调用。
+ */
+export * from "./types.js";
+export * from "./config.js";
+export * from "./data.js";
+export * from "./lite.js";
+export * from "./tags.js";
+export * from "./search.js";
+export * from "./zh-intent.js";
+export * from "./zh-taxonomy.js";
+export * from "./backup.js";
+export * from "./installed.js";
+export * from "./profile.js";
+export * from "./recommend.js";
+export * from "./installer.js";
+export * from "./command-guard.js";
+export * from "./recipe.js";
+export * from "./router.js";
+export * from "./metrics.js";
+export * from "./update.js";
+export * from "./verify.js";
+export * from "./builds.js";
+export * from "./yaml-block.js";
+export * from "./github.js";
+export * from "./version.js";
+export * from "./host.js";
+export * from "./compat.js";
+export * from "./diag.js";
+export * from "./errors.js";
+export * from "./log.js";

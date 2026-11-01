@@ -1,0 +1,295 @@
+/**
+ * 路由安装器（T0）：零 LLM 的最小安装路径。
+ * 决策顺序：已装 → 配方缓存 → collector 解析命令；全部落空/失败才 needAi（升级 T1 协议子代理）。
+ * 冒烟验证驱动升级：验证失败即视为"未通过"——不写配方、不更新 verifiedAt，交 AI 复核。
+ */
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, normalize } from "node:path";
+import { installPlugin, installPackageName, skillsDestName } from "./installer.js";
+import { guardInstallCommands } from "./command-guard.js";
+import { envFingerprint, isRecipeFresh, readRecipe, writeRecipe, } from "./recipe.js";
+/** 展开 `~`（README 命令常见；Windows 上 cmd 的 ~ 展开不可靠，这里统一处理） */
+export function expandHome(p) {
+    if (p === "~")
+        return homedir();
+    if (p.startsWith("~/") || p.startsWith("~\\"))
+        return join(homedir(), p.slice(2));
+    return p;
+}
+/** 提取单条 git clone 命令的本地目标（末位参数，去引号；非 clone / 无目标 → null） */
+function cloneDestOf(command) {
+    if (!/git\s+clone\b/i.test(command))
+        return null;
+    const tokens = command.trim().split(/\s+/).filter(Boolean);
+    if (tokens.length < 3)
+        return null;
+    const dest = tokens[tokens.length - 1].replace(/^"+|"+$/g, "");
+    return dest && dest !== "-" ? dest : null;
+}
+/**
+ * 从 cordis 安装命令提取真实包名（`dsh plugin --profile <p> add <pkg>` / `pnpm add <pkg>` 等）。
+ * 市场数据里大量 name 字段是 "owner/repo" 格式，installPackageName 猜不出真实安装名，
+ * 冒烟必须对"实际执行的安装"做验证 → 优先从命令本身提取。
+ */
+export function extractInstallPkgName(command) {
+    const add = command.match(/(?:^|\s)(?:add|i|install)\s+([\w@][\w@.:/~-]*)/i);
+    if (!add)
+        return null;
+    let pkg = add[1].replace(/^["']|["']$/g, "");
+    // github:/git 源 → 提取仓库名尾部（github:owner/repo → repo）
+    if (/^(github:|git\+|https?:\/\/.*(?:github\.com|gitlab\.com))/.test(pkg)) {
+        const m = pkg.match(/([^/]+?)(?:\.git)?$/);
+        if (m)
+            pkg = m[1];
+    }
+    return /^[\w@][\w@./-]*$/.test(pkg) ? pkg : null;
+}
+/** 冒烟对账的包名：解析命令提取（真实）优先，回落 installPackageName（内置兜底场景） */
+function smokePkgName(plugin, parsed) {
+    const fromCmd = parsed.map(extractInstallPkgName).find((n) => n !== null);
+    return fromCmd ?? installPackageName(plugin);
+}
+/**
+ * skill 解析命令规范化（数据质量兜底）：
+ * 市场里大量 skill 的 README 命令把克隆目标写成 ~/.dsh/skills、~/.claude/skills 等，
+ * 与 harness 实际扫描的技能目录（cfg.skillsDir）不一致 → 装完不可见、冒烟必失败、误升级 AI。
+ * 仅处理"单条 git clone"形态；目标统一重定向为 <skillsDir>/<name>（与已装检测/
+ * 冒烟/卸载约定一致，issue #102）。其余形态（多命令脚本 / cordis 错分类等）原样交付，由冒烟失败 →
+ * T1 子代理兜底，不伪报成功。
+ */
+export function normalizeSkillCommands(cfg, plugin, commands) {
+    if (plugin.type !== "skill" || commands.length !== 1)
+        return commands;
+    const dest = cloneDestOf(commands[0]);
+    if (!dest)
+        return commands;
+    const canonical = join(cfg.skillsDir, skillsDestName(plugin));
+    if (normalize(expandHome(dest)) === normalize(canonical))
+        return commands;
+    const tokens = commands[0].trim().split(/\s+/);
+    // 不加引号：与内置 clone 路径一致（cmd/node 会剥引号但 git/msys 会把引号当字面量；
+    // 空格路径暂不支持——与 installer 既有约定相同）
+    tokens[tokens.length - 1] = canonical;
+    return [tokens.join(" ")];
+}
+/** 目标技能目录名（与 installer 的 skillsDestName 唯一出口一致，issue #102 后为 <name>） */
+function skillDest(cfg, plugin) {
+    return join(cfg.skillsDir, skillsDestName(plugin));
+}
+/** 旧约定残留目录（<name>-latest，issue #102 修复前的安装） */
+function legacySkillDest(cfg, plugin) {
+    return join(cfg.skillsDir, `${plugin.name}-latest`);
+}
+/** 推导冒烟检查（结构化，进程内执行——规避 cmd/sh 引号与 node -e 被打断的问题）：
+ *  skill → 技能目录含 SKILL.md（优先新约定 <name>；旧 <name>-latest 残留也认，过渡期兼容）；
+ *  cordis → profile package.json 依赖含包名
+ *  pkgName：解析命令提取的真实包名优先（name 字段常为 owner/repo，installPackageName 猜不准） */
+export function deriveSmokeCommands(cfg, plugin, profile, pkgName) {
+    if (plugin.type === "skill") {
+        const canonicalFile = join(skillDest(cfg, plugin), "SKILL.md");
+        const legacyFile = join(legacySkillDest(cfg, plugin), "SKILL.md");
+        // 冒烟目标是"当前实际存在的那份技能"：<name> 优先，旧 <name>-latest 兜底；都不存在则查 <name> 如实失败
+        const target = existsSync(canonicalFile)
+            ? canonicalFile
+            : existsSync(legacyFile)
+                ? legacyFile
+                : canonicalFile;
+        return [{ type: "exists", path: target, label: `技能目录含 SKILL.md（${plugin.name}）` }];
+    }
+    const name = pkgName ?? installPackageName(plugin);
+    return [
+        {
+            type: "deps",
+            pkgJsonPath: join(cfg.profilesDir, profile, "package.json"),
+            pkgName: name,
+            label: `profile「${profile}」依赖含 ${name}`,
+        },
+    ];
+}
+/** 安装是否已完成（skill：<name> 或旧 <name>-latest 存在；cordis：profile 依赖含包名；pkgName 同上优先级） */
+export function isInstalled(cfg, plugin, profile, pkgName) {
+    if (plugin.type === "skill") {
+        return existsSync(skillDest(cfg, plugin)) || existsSync(legacySkillDest(cfg, plugin));
+    }
+    const pkgJsonPath = join(cfg.profilesDir, profile, "package.json");
+    try {
+        if (!existsSync(pkgJsonPath))
+            return false;
+        const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
+        return pkg.dependencies?.[pkgName ?? installPackageName(plugin)] != null;
+    }
+    catch {
+        return false;
+    }
+}
+/** 内置安装路径对应的规范命令（一键安装成功后学配方用） */
+export function canonicalCommands(cfg, plugin, profile) {
+    if (plugin.type === "skill") {
+        return [`git clone --depth 1 https://github.com/${plugin.fullName}.git ${skillDest(cfg, plugin)}`];
+    }
+    return [`dsh plugin --profile ${profile} add ${installPackageName(plugin)}`];
+}
+/** T0 路由安装：已装 → 配方 → 解析命令；全部落空/失败 → needAi */
+export async function routeInstall(cfg, plugin, opts) {
+    const { profile, runner, force, onStep, useRecipe = true, signal } = opts;
+    // 前置计算：解析命令（skill 目标规范化）+ cordis 冒烟对账包名（解析命令提取优先）
+    const parsed = normalizeSkillCommands(cfg, plugin, plugin.install?.commands ?? []);
+    const pkgName = smokePkgName(plugin, parsed);
+    // 0. 已装：直接跳过（零动作）
+    if (!force && isInstalled(cfg, plugin, profile, pkgName)) {
+        return { mode: "already", ok: true, alreadyInstalled: true, needAi: false };
+    }
+    const install = (commands, smoke) => installPlugin(cfg, plugin, {
+        commands,
+        smoke,
+        targetProfile: profile,
+        runner,
+        force,
+        onStep,
+        signal,
+    });
+    // 1. 配方命中：环境指纹一致 + 未过期 + 类型一致 → 按配方执行
+    if (useRecipe) {
+        const recipe = readRecipe(cfg, plugin.id);
+        if (recipe &&
+            recipe.envFingerprint === envFingerprint() &&
+            isRecipeFresh(recipe) &&
+            recipe.commands.length > 0 &&
+            recipe.type === plugin.type) {
+            // 命令安全门（issue #165）：配方命令也未过白名单 → 拒绝直装，交 AI 复核
+            const recipeGuard = guardInstallCommands(plugin, recipe.commands, {
+                allowedDestPrefix: cfg.skillsDir,
+            });
+            if (!recipeGuard.ok) {
+                return {
+                    mode: "recipe",
+                    ok: false,
+                    needAi: true,
+                    reason: `配方命令未通过直装白名单（${recipeGuard.blocked[0]?.reason ?? "未知"}），已拦截，交 AI 复核`,
+                    recipe,
+                };
+            }
+            const result = await install(recipe.commands, recipe.smoke.length > 0 ? recipe.smoke : deriveSmokeCommands(cfg, plugin, profile, pkgName));
+            if (result.ok && !result.smokeFailed) {
+                writeRecipe(cfg, { ...recipe, verifiedAt: new Date().toISOString(), lastSmoke: "pass" });
+                return { mode: "recipe", ok: true, needAi: false, result, recipe };
+            }
+            const reason = result.smokeFailed
+                ? "配方冒烟验证失败（可能已过期），交 AI 复核"
+                : `配方安装失败：${result.error ?? "未知"}，交 AI 复核`;
+            if (result.smokeFailed)
+                writeRecipe(cfg, { ...recipe, lastSmoke: "fail" });
+            return { mode: "recipe", ok: false, needAi: true, reason, result, recipe };
+        }
+    }
+    // 2. collector 解析命令（有则优先执行；无则内置确定性路径兜底——两者都零 LLM）
+    const smoke = deriveSmokeCommands(cfg, plugin, profile, pkgName);
+    // 命令安全门（issue #165）：解析命令未过白名单 → 拒绝直装（不做内置路径静默兜底——
+    // 那会执行与 README 所述不同的安装方式），升级 T1 复核；reason 同步告知 AI 不得原样重试
+    const parsedGuard = guardInstallCommands(plugin, parsed, {
+        allowedDestPrefix: cfg.skillsDir,
+    });
+    if (parsed.length > 0 && !parsedGuard.ok) {
+        return {
+            mode: "parsed",
+            ok: false,
+            needAi: true,
+            reason: `解析命令未通过直装白名单（${parsedGuard.blocked[0]?.reason ?? "未知"}）：${parsedGuard.blocked
+                .map((b) => b.command.slice(0, 80))
+                .join(" ; ")}。直装已拦截、未执行任何命令；复核时不得原样重试被拦截的命令`,
+            recipe: null,
+        };
+    }
+    const useParsed = parsed.length > 0;
+    // 内置兜底：skill → git clone <repo> <skillsDir>/<name>；cordis → dsh plugin add <pkgName>
+    const result = useParsed
+        ? await install(parsed, smoke)
+        : await installPlugin(cfg, plugin, {
+            targetProfile: profile,
+            runner,
+            force,
+            onStep,
+            smoke,
+            signal,
+        });
+    const mode = useParsed ? "parsed" : "builtin";
+    if (result.ok && !result.smokeFailed) {
+        // 学习配方：实际执行的命令（解析命令 / 内置规范命令）+ 推导冒烟 → 下次零 token
+        const recipe = {
+            pluginId: plugin.id,
+            version: null,
+            envFingerprint: envFingerprint(),
+            type: plugin.type,
+            commands: useParsed ? parsed : canonicalCommands(cfg, plugin, profile),
+            smoke,
+            learnedFrom: "parsed",
+            verifiedAt: new Date().toISOString(),
+            lastSmoke: "pass",
+        };
+        writeRecipe(cfg, recipe);
+        return { mode, ok: true, needAi: false, result, recipe };
+    }
+    return {
+        mode,
+        ok: result.ok,
+        needAi: true,
+        reason: result.smokeFailed
+            ? useParsed
+                ? "解析命令已执行但冒烟验证失败，交 AI 复核"
+                : "内置安装完成但冒烟验证失败，交 AI 复核"
+            : useParsed
+                ? `解析命令安装失败：${result.error ?? "未知"}，交 AI 复核`
+                : `内置安装失败：${result.error ?? "未知"}，交 AI 复核`,
+        result,
+        recipe: null,
+    };
+}
+/** 手动/子代理学习配方（T1 JSON verdict 落库 / 用户修正；命令不一定已验证 → lastSmoke=null） */
+export function learnRecipe(cfg, plugin, profile, input) {
+    writeRecipe(cfg, {
+        pluginId: plugin.id,
+        version: null,
+        envFingerprint: envFingerprint(),
+        type: plugin.type,
+        commands: input.commands,
+        smoke: input.smoke ?? deriveSmokeCommands(cfg, plugin, profile),
+        config: input.config,
+        learnedFrom: input.learnedFrom ?? "t1",
+        verifiedAt: new Date().toISOString(),
+        lastSmoke: null,
+    });
+}
+/** 解析 T1 子代理的严格 JSON verdict：容忍 ```json 围栏与前后杂文本；无 ok 字段视为无效 */
+export function parseInstallVerdict(text) {
+    const cleaned = text.replace(/```(?:json)?/gi, "");
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if (!m)
+        return null;
+    try {
+        const obj = JSON.parse(m[0]);
+        if (typeof obj !== "object" || obj === null || typeof obj.ok !== "boolean")
+            return null;
+        const asStrArr = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string") : undefined;
+        const cfg = obj.config_needed;
+        const rec = obj.recipe;
+        return {
+            ok: obj.ok,
+            commands: asStrArr(obj.commands),
+            smoke: asStrArr(obj.smoke),
+            fail: typeof obj.fail === "string" ? obj.fail : undefined,
+            configNeeded: cfg && typeof cfg === "object"
+                ? {
+                    what: typeof cfg.what === "string" ? cfg.what : undefined,
+                    hint: typeof cfg.hint === "string" ? cfg.hint : undefined,
+                }
+                : null,
+            recipe: rec && typeof rec === "object"
+                ? { commands: asStrArr(rec.commands), smoke: asStrArr(rec.smoke) }
+                : undefined,
+        };
+    }
+    catch {
+        return null;
+    }
+}

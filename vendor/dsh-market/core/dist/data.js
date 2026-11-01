@@ -1,0 +1,234 @@
+/**
+ * 市场数据获取：线上优先 → 本地文件兜底 → 磁盘缓存
+ * 纯 Node 实现（global fetch，Node 18+）。
+ */
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { withMirrors } from "./config.js";
+const CACHE_FILE = "plugins-cache.json";
+const PACKS_CACHE_FILE = "packs-cache.json";
+/**
+ * 单源超时（#249 由 15s 放宽到 30s）：lite 索引 gzip 后仍有数 MB，慢速网络下
+ * 15s 根本下不完；配合多源候选，单源失败快速切下一个，总量仍可控。
+ */
+const FETCH_TIMEOUT_MS = 30_000;
+/**
+ * 每个配置记住「哪个远程地址真的能用」，避免每次取数都先撞一次 404 的瘦身索引。
+ * 用 WeakMap 按 cfg 实例隔离：不同数据源互不影响，测试各自新建 cfg 也天然无串扰。
+ * 注意（#249）：记住的地址也可能失效（网络环境变化 / Pages 301 目标劣化），
+ * fetchRemote 会在记忆地址失败时清除记忆并全量重探。
+ */
+const resolvedRemoteUrls = new WeakMap();
+/** 远程候选地址：记忆命中优先 → 瘦身索引（含镜像）→ 全量（含镜像）；同一地址只列一次 */
+function remoteCandidates(cfg) {
+    const remembered = resolvedRemoteUrls.get(cfg);
+    if (remembered !== undefined)
+        return [remembered];
+    const { liteUrl, remoteUrl } = cfg;
+    const lite = liteUrl && liteUrl !== remoteUrl ? withMirrors(liteUrl) : [];
+    return [...new Set([...lite, ...withMirrors(remoteUrl)])];
+}
+/**
+ * 按候选顺序拉远程，返回首个成功的结果。
+ * 记住命中的地址，后续调用不再重复试探（否则每次都要等 404 往返）；
+ * 记忆地址失效时（#249：网络环境变化 / Pages 301 目标劣化）清除记忆、全量重探。
+ */
+async function fetchRemote(cfg) {
+    const first = await tryFetchCandidates(cfg, remoteCandidates(cfg));
+    if (first !== null)
+        return first;
+    if (resolvedRemoteUrls.has(cfg)) {
+        resolvedRemoteUrls.delete(cfg);
+        return tryFetchCandidates(cfg, remoteCandidates(cfg));
+    }
+    return null;
+}
+async function tryFetchCandidates(cfg, candidates) {
+    for (const url of candidates) {
+        try {
+            const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+            if (!res.ok)
+                continue;
+            const data = (await res.json());
+            resolvedRemoteUrls.set(cfg, url);
+            return { data, url };
+        }
+        catch {
+            /* 试下一个候选 */
+        }
+    }
+    return null;
+}
+/** 拉取市场数据（远程优先，失败逐级降级：本地文件 → 磁盘缓存） */
+export async function fetchMarketData(cfg) {
+    // 1. 远程（瘦身索引优先 → 全量兜底）
+    const remote = await fetchRemote(cfg);
+    if (remote !== null) {
+        writeCache(cfg, remote.data);
+        return { data: remote.data, source: "remote" };
+    }
+    // 2. 本地文件兜底（开发模式）
+    if (cfg.localDataPath && existsSync(cfg.localDataPath)) {
+        try {
+            const data = JSON.parse(readFileSync(cfg.localDataPath, "utf8"));
+            return { data, source: "local" };
+        }
+        catch {
+            /* fall through */
+        }
+    }
+    // 3. 磁盘缓存（允许过期，标记 stale）
+    const cached = readCache(cfg);
+    if (cached) {
+        return {
+            data: cached,
+            source: "cache",
+            stale: true,
+            ageMs: cacheAge(cfg),
+        };
+    }
+    throw new Error("无法获取市场数据：远程不可用且无本地缓存");
+}
+/**
+ * 缓存优先取数（stale-while-revalidate）——面板打开走这条路径。
+ *
+ * 修的是「磁盘缓存写了却从不读」：`fetchMarketData` 是远程优先，缓存只在远程
+ * 失败时兜底，于是每个 DSH 进程首次打开面板都要重下整份索引（实测 6–8s）。
+ * 本函数改为：
+ *
+ *   未过期缓存 → 直接返回，**不发起网络**（数据每日更新一次，1h TTL 足够新鲜）
+ *   过期缓存   → 立即返回旧数据，同时**后台刷新**（下次打开即最新，用户永不等待）
+ *   无缓存     → 前台拉取（仅首次安装/清缓存后发生）
+ *
+ * @param cfg - 解析后的配置
+ * @param opts.revalidate - 后台刷新完成后回调（用于更新调用方的内存快照）
+ * @returns 取数结果，`source` 为 cache/remote/local，`stale` 表示后台正在刷新
+ */
+export async function loadMarketData(cfg, opts = {}) {
+    const cached = readCachedData(cfg);
+    if (cached !== null && !cached.stale) {
+        return cached;
+    }
+    if (cached !== null) {
+        // 有过期缓存：先用旧的，后台刷新（不 await，失败静默）
+        void fetchMarketData(cfg)
+            .then((fresh) => {
+            opts.revalidate?.(fresh);
+        })
+            .catch(() => {
+            /* 后台刷新失败：继续用旧缓存 */
+        });
+        return cached;
+    }
+    // 无缓存：只能前台等（首次安装或清缓存后）
+    return await fetchMarketData(cfg);
+}
+/** 读取磁盘缓存（未过期且有效时返回） */
+export function readCachedData(cfg) {
+    const data = readCache(cfg);
+    if (!data)
+        return null;
+    const ageMs = cacheAge(cfg);
+    return {
+        data,
+        source: "cache",
+        stale: ageMs > cfg.cacheTtlMs,
+        ageMs,
+    };
+}
+/**
+ * 拉取整合包数据（packs.json，与 plugins.json 同目录；失败静默返回空数组）。
+ * #249 · 与插件索引同待遇：多源候选（镜像兜底）+ 磁盘缓存（fresh 直接用 / 全部失败时用过期缓存），
+ * 否则 packs 请求超时会拖住客户端的列表渲染（实测拖 6.3s）。
+ */
+export async function fetchPacksData(cfg) {
+    const cached = readPacksCache(cfg);
+    if (cached !== null && Date.now() - cached.at < cfg.cacheTtlMs)
+        return cached.packs;
+    // 只替换文件名而不是匹配 "plugins.json"：数据源可能是 plugins-lite.json，
+    // 旧写法 replace(/plugins\.json/) 在 lite 地址上不命中 → 会去拉 plugins-lite.json 当 packs。
+    // 候选 = 瘦身索引与全量的全部镜像地址（去重后实际是同一份 packs.json 的多个源）。
+    const urls = [
+        ...new Set([...withMirrors(cfg.liteUrl), ...withMirrors(cfg.remoteUrl)].map((u) => u.replace(/[^/]*$/, "packs.json"))),
+    ];
+    for (const url of urls) {
+        try {
+            const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+            if (!res.ok)
+                continue;
+            const data = (await res.json());
+            const packs = data.packs ?? [];
+            writePacksCache(cfg, packs);
+            return packs;
+        }
+        catch {
+            /* 试下一个候选 */
+        }
+    }
+    // 全部候选失败：有过期缓存就先用（总好过空数组，且不阻塞客户端渲染）
+    if (cached !== null)
+        return cached.packs;
+    return [];
+}
+function cachePath(cfg) {
+    return join(cfg.dataDir, CACHE_FILE);
+}
+function writeCache(cfg, data) {
+    try {
+        if (!existsSync(cfg.dataDir))
+            mkdirSync(cfg.dataDir, { recursive: true });
+        writeFileSync(cachePath(cfg), JSON.stringify(data), "utf8");
+    }
+    catch {
+        /* 缓存失败不影响主流程 */
+    }
+}
+function readCache(cfg) {
+    try {
+        const p = cachePath(cfg);
+        if (!existsSync(p))
+            return null;
+        return JSON.parse(readFileSync(p, "utf8"));
+    }
+    catch {
+        return null;
+    }
+}
+function cacheAge(cfg) {
+    try {
+        const p = cachePath(cfg);
+        if (!existsSync(p))
+            return Number.MAX_SAFE_INTEGER;
+        return Date.now() - statSync(p).mtimeMs;
+    }
+    catch {
+        return Number.MAX_SAFE_INTEGER;
+    }
+}
+function packsCachePath(cfg) {
+    return join(cfg.dataDir, PACKS_CACHE_FILE);
+}
+function writePacksCache(cfg, packs) {
+    try {
+        if (!existsSync(cfg.dataDir))
+            mkdirSync(cfg.dataDir, { recursive: true });
+        writeFileSync(packsCachePath(cfg), JSON.stringify({ at: Date.now(), packs }), "utf8");
+    }
+    catch {
+        /* 缓存失败不影响主流程 */
+    }
+}
+function readPacksCache(cfg) {
+    try {
+        const p = packsCachePath(cfg);
+        if (!existsSync(p))
+            return null;
+        const parsed = JSON.parse(readFileSync(p, "utf8"));
+        if (!Array.isArray(parsed.packs))
+            return null;
+        return { at: parsed.at ?? 0, packs: parsed.packs };
+    }
+    catch {
+        return null;
+    }
+}
