@@ -179,6 +179,68 @@ def cmd_check(fp: Path, name: str) -> int:
     return 0 if ok else 1
 
 
+def cmd_remove_market(fp: Path) -> int:
+    """从 profile 摘掉 vendored 插件市场的四个依赖与 bundle（幂等）。"""
+    data = load(fp)
+    deps = data.get("dependencies", {})
+    removed: list[str] = []
+    if isinstance(deps, dict):
+        for name in ("@dsh-market/plugin", "@dsh-market/core", "@dsh-market/schema", "fuse.js"):
+            if name in deps:
+                deps.pop(name)
+                removed.append(name)
+    bundles = data.get("dsh", {}).get("profile", {}).get("bundles", [])
+    if isinstance(bundles, list) and "@dsh-market/plugin" in bundles:
+        bundles.remove("@dsh-market/plugin")
+        removed.append("bundle")
+    if not removed:
+        print("= 插件市场未挂载")
+        return 0
+    backup(fp)
+    dump(fp, data)
+    print(f"✓ 已从 profile 摘除插件市场（{len(removed)} 项）")
+    return 0
+
+
+def cmd_add_market(fp: Path) -> int:
+    """把 vendored 的插件市场四包挂进 profile（幂等）。
+
+    plugin 依赖 core/schema/fuse.js，而 core 又依赖 schema 与 fuse.js。
+    四个都用 file: 指向 plugins/@dsh-market/ 下的实体副本，pnpm 解析子依赖时
+    会用到已声明的满足版本，离线也能装。bundles 只加 @dsh-market/plugin 一项，
+    它的 cordis.patch.yml 会自己 insert。
+    """
+    data = load(fp)
+    deps = data.setdefault("dependencies", {})
+    if not isinstance(deps, dict):
+        raise ValueError("dependencies 必须是对象")
+    base = "file:../../plugins/@dsh-market/"
+    wanted = {
+        "@dsh-market/plugin": base + "plugin",
+        "@dsh-market/core": base + "core",
+        "@dsh-market/schema": base + "schema",
+        "fuse.js": base + "fuse.js",
+    }
+    changed = False
+    for name, spec in wanted.items():
+        if deps.get(name) != spec:
+            deps[name] = spec
+            changed = True
+    dsh = data.setdefault("dsh", {})
+    profile = dsh.setdefault("profile", {})
+    bundles = profile.setdefault("bundles", [])
+    if "@dsh-market/plugin" not in bundles:
+        bundles.append("@dsh-market/plugin")
+        changed = True
+    if not changed:
+        print("= 插件市场已在 profile 中")
+        return 0
+    backup(fp)
+    dump(fp, data)
+    print("✓ 插件市场已挂进 profile")
+    return 0
+
+
 def cmd_repair_market(fp: Path, version: str) -> int:
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("市场版本必须是完整版本号")
@@ -326,6 +388,14 @@ def main(argv: list[str]) -> int:
     if not argv:
         print(__doc__)
         return 2
+    if argv[0] == "--add-market":
+        if len(argv) != 2:
+            return 2
+        return cmd_add_market(Path(argv[1]))
+    if argv[0] == "--remove-market":
+        if len(argv) != 2:
+            return 2
+        return cmd_remove_market(Path(argv[1]))
     if argv[0] == "--repair-market":
         if len(argv) != 3:
             return 2

@@ -6,11 +6,11 @@
 
 | 项 | 当前值 |
 |---|---|
-| 海鸥 | **1.0.17** |
+| 海鸥 | **1.1.0** |
 | 官方 Harness | 0.2.1-rc.3（Windows 桌面）；rc.5 文件补丁可落地但插件不加载，见 [VERIFICATION S](VERIFICATION.md) |
 | dsh-purge | 1.1.82（固定上游 `6318442a88ea7459d0135d0a07f31776c5d6a7b1`） |
 | AgentTeams | 0.1.26 |
-| 插件市场 | plugin 0.4.16 / core 0.4.13 |
+| 插件市场 | 内置 vendored：plugin 0.4.16 / core 0.4.13 / schema 0.1.4 / fuse.js 7.5.0 |
 | 补丁定义 | **88**（`ALL_PATCHES` 实测，id 不连续） |
 
 ## 运行副本
@@ -19,7 +19,7 @@
 
 | 文件 | 期望 |
 |---|---|
-| `package.json` → `seagull.version` | 1.0.17 |
+| `package.json` → `seagull.version` | 1.1.0 |
 | `lib/net-scope.js` | SHA-256 前 16 位 `0CCA874540F5D11C`，约 6,027B |
 | `lib/default-prompt-inject.md` | `24581A9E8511890E`，34,138B，与 `src/prompt/prompt-inject.md` 逐字节一致 |
 | `lib/asset-table.js` | `4F46EDE9FC533704` |

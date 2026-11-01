@@ -9,6 +9,19 @@
 
 - **Harness 0.2.1-rc.5 上插件不加载**：`-Apply` 返回 `ok:true / applied:61 / failed:0`，文件级补丁全部落地，但插件页把 `dsh-purge` 与 `@nanmicoder/dsh-agent-teams` 标成「异常 / 包不可用」，详情为 `dsh: cannot resolve profile bundle "dsh-purge" from the dsh installation or <profile>`。profile 的 `bundles`、`node_modules`、直接 `import()` 都正常；`dsh-client-runtime` / `dsh-client-ui-slots` 在 rc.3 与 rc.5 都缺，不是原因。首要嫌疑是 pnpm `file:` 依赖生成符号链接、rc.5 的 bundle 解析不跟随（**未确认**，见 [VERIFICATION S](docs/VERIFICATION.md)）。rc.3 不受影响。
 
+## [1.1.0] - 2026-11-01
+
+### Added
+
+- **内置插件市场，一键部署**：`vendor/dsh-market/` 收进 `@dsh-market/plugin` 0.4.16、`@dsh-market/core` 0.4.13、`@dsh-market/schema` 0.1.4 与 `fuse.js` 7.5.0（99 个文件 / 1.1 MB）。`install.ps1` / `install.sh` 把它们复制到 `plugins/@dsh-market/`，`patch_profile.py --add-market` 写入四个 `file:` 依赖并把 `@dsh-market/plugin` 加进 bundles；不访问 npm registry，离线可装。
+- `patch_profile.py --remove-market` 与两端卸载分支：`-Uninstall` / `--uninstall` 摘除四个依赖、bundle 和 `plugins/@dsh-market`。
+
+### Validation
+
+- `--add-market` 幂等：第二次执行输出「插件市场已在 profile 中」。
+- `bash tests/smoke.sh`：安装后 bundles 含 `@dsh-market/plugin`；卸载后回到 `['@deepseek-ai/dsh-base','@deepseek-ai/dsh-web-app']`。
+- `bash -n install.sh`、`python -m py_compile`、PowerShell `Parser::ParseFile` 全部通过。
+
 ## [1.0.17] - 2026-11-01
 
 ### Fixed

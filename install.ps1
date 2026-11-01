@@ -21,7 +21,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 if ($Update -and $Uninstall) { throw "-Update 和 -Uninstall 不能同时使用" }
-$VERSION = "1.0.17"
+$VERSION = "1.1.0"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -192,6 +192,9 @@ if ($Uninstall) {
   }
   & $Py @PyArgs (Join-Path $Here "src\tools\patch_profile.py") --remove (Join-Path $ProfDir "package.json") $PluginId
   if ($LASTEXITCODE -ne 0) { Die "profile 移除失败，保留插件文件" }
+  & $Py @PyArgs (Join-Path $Here "src\tools\patch_profile.py") --remove-market (Join-Path $ProfDir "package.json")
+  Remove-Item -Recurse -Force (Join-Path $DH "plugins\@dsh-market") -ErrorAction SilentlyContinue
+  if ($LASTEXITCODE -ne 0) { Die "profile 移除失败，保留插件文件" }
   Remove-Item -Recurse -Force $PlugDir -ErrorAction SilentlyContinue
   Remove-Item -Force (Join-Path $DH "prompt-inject.md") -ErrorAction SilentlyContinue
   Remove-Item -Force (Join-Path $DH "rules\seagull-fullbreak.md"), (Join-Path $DH "rules\seagull-fullbreak.json") -ErrorAction SilentlyContinue
@@ -231,6 +234,23 @@ if ($Update) {
   if ($LASTEXITCODE -ne 0) { Die "插件市场配置修复失败，备份已保留" }
 }
 
+# ── 2b. 插件市场（vendored）──────────────────────────────────────
+$MarketSrc = Join-Path $Here "vendor\dsh-market"
+if (-not $Uninstall -and (Test-Path (Join-Path $MarketSrc "plugin\package.json"))) {
+  Step "插件市场"
+  $MarketDir = Join-Path $DH "plugins\@dsh-market"
+  New-Item -ItemType Directory -Force -Path $MarketDir | Out-Null
+  foreach ($pkg in @("plugin", "core", "schema", "fuse.js")) {
+    $s = Join-Path $MarketSrc $pkg
+    if (-not (Test-Path (Join-Path $s "package.json"))) { Die "安装包缺少市场组件: $pkg" }
+    $d = Join-Path $MarketDir $pkg
+    if (Test-Path $d) { Remove-Item -Recurse -Force $d }
+    Copy-Item $s $d -Recurse
+  }
+  & $Py @PyArgs (Join-Path $Here "src\tools\patch_profile.py") --add-market (Join-Path $ProfDir "package.json")
+  if ($LASTEXITCODE -ne 0) { Die "插件市场挂载失败" }
+  Ok "插件市场就位: $MarketDir"
+}
 # ── 3. pnpm ─────────────────────────────────────────────────────
 $DependenciesReady = $false
 if (-not $NoPnpm -and $Node -and $Pnpm) {

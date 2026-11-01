@@ -1,0 +1,3523 @@
+window.__ModuleLoader__.load({
+	id: "@dsh-market/plugin",
+	factory: (require) => {
+		var module = { exports: {} };
+		var exports = module.exports;
+		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
+		let react = require("react");
+		//#region src/client/api.ts
+		/** P6：RPC 错误附分类（人话原因 + 建议动作），不再是干巴巴的原始报错 */
+		var RpcError = class extends Error {
+			classified;
+			constructor(message, classified) {
+				super(message);
+				this.classified = classified;
+			}
+		};
+		async function api(method, args, opts) {
+			const data = await (await fetch("/market/api", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					method,
+					args: args ?? {}
+				}),
+				signal: opts?.signal
+			})).json();
+			if (!data.ok) throw new RpcError(data.error ?? "RPC failed", data.classified);
+			return data.result;
+		}
+		//#endregion
+		//#region src/client/store.ts
+		/**
+		* 面板开关单一 store —— **仅旧入口（≤0.1.4）使用**：
+		* sidebar.footer.action 的入口按钮与 shell.overlay 的面板跨 slot 共享开关状态。
+		*
+		* 0.1.5 走标准入口（sidebar.panellist + main）时不需要它：面板挂载/卸载由 layout
+		* 的选中的 key 决定，开合即 `layout.selectPanel(id | null)`。
+		*/
+		let panelOpen = false;
+		const listeners = /* @__PURE__ */ new Set();
+		function subscribe(listener) {
+			listeners.add(listener);
+			return () => {
+				listeners.delete(listener);
+			};
+		}
+		function getOpen() {
+			return panelOpen;
+		}
+		function setOpen(v) {
+			if (panelOpen === v) return;
+			panelOpen = v;
+			for (const l of listeners) l();
+		}
+		function toggle() {
+			setOpen(!panelOpen);
+		}
+		//#endregion
+		//#region src/client/logo.tsx
+		/**
+		* DSH Market 插件端 Logo（方向 A：纯黑剪影 + 眼睛镂空点，适配侧边栏）
+		* - 单色剪影：fill 用 currentColor（由使用处设置颜色）
+		* - 眼睛点：fill 用背景色（eyeColor，默认侧边栏背景 token），形成镂空感
+		* - 深色/浅色底自适应：使用处控制 color 与 eyeColor
+		*/
+		function MarketLogo(props) {
+			const { size = 22, color = "currentColor", eyeColor = "var(--dsw-specific-sidebar-fill, #EDEDF0)" } = props;
+			return (0, react.createElement)("svg", {
+				width: size,
+				height: size,
+				viewBox: "14 8 98 102",
+				"aria-label": "DSH Market",
+				style: { display: "block" }
+			}, (0, react.createElement)("g", { transform: "translate(60 62) scale(1.35) translate(-60 -62)" }, (0, react.createElement)("path", {
+				d: "M51 42 C52 36 56 32 61 32 C60 37 60 40 60 42 Z",
+				fill: color
+			}), (0, react.createElement)("path", {
+				d: "M83 62 C87 57 93 55 97 56 C94 59 91 61 88 62 C91 65 91 69 88 70 C90 66 87 63 83 62 Z",
+				fill: color
+			}), (0, react.createElement)("g", { fill: color }, (0, react.createElement)("path", { d: "M38 42 h44 a6 6 0 0 1 6 6 v8 h-14 a8 8 0 1 0 -16 0 h-20 a6 6 0 0 1 -6 -6 v-2 a6 6 0 0 1 6 -6 z" }), (0, react.createElement)("rect", {
+				x: "38",
+				y: "60",
+				width: "8",
+				height: "14",
+				rx: "4"
+			}), (0, react.createElement)("rect", {
+				x: "50",
+				y: "66",
+				width: "8",
+				height: "18",
+				rx: "4"
+			}), (0, react.createElement)("rect", {
+				x: "62",
+				y: "60",
+				width: "8",
+				height: "14",
+				rx: "4"
+			})), (0, react.createElement)("circle", {
+				cx: "60",
+				cy: "46",
+				r: "2.8",
+				fill: eyeColor
+			})));
+		}
+		//#endregion
+		//#region \0dsh-css:E:\wm\tool\lader\plugin\ui\src\client\styles.module.css.mjs
+		const css = "*{box-sizing:border-box}:root{--mkt-text:#252525;--mkt-text2:#5f6670;--mkt-text3:#8a919f;--mkt-brand:#4d6bfe;--mkt-brand-strong:#2e4bd8;--mkt-brand-tint:#eaf2fb;--mkt-brand-soft:#c9d4f5;--mkt-border:#e5e7eb;--mkt-border-strong:#d4d7dc;--mkt-divider:#eef0f2;--mkt-selected:#f3f4f6;--mkt-hover:#edeef1;--mkt-bg:#f6f8fb;--mkt-inverse:#252525;--mkt-surface-a:#fff;--mkt-surface-b:#fff;--mkt-surface-c:#fff;--mkt-chip-warn-bg:#fef7e7;--mkt-chip-warn-text:#a97f1f;--mkt-chip-gold-bg:#fef3e2;--mkt-chip-gold-border:#f0d9a8;--mkt-chip-gold-text:#b45309;--mkt-chip-green-bg:#e8f6ee;--mkt-chip-green-border:#bfe3cd;--mkt-chip-green-text:#15803d;--mkt-chip-red-bg:#fdeaea;--mkt-chip-red-border:#f5c6c6;--mkt-chip-red-text:#b91c1c;--mkt-text-ok:#22c55e;--mkt-text-danger:#ef4444;--mkt-rate-ok:#1e7a46;--mkt-rate-warn:#b26a00;--mkt-rate-danger:#b33a3a;--mkt-purple:#7c3aed;--mkt-purple-bg:#f3efff}[data-slot=\"sidebar.footer.action\"]{flex-wrap:wrap;row-gap:4px;width:100%;display:flex!important}._LI32q_trigger{width:100%;min-height:34px;color:var(--dsw-alias-label-primary,var(--mkt-text));cursor:pointer;box-sizing:border-box;background:0 0;border:none;border-radius:8px;flex:0 0 100%;justify-content:flex-start;align-items:center;gap:8px;padding:0 12px;font-size:13px;display:flex}._LI32q_trigger:hover{color:var(--dsw-alias-label-primary,var(--mkt-text));background:var(--dsw-alias-interactive-bg-hover,var(--mkt-hover))}._LI32q_trigger[data-active]{color:var(--mkt-brand);background:var(--mkt-hover)}@media (prefers-color-scheme:dark){._LI32q_trigger{color:#e8eaed}._LI32q_trigger:hover{color:#fff;background:#ffffff1a}}._LI32q_triggerIcon{justify-content:center;align-items:center;line-height:1;display:inline-flex}._LI32q_triggerIcon svg{flex:none;width:16px;height:16px}._LI32q_triggerLabel{white-space:nowrap}._LI32q_backdrop{z-index:100;pointer-events:auto;background:0 0;justify-content:center;align-items:center;display:flex;position:fixed;inset:0}._LI32q_panel{pointer-events:auto;width:560px;max-width:94vw;height:720px;max-height:92vh;color:var(--mkt-text);-webkit-font-smoothing:antialiased;background:#fff;border:1px solid #e5e7eb;border-radius:14px;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Noto Sans SC,Microsoft YaHei,Helvetica Neue,Arial,sans-serif;font-size:13px;display:flex;position:relative;overflow:hidden;box-shadow:0 8px 40px #00000024,0 2px 8px #00000014}._LI32q_mainHost{box-sizing:border-box;justify-content:center;align-items:stretch;width:100%;height:100%;min-height:0;padding:16px;display:flex;overflow:hidden}._LI32q_panelInMain{width:100%;max-width:960px;height:100%;max-height:none;margin:0 auto}._LI32q_header{border-bottom:1px solid #eef0f2;flex:none;align-items:center;gap:10px;padding:14px 16px 12px;display:flex}._LI32q_titleIcon{align-items:center;display:flex}._LI32q_titleIcon>svg{color:#4d6bfe;width:24px;height:24px}._LI32q_title{font-size:15px;font-weight:600}._LI32q_subtitle{color:var(--mkt-brand-strong);background:#eaf2fb;border-radius:10px;padding:2px 8px;font-size:11.5px;font-weight:500}._LI32q_headerClose{cursor:pointer;color:#8a919f;background:0 0;border:none;border-radius:7px;justify-content:center;align-items:center;width:28px;height:28px;margin-left:auto;transition:background-color .14s;display:flex}._LI32q_headerClose:hover{color:var(--mkt-text);background:#f3f4f6}._LI32q_headerClose svg{width:16px;height:16px}._LI32q_tabs{border-bottom:1px solid #eef0f2;flex:none;gap:2px;padding:0 12px;display:flex}._LI32q_tab{color:var(--mkt-text2);cursor:pointer;white-space:nowrap;background:0 0;border:none;margin:0 8px;padding:10px 4px;font-size:13px;position:relative}._LI32q_tab:hover{color:var(--mkt-text)}._LI32q_tabOn{color:var(--mkt-text);font-weight:600}._LI32q_tabOn:after{content:\"\";background:#4d6bfe;border-radius:2px;height:2px;position:absolute;bottom:-1px;left:0;right:0}._LI32q_body{scrollbar-width:thin;scrollbar-color:var(--mkt-border-strong) transparent;flex:1;min-height:0;padding:16px 16px 20px;overflow-y:auto}._LI32q_body::-webkit-scrollbar{width:6px}._LI32q_body::-webkit-scrollbar-thumb{background:var(--mkt-border-strong);border-radius:3px}._LI32q_body::-webkit-scrollbar-track{background:0 0}._LI32q_tabBody,._LI32q_section{flex-direction:column;display:flex}._LI32q_sectionHead{align-items:center;gap:7px;margin:20px 0 10px;display:flex}._LI32q_section:first-child>._LI32q_sectionHead{margin-top:2px}._LI32q_sectionIcon{color:#8a919f;flex:none;align-items:center;display:flex}._LI32q_sectionIcon>svg{width:14px;height:14px}._LI32q_sectionTitle{color:var(--mkt-text);margin:0;font-size:14px;font-weight:600}._LI32q_sectionNote{color:#8a919f;margin-left:auto;font-size:12px}._LI32q_btn{color:var(--mkt-text);cursor:pointer;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 14px;font-family:inherit;font-size:12.5px;font-weight:500;transition:background-color .14s,border-color .14s,box-shadow .14s;box-shadow:0 1px 3px #0000000f}._LI32q_btn:hover{border-color:var(--mkt-border-strong);background:#f3f4f6}._LI32q_btn:disabled{opacity:.5;cursor:not-allowed}._LI32q_btnPrimary{background:var(--mkt-brand);border-color:var(--mkt-brand);color:#fff;box-shadow:0 1px 3px #4d6bfe59}._LI32q_btnPrimary:disabled{opacity:.5;cursor:not-allowed}._LI32q_btnGhost{box-shadow:none;color:var(--mkt-text2);border-color:#0000}._LI32q_btnGhost:hover{color:var(--mkt-text);background:#f3f4f6}._LI32q_btnSm{padding:4px 11px;font-size:12px}._LI32q_btnDanger{color:var(--mkt-text-danger);border-color:var(--mkt-chip-red-border)}._LI32q_btnDanger:hover{background:var(--mkt-chip-red-bg);border-color:var(--mkt-chip-red-border)}._LI32q_card{cursor:default;background:#fff;border:1px solid #e5e7eb;border-radius:11px;flex-direction:column;min-width:0;padding:14px;transition:box-shadow .15s,transform .15s,border-color .15s;display:flex;overflow:hidden;box-shadow:0 1px 3px #0000000f}._LI32q_card:hover{border-color:var(--mkt-border-strong);transform:translateY(-1px);box-shadow:0 2px 8px #0000001a}._LI32q_cardHead{align-items:center;gap:8px;display:flex}._LI32q_cardName{color:var(--mkt-text);text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600;overflow:hidden}._LI32q_cardBadge{color:var(--mkt-brand-strong);background:#eaf2fb;border-radius:10px;flex:none;padding:1px 7px;font-size:11.5px;font-weight:500}._LI32q_compatChip{white-space:nowrap;background:var(--mkt-surface-c);color:var(--mkt-text3);border:1px solid #0000;border-radius:8px;flex:none;padding:1px 6px;font-size:10.5px;font-weight:500}._LI32q_compatChip[data-status=unknown]{background:var(--mkt-chip-warn-bg);color:var(--mkt-chip-warn-text);border-color:var(--mkt-chip-warn-border,transparent)}._LI32q_compatChip[data-status=incompatible]{background:var(--mkt-chip-red-bg);color:var(--mkt-chip-red-text);border-color:var(--mkt-chip-red-border)}._LI32q_cardStars{color:var(--mkt-text2);flex:none;align-items:center;gap:4px;margin-left:auto;font-size:12px;display:flex}._LI32q_cardStars>svg{width:13px;height:13px;color:var(--mkt-chip-warn-text)}._LI32q_cardDesc{color:var(--mkt-text2);-webkit-line-clamp:3;-webkit-box-orient:vertical;margin:8px 0 9px;font-size:13px;line-height:1.55;display:-webkit-box;overflow:hidden}._LI32q_cardTags,._LI32q_cardReasons{flex-wrap:wrap;gap:6px;margin-bottom:10px;display:flex}._LI32q_reason{color:var(--mkt-chip-green-text);background:var(--mkt-chip-green-bg);border-radius:8px;padding:2px 6px;font-size:11px}._LI32q_reasonAi{color:var(--mkt-brand-strong);background:#eaf2fb;border-radius:8px;padding:2px 6px;font-size:11px}._LI32q_cardActions{align-items:center;gap:6px;display:flex}._LI32q_spacer{margin-left:auto}._LI32q_needConfig{color:var(--mkt-chip-warn-text);font-size:11px}._LI32q_cardActionHint{color:#8a919f;text-align:right;margin-top:6px;font-size:11px}._LI32q_iconBtn{border:1px solid var(--mkt-border-strong);cursor:pointer;color:#8a919f;background:#fff;border-radius:7px;flex:none;justify-content:center;align-items:center;width:28px;height:28px;padding:0;transition:color .14s,border-color .14s,background-color .14s;display:flex;box-shadow:0 1px 3px #0000000f}._LI32q_iconBtn:hover{color:#4d6bfe;border-color:var(--mkt-brand-soft)}._LI32q_iconBtn:disabled{opacity:.5;cursor:not-allowed}._LI32q_iconBtn svg{width:15px;height:15px}._LI32q_iconBtnOn{color:#4d6bfe;border-color:var(--mkt-brand-soft)}._LI32q_favBtn{color:var(--mkt-text2);border:1px solid var(--mkt-border-strong);cursor:pointer;white-space:nowrap;background:#fff;border-radius:7px;justify-content:center;align-items:center;gap:4px;padding:4px 9px;font-family:inherit;font-size:12px;transition:color .14s,border-color .14s,background-color .14s;display:flex;box-shadow:0 1px 3px #0000000f}._LI32q_favBtn:hover{color:#4d6bfe;border-color:var(--mkt-brand-soft)}._LI32q_favBtnOn{color:#4d6bfe;border-color:var(--mkt-brand-soft);background:#eaf2fb}._LI32q_repoBtn{color:var(--mkt-text2);border:1px solid var(--mkt-border-strong);cursor:pointer;background:#fff;border-radius:7px;align-items:center;gap:5px;padding:4px 9px;font-family:inherit;font-size:12px;transition:color .14s,border-color .14s;display:flex;box-shadow:0 1px 3px #0000000f}._LI32q_repoBtn svg{width:13px;height:13px}._LI32q_repoBtn:hover{color:#4d6bfe;border-color:var(--mkt-brand-soft)}._LI32q_tag{color:var(--mkt-text3);cursor:pointer;user-select:none;background:#f3f4f6;border:none;border-radius:8px;padding:2px 6px;font-size:11px;transition:background-color .12s,color .12s}._LI32q_tag:hover{color:var(--mkt-brand-strong);background:#eaf2fb}._LI32q_tagOn{color:var(--mkt-brand-strong);background:#eaf2fb;font-weight:500}._LI32q_recommendToolbar{border:1px solid var(--mkt-brand-tint);background:#eaf2fb;border-radius:11px;align-items:center;gap:8px;margin-bottom:4px;padding:9px 12px;display:flex}._LI32q_recommendToolbarIcon{color:#4d6bfe;flex:none;align-items:center;display:flex}._LI32q_recommendToolbarIcon>svg{width:14px;height:14px}._LI32q_recommendHint{color:var(--mkt-text2);flex:1;font-size:12px;line-height:1.5}._LI32q_modeSwitchRow{margin-bottom:4px;display:flex}._LI32q_quizCard{background:#fff;border:1px solid #e5e7eb;border-radius:11px;flex-direction:column;margin-bottom:4px;padding:15px;display:flex;box-shadow:0 1px 3px #0000000f}._LI32q_quizHead{align-items:center;gap:8px;margin-bottom:4px;display:flex}._LI32q_quizHeadIcon{color:#4d6bfe;align-items:center;display:flex}._LI32q_quizHeadIcon>svg{width:16px;height:16px}._LI32q_quizTitle{flex:1;font-size:14px;font-weight:600}._LI32q_quizDesc{color:var(--mkt-text2);margin:0 0 12px;font-size:12px}._LI32q_quizTags{flex-wrap:wrap;gap:6px;margin-bottom:14px;display:flex}._LI32q_quizChip{color:var(--mkt-text2);cursor:pointer;user-select:none;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:5px 11px;font-size:12px;transition:all .14s}._LI32q_quizChip:hover{border-color:var(--mkt-brand-soft);color:#4d6bfe}._LI32q_quizChipOn{border-color:var(--mkt-brand-soft);color:var(--mkt-brand-strong);background:#eaf2fb;font-weight:500}._LI32q_quizActions{align-items:center;gap:8px;display:flex}._LI32q_quizCount{color:#8a919f;font-size:12px}._LI32q_quizCta{align-items:center;margin-left:auto;display:flex}._LI32q_quizCta ._LI32q_btnPrimary{padding:9px 14px;font-size:13px;font-weight:600}._LI32q_sceneList{flex-direction:column;gap:0;display:flex}._LI32q_sceneRow{border:1px solid #e5e7eb;border-radius:11px;align-items:center;gap:10px;margin-bottom:9px;padding:12px 13px;transition:box-shadow .15s,transform .15s;display:flex;box-shadow:0 1px 3px #0000000f}._LI32q_sceneRow:hover{transform:translateY(-1px);box-shadow:0 2px 8px #0000001a}._LI32q_sceneInfo{flex:1;min-width:0}._LI32q_sceneName{margin-bottom:3px;font-size:13.5px;font-weight:600}._LI32q_sceneDesc{color:var(--mkt-text2);font-size:12px;line-height:1.5}._LI32q_sceneHint{color:#8a919f;font-size:12px}._LI32q_sceneEmpty{color:#8a919f;border:1px solid #e5e7eb;border-radius:11px;margin:0;padding:12px 13px;font-size:12px}._LI32q_stateHint{text-align:center;color:#8a919f;padding:24px 12px;font-size:12px}._LI32q_installedNote{color:#8a919f;margin-top:8px;font-size:11px}._LI32q_grid2{grid-template-columns:1fr 1fr;align-items:start;gap:12px;display:grid}._LI32q_grid2>*{min-width:0;max-width:100%}@media (width<=480px){._LI32q_grid2{grid-template-columns:1fr}}._LI32q_searchWrap{margin-bottom:14px;position:relative}._LI32q_searchWrapIcon{color:#8a919f;pointer-events:none;align-items:center;width:15px;height:15px;display:flex;position:absolute;top:50%;left:11px;transform:translateY(-50%)}._LI32q_searchWrapIcon>svg{width:15px;height:15px}._LI32q_searchInput{border:1px solid var(--mkt-border-strong);width:100%;height:38px;color:var(--mkt-text);background:#fff;border-radius:10px;outline:none;padding:0 34px;font-family:inherit;font-size:13px;transition:border-color .16s,box-shadow .16s}._LI32q_searchInput::placeholder{color:var(--mkt-text2)}._LI32q_searchInput:focus{border-color:#4d6bfe;box-shadow:0 0 0 3px #4d6bfe24}._LI32q_searchClear{cursor:pointer;color:#8a919f;background:0 0;border:none;border-radius:5px;justify-content:center;align-items:center;width:20px;height:20px;padding:0;display:flex;position:absolute;top:50%;right:9px;transform:translateY(-50%)}._LI32q_searchClear:hover{background:#f3f4f6}._LI32q_searchClear svg{width:13px;height:13px}._LI32q_filterRow{flex-wrap:wrap;gap:6px;margin-bottom:14px;display:flex}._LI32q_filterChip{color:var(--mkt-text2);cursor:pointer;user-select:none;background:#fff;border:1px solid #e5e7eb;border-radius:13px;padding:4px 11px;font-size:12px;transition:all .14s}._LI32q_filterChip:hover{color:#4d6bfe;border-color:var(--mkt-brand-soft)}._LI32q_filterChipOn{border-color:var(--mkt-brand-soft);color:var(--mkt-brand-strong);background:#eaf2fb;font-weight:500}._LI32q_zhChip{color:#0f6e56;cursor:pointer;user-select:none;background:#e1f5ee;border:1px solid #9fe1cb;border-radius:13px;padding:4px 11px;font-size:12px;transition:all .14s}._LI32q_zhChip:hover{border-color:#1d9e75}._LI32q_zhChipOn{color:#fff;background:#0f6e56;border-color:#0f6e56;font-weight:500}._LI32q_zhChipCount{opacity:.75;margin-left:3px;font-size:10px}._LI32q_zhCatLabel{color:#8a919f;align-self:center;font-size:12px}._LI32q_semanticToggle{background:#fff;border:1px solid #e5e7eb;border-radius:11px;align-items:center;gap:9px;margin-bottom:14px;padding:9px 12px;display:flex}._LI32q_semanticInfo{flex:1}._LI32q_semanticTitle{align-items:center;gap:6px;font-size:13px;font-weight:600;display:flex}._LI32q_semanticPill{color:#8a919f;border:1px solid #e5e7eb;border-radius:9px;padding:0 6px;font-size:10px;font-weight:500}._LI32q_semanticDesc{color:#8a919f;margin-top:2px;font-size:12px}._LI32q_semanticSwitch{background:var(--mkt-border-strong);cursor:not-allowed;opacity:.7;border-radius:10px;flex:none;width:34px;height:20px;position:relative}._LI32q_semanticSwitch:after{content:\"\";background:#fff;border-radius:50%;width:16px;height:16px;position:absolute;top:2px;left:2px;box-shadow:0 1px 2px #0003}._LI32q_hotTagsTitle{color:#8a919f;margin-bottom:8px;font-size:12px}._LI32q_tagCloud{flex-wrap:wrap;gap:6px;padding:0;display:flex}._LI32q_hotTag{color:var(--mkt-text2);cursor:pointer;user-select:none;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:5px 11px;font-size:12px;transition:all .14s}._LI32q_hotTag:hover{border-color:var(--mkt-brand-soft);color:#4d6bfe}._LI32q_hotTagOn{border-color:var(--mkt-brand-soft);color:var(--mkt-brand-strong);background:#eaf2fb;font-weight:500}._LI32q_tagMoreRow{margin:2px 0 4px}._LI32q_results{grid-template-columns:1fr 1fr;align-items:start;gap:12px;display:grid}._LI32q_results>*{min-width:0;max-width:100%}@media (width<=480px){._LI32q_results{grid-template-columns:1fr}}._LI32q_resultCount{color:var(--mkt-text2);margin:2px 0 10px;font-size:12px}._LI32q_resultCount b{color:var(--mkt-text)}._LI32q_loadMoreRow{text-align:center;margin:14px 0 6px}._LI32q_loadMore{color:var(--mkt-text);cursor:pointer;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 14px;font-family:inherit;font-size:12.5px;font-weight:500;transition:background-color .14s,border-color .14s;box-shadow:0 1px 3px #0000000f}._LI32q_loadMore:hover{border-color:var(--mkt-border-strong);background:#f3f4f6}._LI32q_semanticResult{color:#8a919f;flex-wrap:wrap;align-items:center;gap:5px;font-size:12px;display:flex}._LI32q_emptyState{text-align:center;padding:56px 20px}._LI32q_emptyIcon{color:var(--mkt-border-strong);justify-content:center;margin-bottom:12px;display:flex}._LI32q_emptyIcon>svg{width:44px;height:44px}._LI32q_emptyTitle{color:var(--mkt-text);margin-bottom:5px;font-size:14px;font-weight:600}._LI32q_emptyDesc{color:#8a919f;margin-bottom:16px;font-size:12px}._LI32q_installedRow{border:1px solid #e5e7eb;border-radius:11px;align-items:flex-start;gap:11px;margin-bottom:9px;padding:13px;transition:box-shadow .15s,transform .15s;display:flex;box-shadow:0 1px 3px #0000000f}._LI32q_installedRow:hover{transform:translateY(-1px);box-shadow:0 2px 8px #0000001a}._LI32q_installedInfo{flex:1;min-width:0}._LI32q_installedHead{align-items:center;gap:8px;display:flex}._LI32q_installedName{color:var(--mkt-text);text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600;overflow:hidden}._LI32q_installedMeta{color:#8a919f;margin-top:3px;font-size:12px}._LI32q_installedActions{flex-direction:column;flex:none;gap:6px;display:flex}._LI32q_unmatched{flex-wrap:wrap;gap:5px;margin-top:8px;display:flex}._LI32q_unmatchedChip{background:var(--mkt-chip-warn-bg);border:1px dashed var(--mkt-chip-gold-border);color:var(--mkt-chip-warn-text);border-radius:10px;padding:3px 8px;font-size:11.5px}._LI32q_unmatchedMore{color:#8a919f;align-self:center;font-size:11px}._LI32q_updateChip{background:var(--mkt-chip-gold-bg);border:1px solid var(--mkt-chip-gold-border);color:var(--mkt-chip-gold-text);border-radius:10px;margin-top:5px;padding:1px 8px;font-size:11.5px;font-weight:500;display:inline-block}._LI32q_latestChip{background:var(--mkt-chip-green-bg);border:1px solid var(--mkt-chip-green-border);color:var(--mkt-chip-green-text);border-radius:10px;margin-top:5px;padding:1px 8px;font-size:11.5px;font-weight:500;display:inline-block}._LI32q_updateHint{color:#8a919f;margin-top:5px;font-size:11.5px}._LI32q_activationChip{background:var(--mkt-brand-tint);border:1px solid var(--mkt-brand-soft);color:#4d6bfe;border-radius:10px;margin-top:5px;padding:1px 8px;font-size:11.5px;font-weight:500;display:inline-block}._LI32q_activationLive{background:var(--mkt-chip-green-bg);border:1px solid var(--mkt-chip-green-border);color:var(--mkt-chip-green-text)}._LI32q_activationBroken{background:var(--mkt-chip-red-bg);border:1px solid var(--mkt-chip-red-border);color:var(--mkt-chip-red-text)}._LI32q_activationInert{border:1px solid var(--mkt-border-strong);color:var(--mkt-text3);background:#f3f4f6}._LI32q_selfUpdateBar{background:var(--mkt-chip-gold-bg);border:1px solid var(--mkt-chip-gold-border);color:var(--mkt-chip-gold-text);border-radius:10px;align-items:center;gap:8px;margin:0 14px 10px;padding:8px 12px;font-size:12px;display:flex}._LI32q_selfUpdateText{text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;overflow:hidden}._LI32q_settingCard{background:#fff;border:1px solid #e5e7eb;border-radius:11px;margin-bottom:12px;padding:15px;box-shadow:0 1px 3px #0000000f}._LI32q_settingHead{align-items:center;gap:8px;margin-bottom:10px;display:flex}._LI32q_settingIc{color:#4d6bfe;background:#f3f4f6;border-radius:8px;flex:none;justify-content:center;align-items:center;width:26px;height:26px;display:flex}._LI32q_settingIc>svg{width:15px;height:15px}._LI32q_settingTitle{font-size:14px;font-weight:600}._LI32q_versionRow{border-top:1px solid #eef0f2;align-items:center;gap:8px;margin-top:10px;padding-top:10px;display:flex}._LI32q_versionLabel{color:var(--mkt-text2);flex:none;font-size:12px}._LI32q_versionCode{color:var(--mkt-text);background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:2px 8px;font-family:ui-monospace,Menlo,monospace;font-size:12px}._LI32q_settingStatus{border-radius:9px;margin-left:auto;padding:2px 8px;font-size:11.5px}._LI32q_statusOk{background:var(--mkt-chip-green-bg);color:var(--mkt-text-ok)}._LI32q_statusOff{color:#8a919f;background:#f3f4f6}._LI32q_statusWarn{background:var(--mkt-chip-warn-bg);color:var(--mkt-chip-warn-text)}._LI32q_settingsRow{align-items:center;gap:8px;display:flex}._LI32q_settingsLabel{color:var(--mkt-text2);white-space:nowrap;font-size:12px}._LI32q_ghTip{color:var(--mkt-text2);margin:0;font-size:12px;line-height:1.7}._LI32q_ghLink{color:#4d6bfe;align-items:center;gap:2px;text-decoration:none;display:inline-flex}._LI32q_ghLink:hover{text-decoration:underline}._LI32q_ghLogin{flex:1;font-size:13px;font-weight:600}._LI32q_ghRow{align-items:center;gap:8px;display:flex}._LI32q_deviceFlow{color:var(--mkt-text2);background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;flex-direction:column;gap:6px;padding:9px 11px;font-size:12px;display:flex}._LI32q_deviceCode{letter-spacing:2px;color:#4d6bfe;background:#fff;border-radius:6px;align-self:flex-start;padding:4px 8px;font-family:ui-monospace,Menlo,monospace;font-size:18px;font-weight:700}._LI32q_ghPollState{color:var(--mkt-text2);margin:0;font-size:12px}._LI32q_deviceFlow a{color:#4d6bfe}._LI32q_deviceFlowTip{color:#8a919f;margin:0;font-size:11.5px;line-height:1.6}._LI32q_ghDone{color:var(--mkt-text-ok);align-items:center;font-weight:500;display:inline-flex}._LI32q_field{margin-bottom:11px}._LI32q_fieldRow{gap:8px;display:flex}._LI32q_fieldRow>._LI32q_field{flex:1;margin-bottom:0}._LI32q_fieldLabel{color:var(--mkt-text2);margin-bottom:5px;font-size:12px;display:block}._LI32q_input,._LI32q_select{border:1px solid var(--mkt-border-strong);width:100%;height:34px;color:var(--mkt-text);background:#fff;border-radius:9px;outline:none;padding:0 10px;font-family:inherit;font-size:13px;transition:border-color .16s,box-shadow .16s}._LI32q_input:focus,._LI32q_select:focus{border-color:#4d6bfe;box-shadow:0 0 0 3px #4d6bfe24}._LI32q_input::placeholder{color:var(--mkt-text2)}._LI32q_error{color:var(--mkt-text-danger);margin:0;font-size:12px}._LI32q_warn{color:var(--mkt-chip-warn-text);align-items:center;margin:0;font-size:12px;display:flex}._LI32q_dividerLine{background:#eef0f2;height:1px;margin:13px 0}._LI32q_inlineIcon{vertical-align:-2px;flex:none;margin-right:4px;display:inline-block}._LI32q_modalBackdrop{z-index:120;background:#14161c6b;justify-content:center;align-items:center;display:flex;position:fixed;inset:0}._LI32q_modal{background:#fff;border-radius:14px;flex-direction:column;width:420px;max-width:92vw;padding:20px 22px;display:flex;overflow:hidden;box-shadow:0 12px 50px #0000003d}._LI32q_modalHead{justify-content:space-between;align-items:center;margin-bottom:12px;display:flex}._LI32q_modalTitle{font-size:15px;font-weight:600}._LI32q_modalClose{cursor:pointer;color:#8a919f;background:0 0;border:none;border-radius:7px;justify-content:center;align-items:center;width:28px;height:28px;padding:0;transition:background-color .14s;display:flex}._LI32q_modalClose:hover{color:var(--mkt-text);background:#f3f4f6}._LI32q_modalClose svg{width:16px;height:16px}._LI32q_modalBody{flex-direction:column;gap:10px;display:flex}._LI32q_modalDesc{color:var(--mkt-text2);margin:0;font-size:12.5px;line-height:1.6}._LI32q_modalActions{justify-content:flex-end;gap:8px;margin-top:8px;display:flex}._LI32q_modalSuccess{text-align:center;flex-direction:column;justify-content:center;align-items:center;gap:10px;display:flex}._LI32q_modalSuccessIcon{background:var(--mkt-chip-green-bg);width:44px;height:44px;color:var(--mkt-text-ok);border-radius:50%;justify-content:center;align-items:center;margin:0 auto;display:flex}._LI32q_modalSuccessIcon>svg{width:22px;height:22px}._LI32q_modalSuccessTitle{color:var(--mkt-text);font-size:14px;font-weight:600}._LI32q_modalError{color:var(--mkt-text-danger);word-break:break-all;align-items:center;font-size:13px;font-weight:600;display:flex}._LI32q_loading{text-align:center;color:#8a919f;padding:20px;font-size:12px}._LI32q_advanced{margin-top:2px}._LI32q_advanced summary{cursor:pointer;color:#8a919f;user-select:none;font-size:11px}._LI32q_advancedTip{color:#8a919f;margin:6px 0 0;font-size:11px;line-height:1.5}._LI32q_advancedCmd{color:var(--mkt-text2);white-space:pre-wrap;word-break:break-all;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;margin-top:6px;padding:9px 11px;font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.6;display:block}._LI32q_steps{align-items:center;margin-bottom:18px;display:flex}._LI32q_step{color:#8a919f;flex:1;align-items:center;gap:7px;font-size:12px;display:flex;position:relative}._LI32q_stepDot{border:1.5px solid var(--mkt-border-strong);color:#8a919f;background:#fff;border-radius:50%;flex:none;justify-content:center;align-items:center;width:20px;height:20px;font-size:11.5px;transition:all .2s;display:flex}._LI32q_stepActive{color:var(--mkt-text)}._LI32q_stepActive ._LI32q_stepDot{color:#4d6bfe;border-color:#4d6bfe}._LI32q_stepDone{color:var(--mkt-text)}._LI32q_stepDone ._LI32q_stepDot{color:#fff;background:#4d6bfe;border-color:#4d6bfe}._LI32q_stepBar{background:var(--mkt-border-strong);border-radius:1px;flex:1;height:1.5px;margin:0 6px}._LI32q_stepBarDone{background:#4d6bfe}._LI32q_toast{background:var(--mkt-inverse);color:#fff;z-index:200;pointer-events:none;border-radius:8px;padding:8px 16px;font-size:12.5px;animation:.22s _LI32q_toastIn;position:fixed;bottom:24px;left:50%;transform:translate(-50%);box-shadow:0 4px 16px #0003}@keyframes _LI32q_toastIn{0%{opacity:0;transform:translate(-50%)translateY(10px)}to{opacity:1;transform:translate(-50%)translateY(0)}}@media (prefers-color-scheme:dark){:root{--mkt-text:#e8eaed;--mkt-text2:#b3bac4;--mkt-text3:#a6aeba;--mkt-brand:#6d8bff;--mkt-brand-strong:#8aa5ff;--mkt-brand-tint:#6d8bff1a;--mkt-brand-soft:#6d8bff3d;--mkt-border:#2a2e36;--mkt-border-strong:#3a3f49;--mkt-divider:#262a31;--mkt-selected:#2e323a;--mkt-hover:#2a2e35;--mkt-bg:#171a1f;--mkt-inverse:#31353d;--mkt-surface-a:#1b1e24;--mkt-surface-b:#21252c;--mkt-surface-c:#262a32;--mkt-chip-warn-bg:#b4530929;--mkt-chip-warn-text:#fbbf24;--mkt-chip-gold-bg:#d9770629;--mkt-chip-gold-border:#d9770659;--mkt-chip-gold-text:#fbbf24;--mkt-chip-green-bg:#22c55e21;--mkt-chip-green-border:#22c55e4d;--mkt-chip-green-text:#4ade80;--mkt-chip-red-bg:#ef444421;--mkt-chip-red-border:#ef44444d;--mkt-chip-red-text:#f87171;--mkt-text-ok:#4ade80;--mkt-text-danger:#f87171;--mkt-rate-ok:#4ade80;--mkt-rate-warn:#fbbf24;--mkt-rate-danger:#f87171;--mkt-purple:#a78bfa;--mkt-purple-bg:#7c3aed29}._LI32q_panel{color-scheme:dark;box-shadow:0 8px 32px #00000080}}:root[style*=\"color-scheme: dark\"]{--mkt-text:#e8eaed;--mkt-text2:#9aa1a8;--mkt-text3:#8b93a1;--mkt-brand:#6d8bff;--mkt-brand-strong:#8aa5ff;--mkt-brand-tint:#6d8bff1a;--mkt-brand-soft:#6d8bff3d;--mkt-border:#2a2e36;--mkt-border-strong:#3a3f49;--mkt-divider:#262a31;--mkt-selected:#2e323a;--mkt-hover:#2a2e35;--mkt-bg:#171a1f;--mkt-inverse:#31353d;--mkt-surface-a:#1b1e24;--mkt-surface-b:#21252c;--mkt-surface-c:#262a32;--mkt-chip-warn-bg:#b4530929;--mkt-chip-warn-text:#fbbf24;--mkt-chip-gold-bg:#d9770629;--mkt-chip-gold-border:#d9770659;--mkt-chip-gold-text:#fbbf24;--mkt-chip-green-bg:#22c55e21;--mkt-chip-green-border:#22c55e4d;--mkt-chip-green-text:#4ade80;--mkt-chip-red-bg:#ef444421;--mkt-chip-red-border:#ef44444d;--mkt-chip-red-text:#f87171;--mkt-text-ok:#4ade80;--mkt-text-danger:#f87171;--mkt-rate-ok:#4ade80;--mkt-rate-warn:#fbbf24;--mkt-rate-danger:#f87171;--mkt-purple:#a78bfa;--mkt-purple-bg:#7c3aed29}:root[style*=\"color-scheme: dark\"] ._LI32q_panel{color-scheme:dark;box-shadow:0 8px 32px #00000080}:root[style*=\"color-scheme: dark\"] ._LI32q_trigger{color:#e8eaed}:root[style*=\"color-scheme: dark\"] ._LI32q_trigger:hover{color:#fff;background:#ffffff1a}:root[style*=\"color-scheme: dark\"] ._LI32q_trigger[data-active]{color:var(--mkt-brand);background:var(--mkt-hover)}._LI32q_panel{background:var(--mkt-surface-a)}._LI32q_card,._LI32q_settingCard,._LI32q_quizCard,._LI32q_modal{background:var(--mkt-surface-b)}._LI32q_btn,._LI32q_iconBtn,._LI32q_favBtn,._LI32q_repoBtn,._LI32q_quizChip,._LI32q_searchInput,._LI32q_filterChip,._LI32q_semanticToggle,._LI32q_semanticSwitch,._LI32q_hotTag,._LI32q_loadMore,._LI32q_deviceCode,._LI32q_select,._LI32q_stepDot{background:var(--mkt-surface-c)}._LI32q_btnPrimary,._LI32q_btnPrimary:hover,._LI32q_btnPrimary:active{background:var(--mkt-brand);border-color:var(--mkt-brand)}._LI32q_btnPrimary:hover{background:var(--mkt-brand-strong);border-color:var(--mkt-brand-strong)}._LI32q_btnDanger{background:var(--mkt-chip-red-bg);color:var(--mkt-text-danger);border-color:var(--mkt-chip-red-border)}._LI32q_outlet{border:1px solid var(--mkt-chip-red-border,#f3c9c9);text-align:center;background:#fff;border-radius:12px;max-width:460px;margin:18px auto;padding:20px 18px;box-shadow:0 1px 3px #0000000f}._LI32q_outletTitle{color:var(--mkt-text,#1f2328);margin-bottom:8px;font-size:14px;font-weight:600}._LI32q_outletMsg{max-width:420px;margin:0 auto 4px}._LI32q_outletMsg code{background:var(--mkt-chip-red-bg,#fdf1f1);color:var(--mkt-text-danger);word-break:break-all;text-align:left;white-space:pre-wrap;border-radius:8px;max-height:88px;padding:8px 10px;font-size:11.5px;line-height:1.5;display:block;overflow:auto}._LI32q_outletActions{flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px;display:flex}._LI32q_outletManual{text-align:left;margin-top:10px}._LI32q_outletManualTitle{color:var(--mkt-text,#1f2328);margin-bottom:4px;font-size:12px;font-weight:600}._LI32q_outletManualText{white-space:pre-wrap;word-break:break-all;cursor:copy;user-select:all;background:#f7f8fa;border:1px dashed #d0d4da;border-radius:8px;max-height:180px;margin:0;padding:8px 10px;font-size:11px;line-height:1.5;overflow:auto}._LI32q_outletHint{color:#8a919f;margin-top:12px;font-size:11px;line-height:1.6}._LI32q_semanticSwitch{cursor:pointer;opacity:1;transition:background .15s}._LI32q_semanticSwitchOn{background:var(--mkt-brand)}._LI32q_semanticSwitchOn:after{left:16px}";
+		const tagId = "@dsh-market/plugin/styles.module.css";
+		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
+			const tag = document.createElement("style");
+			tag.dataset.plugin = "@dsh-market/plugin";
+			tag.dataset.pluginCss = tagId;
+			tag.textContent = css;
+			document.head.appendChild(tag);
+		}
+		var styles_module_css_default = {
+			"title": "_LI32q_title",
+			"loadMore": "_LI32q_loadMore",
+			"outletHint": "_LI32q_outletHint",
+			"semanticTitle": "_LI32q_semanticTitle",
+			"activationChip": "_LI32q_activationChip",
+			"outletMsg": "_LI32q_outletMsg",
+			"sceneName": "_LI32q_sceneName",
+			"updateHint": "_LI32q_updateHint",
+			"ghLink": "_LI32q_ghLink",
+			"unmatchedMore": "_LI32q_unmatchedMore",
+			"spacer": "_LI32q_spacer",
+			"semanticSwitch": "_LI32q_semanticSwitch",
+			"modalBackdrop": "_LI32q_modalBackdrop",
+			"stepBarDone": "_LI32q_stepBarDone",
+			"versionRow": "_LI32q_versionRow",
+			"modeSwitchRow": "_LI32q_modeSwitchRow",
+			"outletManual": "_LI32q_outletManual",
+			"compatChip": "_LI32q_compatChip",
+			"iconBtnOn": "_LI32q_iconBtnOn",
+			"installedNote": "_LI32q_installedNote",
+			"sceneHint": "_LI32q_sceneHint",
+			"field": "_LI32q_field",
+			"filterChip": "_LI32q_filterChip",
+			"panel": "_LI32q_panel",
+			"header": "_LI32q_header",
+			"modal": "_LI32q_modal",
+			"resultCount": "_LI32q_resultCount",
+			"repoBtn": "_LI32q_repoBtn",
+			"semanticInfo": "_LI32q_semanticInfo",
+			"semanticResult": "_LI32q_semanticResult",
+			"installedMeta": "_LI32q_installedMeta",
+			"hotTag": "_LI32q_hotTag",
+			"deviceFlow": "_LI32q_deviceFlow",
+			"selfUpdateText": "_LI32q_selfUpdateText",
+			"modalSuccess": "_LI32q_modalSuccess",
+			"ghPollState": "_LI32q_ghPollState",
+			"outletManualText": "_LI32q_outletManualText",
+			"quizHeadIcon": "_LI32q_quizHeadIcon",
+			"tab": "_LI32q_tab",
+			"installedInfo": "_LI32q_installedInfo",
+			"sectionHead": "_LI32q_sectionHead",
+			"tagMoreRow": "_LI32q_tagMoreRow",
+			"ghDone": "_LI32q_ghDone",
+			"fieldLabel": "_LI32q_fieldLabel",
+			"section": "_LI32q_section",
+			"cardDesc": "_LI32q_cardDesc",
+			"recommendToolbarIcon": "_LI32q_recommendToolbarIcon",
+			"searchWrapIcon": "_LI32q_searchWrapIcon",
+			"error": "_LI32q_error",
+			"quizDesc": "_LI32q_quizDesc",
+			"input": "_LI32q_input",
+			"recommendToolbar": "_LI32q_recommendToolbar",
+			"quizCard": "_LI32q_quizCard",
+			"activationInert": "_LI32q_activationInert",
+			"results": "_LI32q_results",
+			"warn": "_LI32q_warn",
+			"btn": "_LI32q_btn",
+			"cardReasons": "_LI32q_cardReasons",
+			"tabBody": "_LI32q_tabBody",
+			"sceneDesc": "_LI32q_sceneDesc",
+			"modalClose": "_LI32q_modalClose",
+			"emptyTitle": "_LI32q_emptyTitle",
+			"outletTitle": "_LI32q_outletTitle",
+			"quizCount": "_LI32q_quizCount",
+			"modalSuccessTitle": "_LI32q_modalSuccessTitle",
+			"sceneRow": "_LI32q_sceneRow",
+			"cardName": "_LI32q_cardName",
+			"searchWrap": "_LI32q_searchWrap",
+			"cardTags": "_LI32q_cardTags",
+			"sectionNote": "_LI32q_sectionNote",
+			"quizChip": "_LI32q_quizChip",
+			"filterChipOn": "_LI32q_filterChipOn",
+			"ghRow": "_LI32q_ghRow",
+			"stepBar": "_LI32q_stepBar",
+			"outletManualTitle": "_LI32q_outletManualTitle",
+			"emptyState": "_LI32q_emptyState",
+			"hotTagOn": "_LI32q_hotTagOn",
+			"searchClear": "_LI32q_searchClear",
+			"btnPrimary": "_LI32q_btnPrimary",
+			"statusWarn": "_LI32q_statusWarn",
+			"backdrop": "_LI32q_backdrop",
+			"btnSm": "_LI32q_btnSm",
+			"semanticDesc": "_LI32q_semanticDesc",
+			"versionLabel": "_LI32q_versionLabel",
+			"subtitle": "_LI32q_subtitle",
+			"favBtn": "_LI32q_favBtn",
+			"zhChip": "_LI32q_zhChip",
+			"sectionIcon": "_LI32q_sectionIcon",
+			"zhChipOn": "_LI32q_zhChipOn",
+			"installedRow": "_LI32q_installedRow",
+			"settingStatus": "_LI32q_settingStatus",
+			"settingIc": "_LI32q_settingIc",
+			"statusOk": "_LI32q_statusOk",
+			"panelInMain": "_LI32q_panelInMain",
+			"reason": "_LI32q_reason",
+			"settingsRow": "_LI32q_settingsRow",
+			"modalTitle": "_LI32q_modalTitle",
+			"loading": "_LI32q_loading",
+			"outlet": "_LI32q_outlet",
+			"quizHead": "_LI32q_quizHead",
+			"titleIcon": "_LI32q_titleIcon",
+			"btnDanger": "_LI32q_btnDanger",
+			"activationBroken": "_LI32q_activationBroken",
+			"mainHost": "_LI32q_mainHost",
+			"installedActions": "_LI32q_installedActions",
+			"needConfig": "_LI32q_needConfig",
+			"hotTagsTitle": "_LI32q_hotTagsTitle",
+			"advanced": "_LI32q_advanced",
+			"modalActions": "_LI32q_modalActions",
+			"ghLogin": "_LI32q_ghLogin",
+			"steps": "_LI32q_steps",
+			"sceneEmpty": "_LI32q_sceneEmpty",
+			"settingHead": "_LI32q_settingHead",
+			"stepDot": "_LI32q_stepDot",
+			"iconBtn": "_LI32q_iconBtn",
+			"updateChip": "_LI32q_updateChip",
+			"tabs": "_LI32q_tabs",
+			"selfUpdateBar": "_LI32q_selfUpdateBar",
+			"deviceCode": "_LI32q_deviceCode",
+			"quizChipOn": "_LI32q_quizChipOn",
+			"inlineIcon": "_LI32q_inlineIcon",
+			"grid2": "_LI32q_grid2",
+			"cardHead": "_LI32q_cardHead",
+			"recommendHint": "_LI32q_recommendHint",
+			"sceneList": "_LI32q_sceneList",
+			"ghTip": "_LI32q_ghTip",
+			"sceneInfo": "_LI32q_sceneInfo",
+			"fieldRow": "_LI32q_fieldRow",
+			"modalHead": "_LI32q_modalHead",
+			"cardBadge": "_LI32q_cardBadge",
+			"installedHead": "_LI32q_installedHead",
+			"modalDesc": "_LI32q_modalDesc",
+			"advancedCmd": "_LI32q_advancedCmd",
+			"versionCode": "_LI32q_versionCode",
+			"body": "_LI32q_body",
+			"tagOn": "_LI32q_tagOn",
+			"emptyIcon": "_LI32q_emptyIcon",
+			"installedName": "_LI32q_installedName",
+			"reasonAi": "_LI32q_reasonAi",
+			"searchInput": "_LI32q_searchInput",
+			"filterRow": "_LI32q_filterRow",
+			"semanticPill": "_LI32q_semanticPill",
+			"statusOff": "_LI32q_statusOff",
+			"select": "_LI32q_select",
+			"tag": "_LI32q_tag",
+			"triggerLabel": "_LI32q_triggerLabel",
+			"tagCloud": "_LI32q_tagCloud",
+			"quizActions": "_LI32q_quizActions",
+			"semanticToggle": "_LI32q_semanticToggle",
+			"sectionTitle": "_LI32q_sectionTitle",
+			"quizTitle": "_LI32q_quizTitle",
+			"triggerIcon": "_LI32q_triggerIcon",
+			"btnGhost": "_LI32q_btnGhost",
+			"dividerLine": "_LI32q_dividerLine",
+			"cardActions": "_LI32q_cardActions",
+			"modalBody": "_LI32q_modalBody",
+			"activationLive": "_LI32q_activationLive",
+			"card": "_LI32q_card",
+			"zhCatLabel": "_LI32q_zhCatLabel",
+			"cardStars": "_LI32q_cardStars",
+			"trigger": "_LI32q_trigger",
+			"quizCta": "_LI32q_quizCta",
+			"emptyDesc": "_LI32q_emptyDesc",
+			"stateHint": "_LI32q_stateHint",
+			"settingTitle": "_LI32q_settingTitle",
+			"cardActionHint": "_LI32q_cardActionHint",
+			"loadMoreRow": "_LI32q_loadMoreRow",
+			"unmatchedChip": "_LI32q_unmatchedChip",
+			"modalSuccessIcon": "_LI32q_modalSuccessIcon",
+			"modalError": "_LI32q_modalError",
+			"advancedTip": "_LI32q_advancedTip",
+			"stepActive": "_LI32q_stepActive",
+			"favBtnOn": "_LI32q_favBtnOn",
+			"stepDone": "_LI32q_stepDone",
+			"quizTags": "_LI32q_quizTags",
+			"headerClose": "_LI32q_headerClose",
+			"tabOn": "_LI32q_tabOn",
+			"step": "_LI32q_step",
+			"toast": "_LI32q_toast",
+			"toastIn": "_LI32q_toastIn",
+			"settingCard": "_LI32q_settingCard",
+			"outletActions": "_LI32q_outletActions",
+			"zhChipCount": "_LI32q_zhChipCount",
+			"latestChip": "_LI32q_latestChip",
+			"deviceFlowTip": "_LI32q_deviceFlowTip",
+			"settingsLabel": "_LI32q_settingsLabel",
+			"unmatched": "_LI32q_unmatched",
+			"semanticSwitchOn": "_LI32q_semanticSwitchOn"
+		};
+		//#endregion
+		//#region src/client/error-outlet.tsx
+		/**
+		* P12 崩溃"出路"：错误边界 + 出路面板。
+		*
+		* 原则：**崩溃必须渲染可操作的面板，永远不是空白页。**
+		*
+		* - `Boundary`：React 错误边界（class 组件是 React 官方唯一形式）。使用方式：
+		*   每个 Tab 一个实例（key 绑定 Tab id，切 Tab 自动重置）、安装弹窗一个、
+		*   面板整体再兜底一个——单点崩溃不拖累其他区域，整体崩溃仍有一张"出路卡"。
+		* - `ErrorOutlet`：错误信息 + 三个动作：重试 / 复制诊断 / 复制修复提示词。
+		*   诊断快照来自 Host RPC `diag:snapshot`（只读本地，见 core/src/diag.ts）；
+		*   RPC 也失败时降级为仅错误信息——出路永远可用。
+		*   复制走 clipboard；clipboard 不可用时把文本展开成可手选的 <pre>（webview 里禁剪贴板也能自救）。
+		*/
+		function El$1(tag, props, ...children) {
+			return (0, react.createElement)(tag, props ?? {}, ...children);
+		}
+		/** 错误边界：内部状态 error 非空时渲染出路面板，否则渲染 children */
+		var Boundary = class extends react.Component {
+			state = { error: null };
+			static getDerivedStateFromError(error) {
+				return { error };
+			}
+			componentDidCatch(error, info) {
+				console.error(`[market] ${this.props.label} 崩溃:`, error, info);
+			}
+			render() {
+				if (this.state.error) return El$1(ErrorOutlet, {
+					error: this.state.error,
+					label: this.props.label,
+					onRetry: () => this.setState({ error: null })
+				});
+				return this.props.children;
+			}
+		};
+		/** 截断长文本（堆栈只留头几行，诊断信息够定位即可，不灌满剪贴板） */
+		function truncate(s, max) {
+			return s.length > max ? `${s.slice(0, max)}…（截断）` : s;
+		}
+		/** 组装诊断全文（RPC 失败时降级：仍带上客户端已知的错误与位置）。P6 安装弹窗「复制诊断」复用。 */
+		async function buildDiagnostics(label, error) {
+			return buildDiagText(label, error);
+		}
+		/** 组装诊断全文（RPC 失败时降级：仍带上客户端已知的错误与位置） */
+		async function buildDiagText(label, error) {
+			let snap = "";
+			try {
+				const s = await api("diag:snapshot");
+				snap = JSON.stringify(s, null, 2);
+			} catch (e) {
+				snap = `（诊断 RPC 失败：${e.message}——Host 可能已无响应）`;
+			}
+			return [
+				"【插件市场诊断】",
+				`出错位置: ${label}`,
+				`时间: ${(/* @__PURE__ */ new Date()).toISOString()}`,
+				"",
+				"— 环境（Host 侧快照）—",
+				snap,
+				"",
+				"— 错误 —",
+				`${error.name}: ${error.message}`,
+				error instanceof RpcError && error.classified ? `分类: ${error.classified.code} — ${error.classified.title}\n建议: ${error.classified.hint}` : "",
+				error.stack ? truncate(error.stack, 1200) : "（无堆栈）"
+			].filter((l) => l !== "").join("\n");
+		}
+		/** 修复提示词：把诊断嵌进一段可直接粘贴给 AI 的话 */
+		async function buildFixPrompt(label, error) {
+			const diag = await buildDiagText(label, error);
+			return [
+				"我在用 DSH（deepseek harness）的插件市场插件，面板的「" + label + "」渲染崩溃了。",
+				"下面是自动导出的诊断信息。",
+				"",
+				"请：1) 分析最可能的原因；2) 给我一步步的修复命令——",
+				"优先给不改配置就能解决的方案；涉及 dsh CLI 的请给完整命令行；",
+				"如果是插件自身 bug，请说明我能用哪个临时绕过办法。",
+				"",
+				"====== 诊断开始 ======",
+				diag,
+				"====== 诊断结束 ======"
+			].join("\n");
+		}
+		/** 写剪贴板；不可用返回 false（调用方降级为手动复制）。P6 设置 Tab 导出日志复用。 */
+		async function copyText(text) {
+			try {
+				if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+					await navigator.clipboard.writeText(text);
+					return true;
+				}
+			} catch {}
+			return false;
+		}
+		/** 出路面板：崩溃时渲染的可操作卡片 */
+		function ErrorOutlet(props) {
+			const { error, label, onRetry } = props;
+			const [copied, setCopied] = (0, react.useState)("");
+			const [manual, setManual] = (0, react.useState)(null);
+			const copy = async (kind) => {
+				const text = kind === "diag" ? await buildDiagText(label, error) : await buildFixPrompt(label, error);
+				if (await copyText(text)) {
+					setCopied(kind);
+					setTimeout(() => setCopied(""), 2e3);
+				} else setManual({
+					title: kind === "diag" ? "诊断信息（手动全选复制）" : "修复提示词（手动全选复制）",
+					text
+				});
+			};
+			return El$1("div", { className: styles_module_css_default.outlet }, El$1("div", { className: styles_module_css_default.outletTitle }, "这里出了点问题，但不是死路"), El$1("div", { className: styles_module_css_default.outletMsg }, El$1("code", null, truncate(`${error.name}: ${error.message}`, 200))), El$1("div", { className: styles_module_css_default.outletActions }, El$1("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnPrimary} ${styles_module_css_default.btnSm}`,
+				onClick: onRetry
+			}, "重试"), El$1("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm}`,
+				onClick: () => void copy("diag")
+			}, copied === "diag" ? "已复制 ✓" : "复制诊断"), El$1("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnGhost} ${styles_module_css_default.btnSm}`,
+				onClick: () => void copy("prompt")
+			}, copied === "prompt" ? "已复制 ✓" : "复制修复提示词")), manual ? El$1("div", { className: styles_module_css_default.outletManual }, El$1("div", { className: styles_module_css_default.outletManualTitle }, manual.title), El$1("pre", {
+				className: styles_module_css_default.outletManualText,
+				onClick: (e) => e.target.textContent && void copyText(e.target.textContent || "")
+			}, manual.text)) : null, El$1("div", { className: styles_module_css_default.outletHint }, "诊断只包含版本/环境与错误信息，不含对话内容与密钥。反复崩溃可到设置 Tab 检查插件更新。"));
+		}
+		//#endregion
+		//#region ../../schema/dist/zh-intent.js
+		const ZH_INTENTS = [
+			{
+				key: "记事本",
+				words: [
+					"记事本",
+					"便签",
+					"笔记本",
+					"记事",
+					"笔记"
+				],
+				terms: [
+					"#notes",
+					"#note",
+					"#notepad",
+					"便签",
+					"笔记",
+					"markdown"
+				]
+			},
+			{
+				key: "待办",
+				words: [
+					"待办",
+					"任务管理",
+					"清单",
+					"todo"
+				],
+				terms: [
+					"#todo",
+					"#task",
+					"#checklist",
+					"待办",
+					"任务",
+					"清单",
+					"任务看板",
+					"#kanban"
+				]
+			},
+			{
+				key: "翻译",
+				words: ["翻译", "translate"],
+				terms: [
+					"#translate",
+					"#translation",
+					"翻译"
+				]
+			},
+			{
+				key: "截图",
+				words: [
+					"截图",
+					"截屏",
+					"录屏",
+					"屏幕录制",
+					"长图"
+				],
+				terms: [
+					"#screenshot",
+					"#capture",
+					"#screen",
+					"截图",
+					"录屏",
+					"截图工具",
+					"长图"
+				]
+			},
+			{
+				key: "下载",
+				words: ["下载"],
+				terms: [
+					"#download",
+					"#downloader",
+					"下载"
+				]
+			},
+			{
+				key: "天气",
+				words: ["天气"],
+				terms: ["#weather", "天气"]
+			},
+			{
+				key: "日历日程",
+				words: [
+					"日历",
+					"日程",
+					"闹钟",
+					"时钟"
+				],
+				terms: [
+					"#calendar",
+					"#schedule",
+					"#clock",
+					"#alarm",
+					"日历",
+					"日程",
+					"时钟"
+				]
+			},
+			{
+				key: "提醒",
+				words: ["提醒", "通知"],
+				terms: [
+					"#remind",
+					"#reminder",
+					"#notification",
+					"#notify",
+					"提醒",
+					"消息通知"
+				]
+			},
+			{
+				key: "聊天",
+				words: [
+					"聊天",
+					"对话",
+					"陪聊"
+				],
+				terms: [
+					"#chat",
+					"#chatbot",
+					"聊天",
+					"对话"
+				]
+			},
+			{
+				key: "邮件",
+				words: ["邮件", "邮箱"],
+				terms: [
+					"#mail",
+					"#email",
+					"#smtp",
+					"邮件"
+				]
+			},
+			{
+				key: "文件管理",
+				words: [
+					"文件管理",
+					"资源管理",
+					"文件整理",
+					"整理文件",
+					"整理",
+					"重命名"
+				],
+				terms: [
+					"#file",
+					"#files",
+					"#explorer",
+					"文件",
+					"#rename",
+					"#renamer",
+					"重命名"
+				]
+			},
+			{
+				key: "图片",
+				words: [
+					"图片",
+					"相册",
+					"壁纸",
+					"水印"
+				],
+				terms: [
+					"#image",
+					"#images",
+					"#photo",
+					"#wallpaper",
+					"图片",
+					"壁纸",
+					"相册",
+					"视觉理解",
+					"图像识别",
+					"图片问答",
+					"图像处理",
+					"水印"
+				]
+			},
+			{
+				key: "绘画",
+				words: [
+					"画图",
+					"绘画",
+					"生图",
+					"文生图",
+					"画"
+				],
+				terms: [
+					"#draw",
+					"#drawing",
+					"stable-diffusion",
+					"#image-generation",
+					"绘画",
+					"生图"
+				]
+			},
+			{
+				key: "音乐",
+				words: [
+					"音乐",
+					"歌曲",
+					"听歌"
+				],
+				terms: [
+					"#music",
+					"#audio",
+					"音乐"
+				]
+			},
+			{
+				key: "视频",
+				words: ["视频"],
+				terms: [
+					"#video",
+					"视频",
+					"剪辑"
+				]
+			},
+			{
+				key: "播放器",
+				words: ["播放器"],
+				terms: ["#player", "播放器"]
+			},
+			{
+				key: "浏览器",
+				words: [
+					"浏览器",
+					"网页",
+					"上网"
+				],
+				terms: [
+					"#browser",
+					"#web",
+					"浏览器",
+					"网页"
+				]
+			},
+			{
+				key: "搜索引擎",
+				words: ["搜索引擎"],
+				terms: [
+					"#search",
+					"search-engine",
+					"搜索"
+				]
+			},
+			{
+				key: "代码开发",
+				words: [
+					"代码",
+					"编程",
+					"开发"
+				],
+				terms: [
+					"#code",
+					"#coding",
+					"#dev",
+					"代码",
+					"编程"
+				]
+			},
+			{
+				key: "Git",
+				words: [
+					"git",
+					"github",
+					"gitee",
+					"提交"
+				],
+				terms: [
+					"#git",
+					"#github",
+					"#gitee",
+					"#commit",
+					"版本控制"
+				]
+			},
+			{
+				key: "终端",
+				words: [
+					"终端",
+					"命令行",
+					"shell"
+				],
+				terms: [
+					"#terminal",
+					"#shell",
+					"#cli",
+					"终端",
+					"命令行"
+				]
+			},
+			{
+				key: "数据库",
+				words: ["数据库", "sql"],
+				terms: [
+					"#database",
+					"#sql",
+					"sqlite",
+					"mysql",
+					"数据库",
+					"数据库连接"
+				]
+			},
+			{
+				key: "爬虫",
+				words: ["爬虫", "抓取"],
+				terms: [
+					"#crawler",
+					"#scraper",
+					"#spider",
+					"爬虫",
+					"抓取"
+				]
+			},
+			{
+				key: "自动化",
+				words: ["自动化", "rpa"],
+				terms: [
+					"#automation",
+					"#automate",
+					"#workflow",
+					"任务编排",
+					"桌面自动化"
+				]
+			},
+			{
+				key: "剪贴板",
+				words: ["剪贴板"],
+				terms: ["#clipboard", "剪贴板"]
+			},
+			{
+				key: "压缩",
+				words: ["压缩", "解压"],
+				terms: [
+					"#zip",
+					"#compress",
+					"#archive",
+					"压缩",
+					"解压"
+				]
+			},
+			{
+				key: "PDF",
+				words: ["pdf"],
+				terms: ["#pdf"]
+			},
+			{
+				key: "办公文档",
+				words: [
+					"word",
+					"excel",
+					"ppt",
+					"表格",
+					"幻灯片",
+					"演示"
+				],
+				terms: [
+					"#excel",
+					"#word",
+					"#office",
+					"#xlsx",
+					"表格",
+					"幻灯片",
+					"#ppt"
+				]
+			},
+			{
+				key: "网盘",
+				words: ["网盘", "云盘"],
+				terms: [
+					"#cloud",
+					"#drive",
+					"网盘",
+					"云盘",
+					"#onedrive"
+				]
+			},
+			{
+				key: "密码",
+				words: ["密码"],
+				terms: ["#password", "密码"]
+			},
+			{
+				key: "加密",
+				words: ["加密", "解密"],
+				terms: [
+					"#encrypt",
+					"#crypto",
+					"加密"
+				]
+			},
+			{
+				key: "代理网络",
+				words: [
+					"代理",
+					"梯子",
+					"组网"
+				],
+				terms: [
+					"#proxy",
+					"#network",
+					"代理",
+					"网络",
+					"网络代理",
+					"内网穿透"
+				]
+			},
+			{
+				key: "网络诊断",
+				words: [
+					"ip",
+					"端口",
+					"ping"
+				],
+				terms: [
+					"#ip",
+					"#port",
+					"#tcp",
+					"#udp",
+					"#ping",
+					"端口"
+				]
+			},
+			{
+				key: "系统进程",
+				words: [
+					"系统",
+					"进程",
+					"任务管理"
+				],
+				terms: [
+					"#system",
+					"#process",
+					"系统",
+					"进程"
+				]
+			},
+			{
+				key: "清理",
+				words: [
+					"清理",
+					"垃圾",
+					"瘦身"
+				],
+				terms: [
+					"#clean",
+					"#cleanup",
+					"清理",
+					"垃圾"
+				]
+			},
+			{
+				key: "监控",
+				words: ["监控"],
+				terms: ["#monitor", "监控"]
+			},
+			{
+				key: "日志",
+				words: ["日志"],
+				terms: [
+					"#log",
+					"#logs",
+					"日志"
+				]
+			},
+			{
+				key: "番茄钟",
+				words: [
+					"番茄钟",
+					"专注",
+					"计时"
+				],
+				terms: [
+					"#pomodoro",
+					"#focus",
+					"#timer",
+					"番茄钟",
+					"专注",
+					"计时"
+				]
+			},
+			{
+				key: "计算换算",
+				words: [
+					"计算器",
+					"换算",
+					"单位",
+					"格式转换"
+				],
+				terms: [
+					"#calculator",
+					"#convert",
+					"计算器",
+					"换算",
+					"数学计算"
+				]
+			},
+			{
+				key: "汇率",
+				words: ["汇率", "货币"],
+				terms: [
+					"#exchange",
+					"#currency",
+					"汇率"
+				]
+			},
+			{
+				key: "股票基金",
+				words: [
+					"股票",
+					"基金",
+					"a股",
+					"行情",
+					"炒股"
+				],
+				terms: [
+					"#stock",
+					"#finance",
+					"股票",
+					"基金",
+					"行情"
+				]
+			},
+			{
+				key: "加密货币",
+				words: [
+					"比特币",
+					"加密货币",
+					"币圈"
+				],
+				terms: [
+					"#bitcoin",
+					"#crypto",
+					"#blockchain",
+					"加密货币"
+				]
+			},
+			{
+				key: "AI大模型",
+				words: [
+					"大模型",
+					"llm",
+					"gpt",
+					"智能体",
+					"人工智能"
+				],
+				terms: [
+					"#ai",
+					"#llm",
+					"#gpt",
+					"#agent",
+					"大模型",
+					"人工智能"
+				]
+			},
+			{
+				key: "机器人",
+				words: ["机器人"],
+				terms: [
+					"#bot",
+					"#robot",
+					"机器人"
+				]
+			},
+			{
+				key: "问卷投票",
+				words: [
+					"问卷",
+					"投票",
+					"抽奖"
+				],
+				terms: [
+					"#survey",
+					"#poll",
+					"#quiz",
+					"问卷",
+					"投票",
+					"抽奖"
+				]
+			},
+			{
+				key: "游戏",
+				words: ["游戏", "摸鱼"],
+				terms: [
+					"#game",
+					"#games",
+					"游戏"
+				]
+			},
+			{
+				key: "娱乐",
+				words: [
+					"娱乐",
+					"段子",
+					"笑话"
+				],
+				terms: [
+					"#fun",
+					"#joke",
+					"#meme",
+					"娱乐",
+					"段子"
+				]
+			},
+			{
+				key: "新闻资讯",
+				words: [
+					"新闻",
+					"资讯",
+					"头条",
+					"热搜"
+				],
+				terms: [
+					"#news",
+					"#feed",
+					"#trending",
+					"新闻",
+					"资讯",
+					"热搜",
+					"新闻聚合"
+				]
+			},
+			{
+				key: "RSS订阅",
+				words: ["rss", "订阅"],
+				terms: [
+					"#rss",
+					"#feed",
+					"订阅"
+				]
+			},
+			{
+				key: "阅读",
+				words: [
+					"阅读",
+					"电子书",
+					"小说"
+				],
+				terms: [
+					"#read",
+					"#reader",
+					"#ebook",
+					"#novel",
+					"#epub",
+					"阅读",
+					"小说"
+				]
+			},
+			{
+				key: "学习背词",
+				words: [
+					"学习",
+					"背单词",
+					"单词",
+					"英语"
+				],
+				terms: [
+					"#learn",
+					"#study",
+					"#vocabulary",
+					"#english",
+					"学习",
+					"单词",
+					"英语"
+				]
+			},
+			{
+				key: "论文文献",
+				words: [
+					"论文",
+					"文献",
+					"学术"
+				],
+				terms: [
+					"#paper",
+					"#arxiv",
+					"#scholar",
+					"论文",
+					"文献"
+				]
+			},
+			{
+				key: "知识库",
+				words: [
+					"知识库",
+					"维基",
+					"wiki"
+				],
+				terms: [
+					"#wiki",
+					"#knowledge",
+					"知识库",
+					"维基"
+				]
+			},
+			{
+				key: "白板",
+				words: ["白板", "画布"],
+				terms: [
+					"#whiteboard",
+					"#canvas",
+					"白板",
+					"画布"
+				]
+			},
+			{
+				key: "思维导图",
+				words: ["思维导图"],
+				terms: [
+					"#mindmap",
+					"#mind",
+					"思维导图"
+				]
+			},
+			{
+				key: "流程图",
+				words: [
+					"流程图",
+					"图表",
+					"绘图"
+				],
+				terms: [
+					"#diagram",
+					"#flowchart",
+					"#mermaid",
+					"流程图",
+					"图表"
+				]
+			},
+			{
+				key: "OCR",
+				words: ["ocr", "文字识别"],
+				terms: ["#ocr", "文字识别"]
+			},
+			{
+				key: "语音合成",
+				words: [
+					"语音",
+					"朗读",
+					"tts",
+					"配音",
+					"声音克隆",
+					"克隆声音"
+				],
+				terms: [
+					"#tts",
+					"#speech",
+					"#voice",
+					"语音",
+					"朗读",
+					"声音克隆"
+				]
+			},
+			{
+				key: "语音识别",
+				words: [
+					"语音识别",
+					"听写",
+					"whisper"
+				],
+				terms: [
+					"#whisper",
+					"#asr",
+					"#stt",
+					"语音识别",
+					"听写",
+					"语音输入"
+				]
+			},
+			{
+				key: "字幕",
+				words: ["字幕"],
+				terms: ["#subtitle", "字幕"]
+			},
+			{
+				key: "视频下载",
+				words: [
+					"视频下载",
+					"youtube",
+					"油管",
+					"b站",
+					"bilibili",
+					"哔哩"
+				],
+				terms: [
+					"youtube",
+					"bilibili",
+					"yt-dlp",
+					"b站"
+				]
+			},
+			{
+				key: "微博",
+				words: ["微博"],
+				terms: ["weibo", "微博"]
+			},
+			{
+				key: "微信",
+				words: [
+					"微信",
+					"公众号",
+					"wechat"
+				],
+				terms: [
+					"wechat",
+					"weixin",
+					"微信",
+					"公众号"
+				]
+			},
+			{
+				key: "Twitter",
+				words: [
+					"twitter",
+					"tweet",
+					"推文"
+				],
+				terms: ["twitter", "tweet"]
+			},
+			{
+				key: "Telegram",
+				words: ["telegram"],
+				terms: ["telegram"]
+			},
+			{
+				key: "Discord",
+				words: ["discord"],
+				terms: ["discord"]
+			},
+			{
+				key: "飞书钉钉",
+				words: [
+					"飞书",
+					"钉钉",
+					"lark"
+				],
+				terms: [
+					"#feishu",
+					"#lark",
+					"#dingtalk",
+					"飞书",
+					"钉钉"
+				]
+			},
+			{
+				key: "Notion",
+				words: ["notion"],
+				terms: ["notion"]
+			},
+			{
+				key: "Obsidian",
+				words: ["obsidian"],
+				terms: ["obsidian"]
+			},
+			{
+				key: "MCP",
+				words: ["mcp", "mcp服务器"],
+				terms: [
+					"#mcp",
+					"mcp-server",
+					"MCP管理",
+					"MCP调试"
+				]
+			},
+			{
+				key: "备份恢复",
+				words: ["备份", "恢复"],
+				terms: [
+					"#backup",
+					"#restore",
+					"备份",
+					"恢复"
+				]
+			},
+			{
+				key: "同步",
+				words: ["同步"],
+				terms: ["#sync", "同步"]
+			},
+			{
+				key: "主题美化",
+				words: [
+					"主题",
+					"美化",
+					"皮肤"
+				],
+				terms: [
+					"#theme",
+					"#themes",
+					"主题",
+					"美化"
+				]
+			},
+			{
+				key: "字体",
+				words: ["字体"],
+				terms: [
+					"#font",
+					"#fonts",
+					"字体"
+				]
+			},
+			{
+				key: "颜色配色",
+				words: [
+					"颜色",
+					"配色",
+					"色板"
+				],
+				terms: [
+					"#color",
+					"#palette",
+					"颜色",
+					"配色"
+				]
+			},
+			{
+				key: "图标",
+				words: ["图标"],
+				terms: [
+					"#icon",
+					"#icons",
+					"图标"
+				]
+			},
+			{
+				key: "二维码",
+				words: ["二维码", "扫码"],
+				terms: [
+					"#qrcode",
+					"#qr",
+					"二维码"
+				]
+			},
+			{
+				key: "短链",
+				words: ["短链", "短网址"],
+				terms: [
+					"#shorten",
+					"url-shortener",
+					"短链"
+				]
+			},
+			{
+				key: "正则",
+				words: ["正则"],
+				terms: [
+					"#regex",
+					"#regexp",
+					"正则"
+				]
+			},
+			{
+				key: "格式化",
+				words: ["格式化", "美化代码"],
+				terms: [
+					"#format",
+					"#formatter",
+					"#prettier",
+					"格式化"
+				]
+			},
+			{
+				key: "JSON",
+				words: ["json"],
+				terms: ["#json"]
+			},
+			{
+				key: "CSV",
+				words: ["csv"],
+				terms: ["#csv", "#tsv"]
+			},
+			{
+				key: "API调试",
+				words: [
+					"api",
+					"接口",
+					"mock"
+				],
+				terms: [
+					"#api",
+					"#mock",
+					"#rest",
+					"接口"
+				]
+			},
+			{
+				key: "测试",
+				words: ["测试"],
+				terms: [
+					"#test",
+					"#testing",
+					"测试"
+				]
+			},
+			{
+				key: "Docker",
+				words: ["docker", "容器"],
+				terms: [
+					"#docker",
+					"#container",
+					"容器"
+				]
+			},
+			{
+				key: "服务器运维",
+				words: [
+					"服务器",
+					"运维",
+					"部署"
+				],
+				terms: [
+					"#deploy",
+					"#ops",
+					"#devops",
+					"服务器",
+					"部署",
+					"运维"
+				]
+			},
+			{
+				key: "SSH远程",
+				words: ["ssh", "远程"],
+				terms: [
+					"#ssh",
+					"#remote",
+					"远程"
+				]
+			},
+			{
+				key: "图床上传",
+				words: ["图床", "上传"],
+				terms: [
+					"#upload",
+					"image-hosting",
+					"图床",
+					"上传"
+				]
+			},
+			{
+				key: "磁力种子",
+				words: [
+					"磁力",
+					"种子",
+					"bt",
+					"迅雷"
+				],
+				terms: [
+					"#torrent",
+					"#magnet",
+					"#bt",
+					"种子",
+					"磁力"
+				]
+			},
+			{
+				key: "总结摘要",
+				words: [
+					"总结",
+					"摘要",
+					"概要"
+				],
+				terms: [
+					"#summary",
+					"#summarize",
+					"总结",
+					"摘要"
+				]
+			},
+			{
+				key: "写作文案",
+				words: [
+					"写作",
+					"文案",
+					"改写"
+				],
+				terms: [
+					"#write",
+					"#writing",
+					"写作",
+					"文案",
+					"内容创作"
+				]
+			},
+			{
+				key: "代码审查",
+				words: [
+					"审查",
+					"评审",
+					"review"
+				],
+				terms: [
+					"#review",
+					"code-review",
+					"审查"
+				]
+			},
+			{
+				key: "面试",
+				words: ["面试"],
+				terms: ["#interview", "面试"]
+			},
+			{
+				key: "简历",
+				words: ["简历"],
+				terms: [
+					"#resume",
+					"#cv",
+					"简历"
+				]
+			},
+			{
+				key: "健康健身",
+				words: [
+					"健康",
+					"健身",
+					"体重"
+				],
+				terms: [
+					"#health",
+					"#fitness",
+					"健康",
+					"健身"
+				]
+			},
+			{
+				key: "记账",
+				words: [
+					"记账",
+					"账单",
+					"花销"
+				],
+				terms: [
+					"#expense",
+					"#billing",
+					"记账",
+					"账单"
+				]
+			},
+			{
+				key: "农历节日",
+				words: [
+					"农历",
+					"节日",
+					"假期"
+				],
+				terms: [
+					"#lunar",
+					"#holiday",
+					"农历",
+					"节日"
+				]
+			},
+			{
+				key: "随机抽签",
+				words: [
+					"随机",
+					"抽签",
+					"骰子"
+				],
+				terms: [
+					"#random",
+					"#dice",
+					"随机"
+				]
+			},
+			{
+				key: "桌宠",
+				words: ["桌宠", "桌面宠物"],
+				terms: ["#desktop-pet", "桌宠"]
+			},
+			{
+				key: "数据分析",
+				words: ["数据分析", "数据统计"],
+				terms: [
+					"#data-analysis",
+					"#analytics",
+					"数据分析",
+					"数据统计"
+				]
+			},
+			{
+				key: "多模态",
+				words: ["多模态"],
+				terms: [
+					"#multimodal",
+					"#multi-modal",
+					"多模态"
+				]
+			},
+			{
+				key: "提示词",
+				words: ["提示词", "prompt"],
+				terms: [
+					"#prompt",
+					"提示词管理",
+					"提示词优化"
+				]
+			},
+			{
+				key: "报告生成",
+				words: [
+					"报告生成",
+					"周报",
+					"日报"
+				],
+				terms: [
+					"#report",
+					"报告生成",
+					"周报",
+					"日报"
+				]
+			}
+		];
+		/** 词边界匹配标记前缀（见文件头设计约定） */
+		const TOKEN_MARK = "#";
+		/** 该召回词是否为词边界（token）匹配 */
+		function isTokenTerm(term) {
+			return term.startsWith(TOKEN_MARK);
+		}
+		/** 去掉词边界标记后的实际匹配词 */
+		function rawTerm(term) {
+			return isTokenTerm(term) ? term.slice(1) : term;
+		}
+		const tokenRegexCache = /* @__PURE__ */ new Map();
+		/**
+		* 词边界（token）匹配：`term` 在文本中作为独立词出现才命中。
+		* 边界 = 非小写字母数字（大小写不敏感，文本需先转小写）——
+		* "ai-chat" 命中 "ai"、"AI聊天" 命中（CJK 是边界）、"email"/"main" 不命中。
+		*/
+		function tokenInText(term, text) {
+			let re = tokenRegexCache.get(term);
+			if (!re) {
+				const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+				re = new RegExp(`(?:^|[^a-z0-9])${escaped}(?![a-z0-9])`, "i");
+				tokenRegexCache.set(term, re);
+			}
+			return re.test(text);
+		}
+		//#endregion
+		//#region ../../schema/dist/zh-taxonomy.js
+		/** 实用分归一读取（全量 score.total / lite scoreTotal 双形态） */
+		function facetScoreOf(p) {
+			return p.score?.total ?? p.scoreTotal ?? 0;
+		}
+		/** 对单个插件判断一组召回词的命中层级。hay 传 null 时跳过弱信号判定。 */
+		function matchTerms(nameLower, fullNameLower, tagsLower, hay, terms) {
+			let weak = false;
+			for (const t of terms) {
+				const raw = rawTerm(t);
+				if (tagsLower.includes(raw)) return "strong";
+				if (isTokenTerm(t)) {
+					if (tokenInText(raw, nameLower) || tokenInText(raw, fullNameLower)) return "strong";
+					if (hay !== null && !weak && tokenInText(raw, hay)) weak = true;
+				} else {
+					if (nameLower.includes(raw) || fullNameLower.includes(raw)) return "strong";
+					if (hay !== null && !weak && hay.includes(raw)) weak = true;
+				}
+			}
+			return weak ? "weak" : null;
+		}
+		/** 意图 key → 召回词（查不到返回 null；分类过滤 UI 用） */
+		function intentTerms(key) {
+			return ZH_INTENTS.find((it) => it.key === key)?.terms ?? null;
+		}
+		/**
+		* 为全库构建中文分类 facets。只统计强信号（browse 场景，精度优先，
+		* "宁缺毋滥"与词典设计约定一致）；少于 minCount 个插件的意图不展示。
+		* 按覆盖数降序；一次性 O(意图数 × 插件数)，9k × ~100 在首页加载时约百毫秒级。
+		*/
+		function buildZhFacets(plugins, minCount = 3) {
+			const lowered = /* @__PURE__ */ new Map();
+			for (const p of plugins) lowered.set(p, {
+				name: p.name.toLowerCase(),
+				full: p.fullName.toLowerCase(),
+				tags: p.tags.map((t) => t.toLowerCase())
+			});
+			const out = [];
+			for (const it of ZH_INTENTS) {
+				const strong = [];
+				for (const p of plugins) {
+					const l = lowered.get(p);
+					if (matchTerms(l.name, l.full, l.tags, null, it.terms) === "strong") strong.push(p);
+				}
+				if (strong.length >= minCount) {
+					strong.sort((a, b) => facetScoreOf(b) - facetScoreOf(a));
+					out.push({
+						key: it.key,
+						count: strong.length,
+						plugins: strong
+					});
+				}
+			}
+			return out.sort((a, b) => b.count - a.count);
+		}
+		//#endregion
+		//#region src/client/panel.tsx
+		/**
+		* 插件市场面板（5-tab：推荐 / 搜索 / 收藏 / 已装 / 设置）
+		* 数据全部来自 Host RPC（api.ts）。纯 React.createElement（无 JSX）。
+		*/
+		/** GitHub 设备流 client_id（dsh-market GitHub App，公开值非机密） */
+		const GH_CLIENT_ID = "Iv23liYFieChYuBJklZp";
+		const GH_TOKEN_KEY = "dsh-market:gh_token";
+		/** 断线重连：进行中安装的 installId 留存（宿主侧安装不随面板关闭终止；
+		*  面板重新打开时按它轮询 ai:install:status 恢复进度与终态） */
+		const PENDING_INSTALL_KEY = "dsh-market:pending-install";
+		const GH_LOGIN_KEY = "dsh-market:gh_login";
+		const GH_METHOD_KEY = "dsh-market:gh_method";
+		const FAVORITES_KEY = "dsh-market:favorites";
+		/** 收藏列表（localStorage） */
+		function readFavorites() {
+			try {
+				const raw = localStorage.getItem(FAVORITES_KEY);
+				return raw ? JSON.parse(raw) : [];
+			} catch {
+				return [];
+			}
+		}
+		function writeFavorites(list) {
+			localStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
+		}
+		function isFavorite(id) {
+			return readFavorites().includes(id);
+		}
+		function toggleFavorite(id) {
+			const list = readFavorites();
+			const next = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+			writeFavorites(next);
+			return next.includes(id);
+		}
+		/** 当前 GitHub token（浏览器 localStorage；设备流或 PAT） */
+		function ghToken() {
+			return localStorage.getItem(GH_TOKEN_KEY);
+		}
+		/** 绑定方式：device（GitHub App，不能 star）/ pat */
+		function ghMethod() {
+			return localStorage.getItem(GH_METHOD_KEY) ?? null;
+		}
+		/** 跨 tab 搜索词（标签点击 → 搜索 tab） */
+		let searchSeed = "";
+		function setSearchSeed(t) {
+			searchSeed = t;
+		}
+		/** 聚合热门中文标签（问卷/搜索快捷入口共用） */
+		function aggregateHotTags(plugins, n = 14) {
+			const counts = /* @__PURE__ */ new Map();
+			for (const p of plugins) for (const t of p.tags) {
+				if (!/[\u4e00-\u9fff]/.test(t)) continue;
+				if ([
+					"效率工具",
+					"开发辅助",
+					"AI 增强",
+					"AI增强",
+					"自动化"
+				].includes(t)) continue;
+				counts.set(t, (counts.get(t) ?? 0) + 1);
+			}
+			return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([t]) => t);
+		}
+		let quizTriggered = false;
+		function markQuizSubmitted() {
+			quizTriggered = false;
+		}
+		function markQuizTriggered() {
+			quizTriggered = true;
+		}
+		function fmtStars(n) {
+			return n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n);
+		}
+		function El(tag, props, ...children) {
+			return (0, react.createElement)(tag, props ?? {}, ...children);
+		}
+		/** P0-1 装后四态 → 中文短标签 */
+		function activationText(a) {
+			if (!a) return "";
+			const label = {
+				live: "已生效",
+				restart: "重启后生效",
+				inert: "未成为插件层",
+				broken: "校验失败"
+			}[a.state] ?? a.state;
+			return a.reasons && a.reasons.length ? `${label}（${a.reasons[0]}）` : label;
+		}
+		/** P0-2 从安装/更新失败输出解析被拦构建包名 */
+		function parseBlockedFromOutput(output, item) {
+			const pkgs = (output.match(/Ignored build scripts\s*:\s*([^\n]*)/i)?.[1] ?? "").split(",").map((s) => s.trim().replace(/\.$/, "").replace(/@\d[\w.\-+]*$/, "")).filter(Boolean);
+			if (pkgs.length === 0 && item.plugin) {
+				const fallback = item.plugin.name.replace(/\.$/, "").trim();
+				if (fallback) pkgs.push(fallback);
+			}
+			return [...new Set(pkgs)];
+		}
+		let toastTimer = null;
+		function toast(msg, duration = 2200) {
+			if (typeof document === "undefined") return;
+			document.querySelectorAll("[data-dshm-toast]").forEach((n) => n.remove());
+			if (toastTimer) clearTimeout(toastTimer);
+			const el = document.createElement("div");
+			el.setAttribute("data-dshm-toast", "");
+			el.className = styles_module_css_default.toast;
+			el.textContent = msg;
+			document.body.appendChild(el);
+			toastTimer = setTimeout(() => el.remove(), duration);
+		}
+		/** 通用线性图标：dangerouslySetInnerHTML 承载 path/circle 内容 */
+		function Icon(props) {
+			return El("svg", {
+				viewBox: "0 0 24 24",
+				fill: "none",
+				stroke: "currentColor",
+				strokeWidth: 1.5,
+				strokeLinecap: "round",
+				strokeLinejoin: "round",
+				width: props.size ?? 14,
+				height: props.size ?? 14,
+				className: props.className,
+				dangerouslySetInnerHTML: { __html: props.d }
+			});
+		}
+		/** 图标 path 集（与 design-ref/ui-redesign/direction-B-克制增强.html 一致） */
+		const ICON_SCENE = "<path d=\"M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8\"/>";
+		const ICON_HEART = "<path d=\"M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z\"/>";
+		const ICON_AWARD = "<path d=\"M6 3h12l3 6-9 12L3 9l3-6z\"/><path d=\"M3 9h18M9 21l3-3 3 3\"/>";
+		const ICON_CLOCK = "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/>";
+		const ICON_LINK = "<path d=\"M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4M14 4h6v6\"/><path d=\"M10 14 20 4\"/>";
+		const ICON_STAR = "<path d=\"M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z\"/>";
+		const ICON_STAR_OUTLINE = "<path d=\"M12 3l2.4 5.6 6.1.5-4.6 4 1.4 6-5.3-3.3L6.7 19l1.4-6-4.6-4 6.1-.5z\"/>";
+		const ICON_CLOSE = "<path d=\"M18 6 6 18M6 6l12 12\"/>";
+		const ICON_CHECK = "<path d=\"M20 6 9 17l-5-5\"/>";
+		const ICON_WARN = "<path d=\"M12 3l10 18H2z\"/><path d=\"M12 10v4M12 17h.01\"/>";
+		const ICON_EXTERNAL = "<path d=\"M7 17 17 7M7 7h10v10\"/>";
+		const ICON_HELP = "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M9 10a3 3 0 0 1 6 0c0 2-3 2.5-3 4\"/><path d=\"M12 17h.01\"/>";
+		const ICON_MODE = "<path d=\"M12 3a9 9 0 1 0 9 9\"/><path d=\"M12 3a9 9 0 0 1 9 9\"/><path d=\"M12 12 21 3\"/>";
+		const ICON_SEARCH = "<circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"m21 21-4.3-4.3\"/>";
+		const ICON_GITHUB = "<path d=\"M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-5.7 0-1.3-.5-2.4-1.3-3.2.1-.3.6-1.6-.1-3.3 0 0-1-.3-3.4 1.2a11.6 11.6 0 0 0-6.2 0C6.5 2.5 5.5 2.8 5.5 2.8 4.8 4.5 5.3 5.8 5.4 6.1 4.6 6.9 4.1 8 4.1 9.3c0 4.3 2.7 5.4 5.5 5.7-.6.6-.6 1.2-.5 2V21\"/><path d=\"M9 9v4M9 9H7.5M9 20h3\"/>";
+		const ICON_PACKAGE = "<path d=\"M22 7.5 12 2 2 7.5v9L12 22l10-5.5v-9z\"/><path d=\"M2 7.5 12 13l10-5.5M12 22v-9\"/>";
+		function PluginCard(props) {
+			const { plugin, reasons, onInstall, onTagClick } = props;
+			const tags = (plugin.tags ?? []).filter((t) => /[\u4e00-\u9fff]/.test(t)).slice(0, 4);
+			const [fav, setFav] = (0, react.useState)(() => isFavorite(plugin.id));
+			const [starring, setStarring] = (0, react.useState)(false);
+			const [starErr, setStarErr] = (0, react.useState)("");
+			const toggleFav = () => {
+				const now = toggleFavorite(plugin.id);
+				setFav(now);
+				toast(now ? `已收藏「${plugin.name}」` : `已取消收藏「${plugin.name}」`);
+			};
+			const toggleStar = async () => {
+				const token = ghToken();
+				if (!token) {
+					toast("未绑定 GitHub，请到「设置」绑定后可加星");
+					return;
+				}
+				if (ghMethod() === "device") {
+					setStarErr("设备流授权不支持加星，请在设置里改用 PAT（个人令牌）绑定");
+					return;
+				}
+				setStarring(true);
+				setStarErr("");
+				try {
+					const [owner, repo] = plugin.fullName.split("/");
+					await api("gh:star", {
+						token,
+						owner,
+						repo,
+						action: "star"
+					});
+					setStarErr("");
+					toast(`已加星「${plugin.name}」`);
+				} catch (e) {
+					setStarErr(e.message.includes("403") || e.message.includes("404") ? "当前授权方式不支持加星，请改用 PAT（个人令牌）绑定" : `加星失败：${e.message}`);
+				} finally {
+					setStarring(false);
+				}
+			};
+			return El("div", {
+				className: styles_module_css_default.card,
+				"data-type": plugin.type
+			}, El("div", { className: styles_module_css_default.cardHead }, El("span", {
+				className: styles_module_css_default.cardName,
+				title: plugin.fullName
+			}, plugin.name), El("span", { className: styles_module_css_default.cardBadge }, plugin.type === "skill" ? "技能" : "插件"), plugin.dshCompat ? El("span", {
+				className: styles_module_css_default.compatChip,
+				"data-status": plugin.dshCompat.status,
+				title: plugin.dshCompat.reason
+			}, plugin.dshCompat.label) : null, El("span", { className: styles_module_css_default.cardStars }, El(Icon, {
+				d: ICON_STAR,
+				size: 13
+			}), fmtStars(plugin.stars))), plugin.descriptionZh ? El("div", { className: styles_module_css_default.cardDesc }, plugin.descriptionZh) : null, El("div", { className: styles_module_css_default.cardTags }, ...tags.map((t) => El("span", {
+				key: t,
+				className: styles_module_css_default.tag,
+				onClick: () => onTagClick(t)
+			}, t)), reasons && reasons.length > 0 ? reasons.map((r, i) => El("span", {
+				key: `r${i}`,
+				className: r.startsWith("AI：") ? styles_module_css_default.reasonAi : styles_module_css_default.reason
+			}, r)) : null), El("div", { className: styles_module_css_default.cardActions }, El("button", {
+				className: styles_module_css_default.repoBtn,
+				title: `打开 GitHub 仓库：${plugin.fullName}`,
+				onClick: () => window.open(`https://github.com/${plugin.fullName}`, "_blank", "noopener noreferrer")
+			}, El(Icon, {
+				d: ICON_LINK,
+				size: 13
+			}), "仓库"), El("span", { className: styles_module_css_default.spacer }), El("button", {
+				className: `${styles_module_css_default.favBtn} ${fav ? styles_module_css_default.favBtnOn : ""}`,
+				title: fav ? "取消收藏" : "收藏（稍后安装）",
+				onClick: toggleFav
+			}, El(Icon, {
+				d: fav ? ICON_STAR : ICON_STAR_OUTLINE,
+				size: 12
+			}), "收藏"), El("button", {
+				className: `${styles_module_css_default.iconBtn} ${starring ? styles_module_css_default.iconBtnOn : ""}`,
+				title: ghToken() ? "在 GitHub 加星这个仓库（PAT 绑定支持）" : "未绑定 GitHub，点击查看绑定方式",
+				disabled: starring,
+				onClick: () => void toggleStar()
+			}, starring ? "…" : El(Icon, {
+				d: ICON_STAR,
+				size: 15
+			})), El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnPrimary} ${styles_module_css_default.btnSm}`,
+				onClick: () => onInstall(plugin)
+			}, "安装")), starErr ? El("div", { className: styles_module_css_default.cardActionHint }, starErr) : null);
+		}
+		function InstallModal(props) {
+			const { plugin, onDone, onClose } = props;
+			const [phase, setPhase] = (0, react.useState)("confirm");
+			const lastInstallIdRef = (0, react.useRef)("");
+			const [review, setReview] = (0, react.useState)(null);
+			const [error, setError] = (0, react.useState)("");
+			const [errorClass, setErrorClass] = (0, react.useState)(null);
+			const [diagCopied, setDiagCopied] = (0, react.useState)(false);
+			const [childSessionId, setChildSessionId] = (0, react.useState)(null);
+			const [security, setSecurity] = (0, react.useState)(false);
+			const [forceCompat, setForceCompat] = (0, react.useState)(false);
+			const compat = plugin.dshCompat;
+			const compatBlocked = Boolean(compat?.block) && !forceCompat;
+			const [t0, setT0] = (0, react.useState)(null);
+			const startAi = async () => {
+				setPhase("running");
+				const installId = `${plugin.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+				lastInstallIdRef.current = installId;
+				localStorage.setItem(PENDING_INSTALL_KEY, JSON.stringify({
+					installId,
+					pluginId: plugin.id,
+					pluginName: plugin.name,
+					at: Date.now()
+				}));
+				try {
+					const r = await api("ai:install", {
+						pluginId: plugin.id,
+						security,
+						installId
+					});
+					setChildSessionId(r.childSessionId);
+					if (r.cancelled) {
+						setPhase("confirm");
+						return;
+					}
+					if (!r.started) setT0(r);
+					setPhase("handedOff");
+				} catch (e) {
+					if (e.name === "AbortError" || /取消/.test(e.message)) {
+						setPhase("confirm");
+						return;
+					}
+					setError(e.message);
+					setErrorClass(e instanceof RpcError ? e.classified ?? null : null);
+					setDiagCopied(false);
+					setPhase("error");
+				} finally {
+					localStorage.removeItem(PENDING_INSTALL_KEY);
+				}
+			};
+			/** #165 建议二（审查与安装分离）：安全模式流程 = 只读审查 → 报告 → 用户确认 → 宿主受控执行。
+			*  审查子代理零执行零写入，没有沙箱悖论；建议命令宿主执行前还会再过一次白名单。 */
+			const startReview = async () => {
+				setPhase("reviewing");
+				const installId = `${plugin.id}-r-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+				lastInstallIdRef.current = installId;
+				try {
+					const r = await api("ai:review", {
+						pluginId: plugin.id,
+						installId
+					});
+					setChildSessionId(r.childSessionId);
+					let polls = 0;
+					for (;;) {
+						await new Promise((res) => setTimeout(res, 3e3));
+						polls++;
+						const p = await api("ai:review:poll", { installId });
+						if (p.cancelled) {
+							setPhase("confirm");
+							return;
+						}
+						if (p.done) {
+							if (p.verdict) {
+								setReview(p.verdict);
+								setPhase("report");
+							} else {
+								setError("审查超时，请稍后重试或按 README 手动安装");
+								setPhase("error");
+							}
+							return;
+						}
+						if (polls > 140) {
+							setError("审查超时，请稍后重试或按 README 手动安装");
+							setPhase("error");
+							return;
+						}
+					}
+				} catch (e) {
+					setError(e.message);
+					setErrorClass(e instanceof RpcError ? e.classified ?? null : null);
+					setPhase("error");
+				}
+			};
+			/** 报告确认后的受控执行：宿主对建议命令再做白名单校验，白名单外返回 manual */
+			const confirmReviewed = async () => {
+				if (!review || review.commands.length === 0) {
+					setError("审查未给出可自动执行的安装命令，请按\"手动执行\"命令操作");
+					setPhase("error");
+					return;
+				}
+				setPhase("running");
+				const installId = `${plugin.id}-x-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+				lastInstallIdRef.current = installId;
+				try {
+					const r = await api("ai:install:reviewed", {
+						pluginId: plugin.id,
+						commands: review.commands,
+						installId
+					});
+					if (r.cancelled) {
+						setPhase("confirm");
+						return;
+					}
+					if (r.blocked && r.blocked.length > 0) {
+						setReview({
+							...review,
+							manual: r.blocked.map((b) => b.command)
+						});
+						setError("部分命令未通过直装白名单，请按\"手动执行\"命令操作");
+						setPhase("error");
+						return;
+					}
+					setT0({
+						mode: "parsed",
+						ok: r.ok,
+						smokeFailed: r.smokeFailed ?? false,
+						error: r.error ?? null,
+						classified: r.classified ?? null
+					});
+					setPhase("handedOff");
+				} catch (e) {
+					setError(e.message);
+					setErrorClass(e instanceof RpcError ? e.classified ?? null : null);
+					setPhase("error");
+				}
+			};
+			/** #165 建议三（可取消）：终止进行中的安装（宿主杀 T0 子进程 / 终止 T1 子代理） */
+			const cancelInstall = async () => {
+				api("ai:install:cancel", { installId: lastInstallIdRef.current }).catch(() => {});
+			};
+			/** P6：错误阶段一键复制诊断（含分类 + 环境快照 + 堆栈） */
+			const copyErrorDiag = async () => {
+				if (await copyText(await buildDiagnostics(`安装弹窗（${plugin.name}）`, new Error(error)))) {
+					setDiagCopied(true);
+					setTimeout(() => setDiagCopied(false), 2e3);
+				} else toast("复制失败：诊断文本过长，请重试一次", 3e3);
+			};
+			const cmd = plugin.installCommands && plugin.installCommands.length > 0 ? plugin.installCommands[0] : plugin.installMethod === "skills-add" ? `git clone https://github.com/${plugin.fullName}.git` : `dsh plugin --profile web add ${plugin.name}`;
+			const t0Commands = plugin.installCommands && plugin.installCommands.length > 0 ? plugin.installCommands : [cmd];
+			return El("div", {
+				className: styles_module_css_default.modalBackdrop,
+				onClick: onClose
+			}, El("div", {
+				className: styles_module_css_default.modal,
+				onClick: (e) => e.stopPropagation()
+			}, El("div", { className: styles_module_css_default.steps }, El("div", { className: `${styles_module_css_default.step} ${styles_module_css_default.stepActive}` }, El("span", { className: styles_module_css_default.stepDot }, "1"), "确认", El("span", { className: phase === "confirm" ? styles_module_css_default.stepBar : `${styles_module_css_default.stepBar} ${styles_module_css_default.stepBarDone}` })), El("div", { className: phase === "confirm" ? styles_module_css_default.step : `${styles_module_css_default.step} ${phase === "handedOff" ? styles_module_css_default.stepDone : styles_module_css_default.stepActive}` }, El("span", { className: styles_module_css_default.stepDot }, phase === "handedOff" ? El(Icon, {
+				d: ICON_CHECK,
+				size: 11
+			}) : "2"), "运行中", El("span", { className: phase === "handedOff" ? `${styles_module_css_default.stepBar} ${styles_module_css_default.stepBarDone}` : styles_module_css_default.stepBar })), El("div", { className: phase === "handedOff" ? `${styles_module_css_default.step} ${styles_module_css_default.stepDone}` : styles_module_css_default.step }, El("span", { className: styles_module_css_default.stepDot }, phase === "handedOff" ? El(Icon, {
+				d: ICON_CHECK,
+				size: 11
+			}) : "3"), "完成")), phase === "confirm" ? El("div", null, El("div", { className: styles_module_css_default.modalTitle }, `确认安装「${plugin.name}」`), El("div", { className: styles_module_css_default.modalDesc }, `将先尝试零 LLM 直装（配方缓存 / README 解析命令 + 冒烟验证）；需要时才交给话题子代理。需要配置（API Key / Token）时会先向你确认。`), plugin.needsConfig ? El("p", { className: styles_module_css_default.warn }, El(Icon, {
+				d: ICON_WARN,
+				size: 13,
+				className: styles_module_css_default.inlineIcon
+			}), "该插件需要额外配置（API Key / Token），AI 会向你询问。") : null, compat ? El("p", { className: compat.status === "incompatible" ? styles_module_css_default.warn : styles_module_css_default.ghTip }, compat.status === "incompatible" ? El(Icon, {
+				d: ICON_WARN,
+				size: 13,
+				className: styles_module_css_default.inlineIcon
+			}) : null, compat.reason) : null, compat?.block ? El("label", {
+				className: styles_module_css_default.securityRow,
+				style: {
+					display: "flex",
+					alignItems: "center",
+					gap: 8,
+					marginTop: 4,
+					cursor: "pointer"
+				}
+			}, El("input", {
+				type: "checkbox",
+				checked: forceCompat,
+				onChange: (e) => setForceCompat(e.target.checked)
+			}), El("span", { style: { fontSize: 12.5 } }, "仍然安装（版本不匹配可能导致 harness 启动异常）")) : null, El("p", { className: styles_module_css_default.ghTip }, plugin.type === "skill" ? "目标：装到技能目录（~/.agents/skills），装完即可用。" : "目标：装进 web profile，装完需重启 harness 生效。"), El("div", {
+				className: styles_module_css_default.advanced,
+				style: { marginTop: 6 }
+			}, El("p", {
+				className: styles_module_css_default.advancedTip,
+				style: { marginBottom: 4 }
+			}, "直装将执行以下命令（白名单外的命令会被拦截并转 AI 复核，不会直接运行）："), El("code", { className: styles_module_css_default.advancedCmd }, t0Commands.join("\n")), plugin.risky ? El("p", {
+				className: styles_module_css_default.warn,
+				style: {
+					fontSize: 11.5,
+					marginTop: 4
+				}
+			}, "⚠ " + (plugin.riskyReasons?.join("；") || "安装命令含风险形态") + "——请先阅读脚本内容再确认。") : null), El("details", { className: styles_module_css_default.advanced }, El("summary", null, "高级：查看/复制手动命令"), El("code", { className: styles_module_css_default.advancedCmd }, cmd), El("p", { className: styles_module_css_default.advancedTip }, "提示：手动命令仅供参考，不一定正确，请以该项目 README 为准。")), El("label", {
+				className: styles_module_css_default.securityRow,
+				style: {
+					display: "flex",
+					alignItems: "center",
+					gap: 8,
+					marginTop: 4,
+					cursor: "pointer"
+				}
+			}, El("input", {
+				type: "checkbox",
+				checked: security,
+				onChange: (e) => setSecurity(e.target.checked)
+			}), El("span", { style: {
+				fontSize: 13,
+				fontWeight: 600
+			} }, "🛡 安全模式"), El("span", {
+				className: styles_module_css_default.securityDesc,
+				style: {
+					fontSize: 11.5,
+					color: "#8a919f"
+				}
+			}, security ? "开启：AI 只读审查 → 看报告确认后才安装（危险命令/信息收集/配置篡改/网络暴露/来源）" : "关闭：快速安装（零 LLM 直装优先）")), security ? El("p", {
+				className: styles_module_css_default.warn,
+				style: { fontSize: 12 }
+			}, El(Icon, {
+				d: ICON_WARN,
+				size: 13,
+				className: styles_module_css_default.inlineIcon
+			}), "安全模式会消耗 token（AI 扫描），且跳过零 LLM 直装；来源不明的插件建议开启。") : null, El("div", { className: styles_module_css_default.modalActions }, El("button", {
+				className: styles_module_css_default.btn,
+				onClick: onClose
+			}, "取消"), El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnPrimary}`,
+				disabled: compatBlocked,
+				title: compatBlocked ? "该插件要求更高的 DSH 版本，请先勾选上方\"仍然安装\"" : void 0,
+				onClick: () => void (security ? startReview() : startAi())
+			}, security ? "🛡 安全安装" : "确认安装"))) : phase === "reviewing" ? El("div", null, El("div", { className: styles_module_css_default.modalTitle }, "🛡 安全审查中"), El("div", { className: styles_module_css_default.loading }, "AI 只读审查（不执行任何命令、不写入任何文件）…"), El("div", { className: styles_module_css_default.modalActions }, El("button", {
+				className: styles_module_css_default.btn,
+				onClick: () => void cancelInstall()
+			}, "取消审查"))) : phase === "report" ? El("div", null, El("div", { className: styles_module_css_default.modalTitle }, "🛡 安全审查报告"), review?.reason ? El("div", { className: styles_module_css_default.modalDesc }, review.reason) : null, ...(review?.risks ?? []).map((rk, i) => El("p", {
+				key: i,
+				className: styles_module_css_default.warn,
+				style: { fontSize: 12 }
+			}, El(Icon, {
+				d: ICON_WARN,
+				size: 13,
+				className: styles_module_css_default.inlineIcon
+			}), `[${(rk.level ?? "info").toUpperCase()}] ${rk.point}`)), review && review.commands.length > 0 ? El("div", {
+				className: styles_module_css_default.advanced,
+				style: { marginTop: 6 }
+			}, El("p", {
+				className: styles_module_css_default.advancedTip,
+				style: { marginBottom: 4 }
+			}, "确认后将执行以下命令（白名单内，宿主安装前会再次校验）："), El("code", { className: styles_module_css_default.advancedCmd }, review.commands.join("\n"))) : null, review && review.manual.length > 0 ? El("div", {
+				className: styles_module_css_default.advanced,
+				style: { marginTop: 6 }
+			}, El("p", {
+				className: styles_module_css_default.advancedTip,
+				style: { marginBottom: 4 }
+			}, "以下命令不在白名单内，请手动执行："), El("code", { className: styles_module_css_default.advancedCmd }, review.manual.join("\n"))) : null, El("div", { className: styles_module_css_default.modalActions }, El("button", {
+				className: styles_module_css_default.btn,
+				onClick: onClose
+			}, "取消"), review && review.commands.length > 0 ? El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnPrimary}`,
+				onClick: () => void confirmReviewed()
+			}, "确认安装") : null)) : phase === "running" ? El("div", null, El("div", { className: styles_module_css_default.modalTitle }, "正在安装"), El("div", { className: styles_module_css_default.loading }, "正在唤起 AI 助手…"), El("div", { className: styles_module_css_default.modalActions }, El("button", {
+				className: styles_module_css_default.btn,
+				onClick: () => void cancelInstall()
+			}, "取消安装"))) : phase === "handedOff" ? El("div", { className: styles_module_css_default.modalSuccess }, El("div", { className: styles_module_css_default.modalSuccessIcon }, El(Icon, {
+				d: ICON_CHECK,
+				size: 22
+			})), El("div", { className: styles_module_css_default.modalSuccessTitle }, childSessionId ? "已交给 AI 助手安装" : "安装完成（零 Token 直装）"), El("p", { className: styles_module_css_default.modalDesc }, childSessionId ? `AI 助手已开始工作（子会话 ${childSessionId.slice(0, 8)}…），请到会话中查看进度；需要配置时 AI 会向你确认。` : t0?.alreadyInstalled ? `「${plugin.name}」已在目标位置检测到安装，已跳过。` : t0?.ok && !t0.smokeFailed ? `已通过${t0.mode === "recipe" ? "配方" : "解析命令"}直装完成，冒烟验证通过，无需 AI 介入。` : t0?.classified ? El("span", null, `直装未通过：${t0.classified.title}，已转交 AI 助手处理。`, El("span", {
+				className: styles_module_css_default.modalDesc,
+				style: {
+					display: "block",
+					marginTop: 6,
+					fontSize: 12,
+					color: "#8a919f"
+				}
+			}, `原因：${t0.error ?? ""}。建议：${t0.classified.hint}`)) : `直装未通过验证（${t0?.error ?? "冒烟失败"}），已转交 AI 助手处理。`), El("div", { className: styles_module_css_default.modalActions }, El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnPrimary}`,
+				onClick: () => {
+					onDone();
+					onClose();
+				}
+			}, "知道了"))) : El("div", null, El("div", { className: styles_module_css_default.modalError }, El(Icon, {
+				d: ICON_CLOSE,
+				size: 14,
+				className: styles_module_css_default.inlineIcon
+			}), errorClass ? `${errorClass.title}` : `启动失败：${error}`), errorClass ? El("div", {
+				className: styles_module_css_default.modalDesc,
+				style: {
+					marginTop: 8,
+					fontSize: 12.5
+				}
+			}, `建议：${errorClass.hint}`, El("span", {
+				className: styles_module_css_default.updateHint,
+				style: {
+					display: "block",
+					marginTop: 6,
+					wordBreak: "break-all"
+				},
+				title: error
+			}, `原始报错：${error.slice(0, 120)}`)) : null, El("div", { className: styles_module_css_default.modalActions }, El("button", {
+				className: styles_module_css_default.btn,
+				onClick: () => setPhase("confirm")
+			}, "重试"), El("button", {
+				className: styles_module_css_default.btn,
+				onClick: () => void copyErrorDiag()
+			}, diagCopied ? "已复制诊断 ✓" : "复制诊断"), El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnPrimary}`,
+				onClick: onClose
+			}, "关闭")))));
+		}
+		function SceneRow(props) {
+			const { plugin, onInstall } = props;
+			const [fav, setFav] = (0, react.useState)(() => isFavorite(plugin.id));
+			const toggleFav = () => {
+				const now = toggleFavorite(plugin.id);
+				setFav(now);
+				toast(now ? `已收藏「${plugin.name}」` : `已取消收藏「${plugin.name}」`);
+			};
+			return El("div", { className: styles_module_css_default.sceneRow }, El("div", { className: styles_module_css_default.sceneInfo }, El("div", { className: styles_module_css_default.sceneName }, plugin.name), El("div", { className: styles_module_css_default.sceneDesc }, plugin.descriptionZh)), El("button", {
+				className: `${styles_module_css_default.favBtn} ${fav ? styles_module_css_default.favBtnOn : ""}`,
+				title: fav ? "取消收藏" : "收藏（稍后安装）",
+				onClick: toggleFav
+			}, El(Icon, {
+				d: fav ? ICON_STAR : ICON_STAR_OUTLINE,
+				size: 12
+			}), "收藏"), El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnPrimary} ${styles_module_css_default.btnSm}`,
+				onClick: () => onInstall(plugin)
+			}, "获取"));
+		}
+		function RecommendTab(props) {
+			const { plugins, profile, recs, loading, installedIds, onInstall, onTagClick, onSwitchMode, onQuizSubmit, sceneState, onFetchScene } = props;
+			const [quizOpen, setQuizOpen] = (0, react.useState)(true);
+			const [picked, setPicked] = (0, react.useState)([]);
+			if (loading && recs.length === 0) return El("div", { className: styles_module_css_default.stateHint }, "加载推荐中…");
+			if (recs.length === 0 && !loading) return El("div", { className: styles_module_css_default.stateHint }, "暂无推荐，先去搜索或完成问卷吧");
+			const isNovice = !profile || profile.modeOverride === "novice" || profile.modeOverride === "auto" && profile.confidence < .4;
+			const groups = [
+				{
+					title: "猜你喜欢",
+					icon: ICON_HEART,
+					items: recs.filter((r) => r.origin === "guess")
+				},
+				{
+					title: "精选",
+					icon: ICON_AWARD,
+					items: recs.filter((r) => r.origin === "curated")
+				},
+				{
+					title: "最近更新",
+					icon: ICON_CLOCK,
+					items: recs.filter((r) => r.origin === "trending")
+				}
+			].filter((g) => g.items.length > 0);
+			const quizTags = aggregateHotTags(plugins, 20);
+			const togglePick = (t) => {
+				setPicked((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : prev.length >= 6 ? prev : [...prev, t]);
+			};
+			const submitQuiz = () => {
+				if (picked.length === 0) return;
+				onQuizSubmit(picked).then(() => {
+					markQuizSubmitted();
+					setQuizOpen(false);
+					toast("已根据偏好重新生成推荐");
+				});
+			};
+			const skipQuiz = () => {
+				setQuizOpen(false);
+				toast("已跳过，推荐将按默认偏好生成");
+			};
+			const quizSubmitted = !profile || profile.sources.quiz.length > 0;
+			const showQuiz = isNovice && quizOpen && (quizSubmitted ? quizTriggered : true);
+			return El("div", { className: styles_module_css_default.tabBody }, showQuiz ? El("div", { className: styles_module_css_default.quizCard }, El("div", { className: styles_module_css_default.quizHead }, El("span", { className: styles_module_css_default.quizHeadIcon }, El(Icon, {
+				d: ICON_HELP,
+				size: 16
+			})), El("span", { className: styles_module_css_default.quizTitle }, "先了解你的偏好"), El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnGhost} ${styles_module_css_default.btnSm}`,
+				onClick: skipQuiz
+			}, "跳过")), El("div", { className: styles_module_css_default.quizDesc }, "告诉我你想用插件做什么，给我更准的推荐（可多选，可跳过）。"), El("div", { className: styles_module_css_default.quizTags }, ...quizTags.map((t) => El("span", {
+				key: t,
+				className: `${styles_module_css_default.quizChip} ${picked.includes(t) ? styles_module_css_default.quizChipOn : ""}`,
+				onClick: () => togglePick(t)
+			}, t))), El("div", { className: styles_module_css_default.quizActions }, El("span", { className: styles_module_css_default.quizCount }, `已选 ${picked.length} / 6`), El("div", { className: styles_module_css_default.quizCta }, El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnPrimary}`,
+				disabled: picked.length === 0,
+				onClick: submitQuiz
+			}, "为我推荐")))) : null, El("div", { className: styles_module_css_default.recommendToolbar }, El("span", { className: styles_module_css_default.recommendToolbarIcon }, El(Icon, {
+				d: ICON_MODE,
+				size: 14
+			})), El("span", { className: styles_module_css_default.recommendHint }, isNovice ? [
+				"当前为",
+				El("b", { key: "b1" }, "新手模式"),
+				"，推荐更稳妥通用。可切换到",
+				El("b", { key: "b2" }, "个性化模式"),
+				"获取贴合你工作流的建议。"
+			] : [
+				"当前为",
+				El("b", { key: "b1" }, "个性化模式"),
+				"，推荐将贴合你的工作流与偏好持续调整。"
+			])), El("div", { className: styles_module_css_default.modeSwitchRow }, El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm}`,
+				onClick: () => void onSwitchMode()
+			}, isNovice ? "切换到 · 个性化模式" : "切换到 · 新手模式")), El("div", { className: styles_module_css_default.section }, El("div", { className: styles_module_css_default.sectionHead }, El(Icon, {
+				d: ICON_SCENE,
+				size: 14,
+				className: styles_module_css_default.sectionIcon
+			}), El("h3", { className: styles_module_css_default.sectionTitle }, "适合当前场景"), El("span", { className: styles_module_css_default.sectionNote }, sceneState.loading ? "读取会话上下文…" : sceneState.recs.length > 0 ? `基于「${sceneState.sceneTags.slice(0, 3).join(" / ")}」` : "基于你的工作区"), sceneState.loading ? null : El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm}`,
+				onClick: () => void onFetchScene()
+			}, sceneState.recs.length > 0 ? "刷新" : "获取场景推荐")), sceneState.loading ? El("div", { className: styles_module_css_default.stateHint }, "读取中…") : sceneState.recs.length > 0 ? El("div", { className: styles_module_css_default.sceneList }, ...sceneState.recs.slice(0, 4).map((r) => El(SceneRow, {
+				key: r.plugin.id,
+				plugin: r.plugin,
+				onInstall
+			}))) : El("p", { className: styles_module_css_default.sceneEmpty }, "根据你当前正在做的事推荐插件（点击获取，基于会话内容）")), ...groups.map((g) => El("div", {
+				key: g.title,
+				className: styles_module_css_default.section
+			}, El("div", { className: styles_module_css_default.sectionHead }, El(Icon, {
+				d: g.icon,
+				size: 14,
+				className: styles_module_css_default.sectionIcon
+			}), El("h3", { className: styles_module_css_default.sectionTitle }, g.title), g.title === "精选" ? El("span", { className: styles_module_css_default.sectionNote }, "编辑推荐") : null), El("div", { className: styles_module_css_default.grid2 }, ...g.items.map((r) => El(PluginCard, {
+				key: r.plugin.id,
+				plugin: r.plugin,
+				reasons: r.reasons,
+				origin: r.origin,
+				onInstall,
+				onTagClick
+			}))))), installedIds.size > 0 ? El("div", { className: styles_module_css_default.installedNote }, `已排除 ${installedIds.size} 个已安装插件`) : null);
+		}
+		function SearchTab(props) {
+			const { plugins, onInstall, onTagClick } = props;
+			const [query, setQuery] = (0, react.useState)("");
+			const [tags, setTags] = (0, react.useState)([]);
+			const [type, setType] = (0, react.useState)("all");
+			const [results, setResults] = (0, react.useState)([]);
+			const [searching, setSearching] = (0, react.useState)(false);
+			const [semanticOn, setSemanticOn] = (0, react.useState)(false);
+			const [semanticNotice, setSemanticNotice] = (0, react.useState)("");
+			const [semanticTags, setSemanticTags] = (0, react.useState)([]);
+			const [hotExpanded, setHotExpanded] = (0, react.useState)(false);
+			const [visible, setVisible] = (0, react.useState)(50);
+			const [zhCat, setZhCat] = (0, react.useState)("");
+			const debounceRef = (0, react.useRef)(null);
+			(0, react.useEffect)(() => {
+				if (searchSeed) {
+					setQuery(searchSeed);
+					setSearchSeed("");
+				}
+			}, []);
+			const hotAll = (0, react.useMemo)(() => aggregateHotTags(plugins, 40), [plugins]);
+			const hot = hotExpanded ? hotAll : hotAll.slice(0, 8);
+			const zhFacets = (0, react.useMemo)(() => buildZhFacets(plugins, 3), [plugins]);
+			const zhVisible = (0, react.useMemo)(() => {
+				const top = zhFacets.slice(0, 12);
+				if (zhCat && !top.some((f) => f.key === zhCat)) {
+					const sel = zhFacets.find((f) => f.key === zhCat);
+					if (sel) return [sel, ...top.slice(0, 11)];
+				}
+				return top;
+			}, [zhFacets, zhCat]);
+			(0, react.useEffect)(() => {
+				if (debounceRef.current) clearTimeout(debounceRef.current);
+				debounceRef.current = setTimeout(() => {
+					runSearch();
+				}, semanticOn && query.trim().length >= 2 ? 700 : 300);
+				return () => {
+					if (debounceRef.current) clearTimeout(debounceRef.current);
+				};
+			}, [
+				query,
+				tags,
+				type,
+				semanticOn,
+				zhCat
+			]);
+			const runSearch = async () => {
+				setSearching(true);
+				setVisible(50);
+				try {
+					if (!query.trim() && zhCat) {
+						const members = (zhFacets.find((f) => f.key === zhCat)?.plugins ?? []).filter((p) => type === "all" || p.type === type).filter((p) => tags.every((t) => (p.tags ?? []).includes(t)));
+						setSemanticTags([]);
+						setResults(members.map((p) => ({
+							plugin: p,
+							relevance: 100,
+							tagHits: 0
+						})));
+						return;
+					}
+					let out = null;
+					if (semanticOn && query.trim().length >= 2) {
+						const r = await api("search:semantic", { query });
+						setSemanticTags(r.tags);
+						if (r.results.length > 0) out = r.results;
+					}
+					if (!out) {
+						setSemanticTags([]);
+						const opts = { limit: 0 };
+						if (tags.length) opts.tags = tags;
+						if (type !== "all") opts.type = type;
+						out = await api("search", {
+							query,
+							options: opts
+						});
+					}
+					if (zhCat && out) {
+						const terms = intentTerms(zhCat) ?? [];
+						out = out.filter((r) => matchTerms(r.plugin.name.toLowerCase(), r.plugin.fullName.toLowerCase(), (r.plugin.tags ?? []).map((t) => t.toLowerCase()), null, terms) === "strong");
+					}
+					setResults(out ?? []);
+				} catch {
+					setResults([]);
+				} finally {
+					setSearching(false);
+				}
+			};
+			const toggleTag = (t) => {
+				setTags((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]);
+			};
+			return El("div", { className: styles_module_css_default.tabBody }, El("div", { className: styles_module_css_default.searchWrap }, El("span", { className: styles_module_css_default.searchWrapIcon }, El(Icon, {
+				d: ICON_SEARCH,
+				size: 15
+			})), El("input", {
+				className: styles_module_css_default.searchInput,
+				placeholder: "搜索插件名称、标签或描述…",
+				value: query,
+				onChange: (e) => setQuery(e.target.value)
+			}), query.length > 0 ? El("button", {
+				className: styles_module_css_default.searchClear,
+				"aria-label": "清除",
+				onClick: () => setQuery("")
+			}, El(Icon, {
+				d: ICON_CLOSE,
+				size: 13
+			})) : null), El("div", { className: styles_module_css_default.filterRow }, ...[
+				["all", "全部"],
+				["cordis-plugin", "cordis 插件"],
+				["skill", "skill"]
+			].map(([v, label]) => El("span", {
+				key: v,
+				className: `${styles_module_css_default.filterChip} ${type === v ? styles_module_css_default.filterChipOn : ""}`,
+				onClick: () => setType(v)
+			}, label))), zhVisible.length > 0 ? El("div", { className: styles_module_css_default.filterRow }, El("span", { className: styles_module_css_default.zhCatLabel }, "中文分类："), ...zhVisible.map((f) => El("span", {
+				key: f.key,
+				className: `${styles_module_css_default.zhChip} ${zhCat === f.key ? styles_module_css_default.zhChipOn : ""}`,
+				title: `按「${f.key}」浏览 · ${f.count} 个插件（词典强信号匹配）`,
+				onClick: () => setZhCat((v) => v === f.key ? "" : f.key)
+			}, f.key, El("em", { className: styles_module_css_default.zhChipCount }, String(f.count))))) : null, El("div", { className: styles_module_css_default.semanticToggle }, El("div", { className: styles_module_css_default.semanticInfo }, El("div", { className: styles_module_css_default.semanticTitle }, "AI 语义搜索", El("span", { className: styles_module_css_default.semanticPill }, "实验")), El("div", { className: styles_module_css_default.semanticDesc }, "理解自然语言需求并精排（消耗少量 token）。普通搜索已内置中文口语匹配，无需开启。")), El("div", {
+				className: `${styles_module_css_default.semanticSwitch} ${semanticOn ? styles_module_css_default.semanticSwitchOn : ""}`,
+				role: "switch",
+				"aria-checked": semanticOn,
+				title: semanticOn ? "关闭 AI 语义搜索" : "开启 AI 语义搜索",
+				onClick: () => setSemanticOn((v) => !v)
+			})), El("div", { className: styles_module_css_default.hotTagsTitle }, "热门标签"), El("div", { className: styles_module_css_default.tagCloud }, ...hot.map((t) => El("span", {
+				key: t,
+				className: `${styles_module_css_default.hotTag} ${tags.includes(t) ? styles_module_css_default.hotTagOn : ""}`,
+				onClick: () => toggleTag(t)
+			}, t))), hotAll.length > 8 ? El("div", { className: styles_module_css_default.tagMoreRow }, El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnGhost} ${styles_module_css_default.btnSm}`,
+				onClick: () => setHotExpanded((v) => !v)
+			}, hotExpanded ? "收起标签" : "展开全部标签")) : null, semanticNotice ? El("p", { className: styles_module_css_default.sceneEmpty }, semanticNotice) : null, semanticTags.length > 0 ? El("div", { className: styles_module_css_default.semanticResult }, `AI 理解为你想要：`, ...semanticTags.map((t) => El("span", {
+				key: t,
+				className: `${styles_module_css_default.hotTag} ${tags.includes(t) ? styles_module_css_default.hotTagOn : ""}`,
+				onClick: () => toggleTag(t)
+			}, t))) : null, searching && results.length === 0 ? El("div", { className: styles_module_css_default.stateHint }, "搜索中…") : results.length === 0 && query === "" && tags.length === 0 && !zhCat ? El("div", { className: styles_module_css_default.stateHint }, "输入关键词、选择中文分类或标签开始搜索") : results.length === 0 ? El("div", { className: styles_module_css_default.emptyState }, El("div", { className: styles_module_css_default.emptyIcon }, El(Icon, {
+				d: ICON_SEARCH,
+				size: 44
+			})), El("div", { className: styles_module_css_default.emptyTitle }, "没有找到匹配的插件"), El("div", { className: styles_module_css_default.emptyDesc }, "换个关键词或标签试试。")) : El("div", null, El("div", { className: styles_module_css_default.resultCount }, "共 ", El("b", null, String(results.length)), " 个结果"), El("div", { className: styles_module_css_default.results }, ...results.slice(0, visible).map((r) => El(PluginCard, {
+				key: r.plugin.id,
+				plugin: r.plugin,
+				reasons: r.aiReason ? [`AI：${r.aiReason}`] : r.via && r.via.length > 0 ? [`匹配「${r.via.join("」「")}」`] : r.tagHits > 0 ? [`标签命中 ${r.tagHits} 项`] : void 0,
+				onInstall,
+				onTagClick
+			}))), visible < results.length ? El("div", { className: styles_module_css_default.loadMoreRow }, El("button", {
+				className: styles_module_css_default.loadMore,
+				onClick: () => setVisible((v) => v + 50)
+			}, `加载更多（还有 ${results.length - visible} 个）`)) : null));
+		}
+		function InstalledTab(props) {
+			const { installed, loading, onChanged } = props;
+			const [confirming, setConfirming] = (0, react.useState)(null);
+			const [busy, setBusy] = (0, react.useState)(false);
+			const [showAllUnmatched, setShowAllUnmatched] = (0, react.useState)(false);
+			const [updateMap, setUpdateMap] = (0, react.useState)({});
+			const [checking, setChecking] = (0, react.useState)(false);
+			const [checkError, setCheckError] = (0, react.useState)("");
+			const [updating, setUpdating] = (0, react.useState)(null);
+			const [verifMap, setVerifMap] = (0, react.useState)({});
+			const [verifying, setVerifying] = (0, react.useState)(null);
+			const [approving, setApproving] = (0, react.useState)(null);
+			const uninstall = async (item) => {
+				if (!item.pluginId) return;
+				setBusy(true);
+				try {
+					const r = await api("uninstall", { pluginId: item.pluginId });
+					if (!r.ok) {
+						toast(`卸载失败：${r.error ?? "未知错误"}`, 3500);
+						return;
+					}
+					onChanged();
+					toast(item.source === "profile" ? "卸载完成，重启 harness 后生效" : "卸载完成");
+				} catch (e) {
+					toast(`卸载失败：${e.message}`, 3500);
+				} finally {
+					setBusy(false);
+					setConfirming(null);
+				}
+			};
+			/** 检查更新（force：绕过 core 内存缓存，重新查 npm / GitHub） */
+			const checkNow = async () => {
+				setChecking(true);
+				setCheckError("");
+				try {
+					const list = await api("update:check", { force: true });
+					const m = {};
+					for (const r of list) m[r.localName] = r;
+					setUpdateMap(m);
+				} catch (e) {
+					setCheckError(e.message);
+				} finally {
+					setChecking(false);
+				}
+			};
+			/** P0-1 装后四态验证：对单个已装项手动触发（读 profile 真值） */
+			const verifyOne = async (item) => {
+				if (!item.pluginId || verifying) return;
+				setVerifying(item.localName);
+				try {
+					const a = await api("verify", { pluginId: item.pluginId });
+					setVerifMap((m) => ({
+						...m,
+						[item.localName]: a
+					}));
+					toast(`「${item.localName}」：${activationText(a)}`, 3200);
+				} catch (e) {
+					toast(`验证失败：${e.message}`, 3e3);
+				} finally {
+					setVerifying(null);
+				}
+			};
+			/**
+			* P0-3 更新执行（update:apply）：before/after 对比，假更新防误报；
+			* P0-2 构建脚本被拦 → 自动放行并重试一次；P0-1 更新成功后展示装后四态。
+			*/
+			const updatePlugin = async (item) => {
+				if (!item.pluginId || updating) return;
+				setUpdating(item.localName);
+				try {
+					let r = await api("update:apply", { pluginId: item.pluginId });
+					if (r.error && !r.applied && /Ignored build scripts|approve-builds/i.test(r.error)) {
+						const blocked = parseBlockedFromOutput(r.error, item);
+						setApproving(item.localName);
+						const ar = await api("builds:approve", { packages: blocked });
+						if (!ar.ok) {
+							setApproving(null);
+							toast(`构建脚本放行失败：${ar.error ?? "未知错误"}`, 3500);
+							return;
+						}
+						toast(`已放行构建脚本（${blocked.join("、")}），自动重试…`, 3200);
+						r = await api("update:apply", { pluginId: item.pluginId });
+						setApproving(null);
+					}
+					if (r.error && !r.applied) {
+						toast(`更新失败：${r.error}`, 4500);
+						return;
+					}
+					if (r.blocked === "minimum-release-age") {
+						const msg = r.reason ?? "新版本已发布但被 pnpm 发布年龄门槛（minimumReleaseAge）挡住";
+						if (typeof window !== "undefined" && window.confirm(`${msg}。\n\n点击「确定」= 放宽门槛（minimumReleaseAge: 0）并自动重试；「取消」= 等门槛期过后再更。`)) {
+							const rel = await api("update:relax", {});
+							if (!rel.ok) {
+								toast(`放宽门槛失败：${rel.error ?? "未知错误"}`, 3500);
+								return;
+							}
+							toast("已放宽发布年龄门槛，自动重试…", 3200);
+							r = await api("update:apply", { pluginId: item.pluginId });
+							if (r.error && !r.applied) {
+								toast(`更新失败：${r.error}`, 4500);
+								return;
+							}
+						} else {
+							toast("已取消；新版本将在发布年龄门槛期过后自动可更新", 3500);
+							return;
+						}
+					}
+					if (r.noChange && !r.applied) {
+						toast(r.reason ?? "版本无变化", 3e3);
+						return;
+					}
+					onChanged();
+					setUpdateMap((m) => {
+						const next = { ...m };
+						delete next[item.localName];
+						return next;
+					});
+					const act = r.activation;
+					toast(`更新完成${act ? ` · ${activationText(act)}` : ""}`, 3500);
+					if (act) setVerifMap((m) => ({
+						...m,
+						[item.localName]: act
+					}));
+				} catch (e) {
+					toast(`更新失败：${e.message}`, 3500);
+				} finally {
+					setUpdating(null);
+				}
+			};
+			/** 单行检测状态（未检测过返回 null） */
+			const renderCheck = (item) => {
+				const r = updateMap[item.localName];
+				if (!r) return null;
+				if (r.kind === "none") return El("div", { className: styles_module_css_default.updateHint }, `无法检测 · ${r.error ?? ""}`);
+				if (r.hasUpdate) return El("div", { className: styles_module_css_default.updateChip }, r.kind === "npm" ? `可更新 ${r.current} → ${r.latest}` : "远端有新提交");
+				return El("div", { className: styles_module_css_default.latestChip }, r.kind === "npm" ? `已是最新 ${r.latest}` : "已是最新");
+			};
+			if (loading) return El("div", { className: styles_module_css_default.stateHint }, "扫描已装插件…");
+			const matched = installed.filter((i) => i.pluginId);
+			const unmatched = installed.filter((i) => !i.pluginId);
+			return El("div", { className: styles_module_css_default.tabBody }, El("div", { className: styles_module_css_default.section }, El("div", { className: styles_module_css_default.sectionHead }, El(Icon, {
+				d: ICON_PACKAGE,
+				size: 14,
+				className: styles_module_css_default.sectionIcon
+			}), El("h3", { className: styles_module_css_default.sectionTitle }, "已安装"), El("span", { className: styles_module_css_default.sectionNote }, `${installed.length} 个`), installed.length > 0 ? El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm} ${styles_module_css_default.btnGhost}`,
+				disabled: checking,
+				onClick: () => void checkNow()
+			}, checking ? "检测中…" : "检查更新") : null), checkError ? El("div", { className: styles_module_css_default.updateHint }, `检测失败：${checkError}`) : null, matched.length === 0 ? El("div", { className: styles_module_css_default.stateHint }, "未检测到市场收录的已装插件") : null, ...matched.map((i, idx) => El("div", {
+				key: `${i.localName}-${idx}`,
+				className: styles_module_css_default.installedRow
+			}, El("div", { className: styles_module_css_default.installedInfo }, El("div", { className: styles_module_css_default.installedHead }, El("span", { className: styles_module_css_default.installedName }, i.plugin?.name ?? i.localName), El("span", { className: styles_module_css_default.cardBadge }, i.source === "skills" ? "技能" : "插件"), i.plugin?.dshCompat && i.plugin.dshCompat.status !== "unknown" ? El("span", {
+				className: styles_module_css_default.compatChip,
+				"data-status": i.plugin.dshCompat.status,
+				title: i.plugin.dshCompat.reason
+			}, `推荐 ${i.plugin.dshCompat.label}`, i.plugin.dshCompat.status === "incompatible" && i.plugin.dshCompat.local ? `（当前 ${i.plugin.dshCompat.local}）` : "") : null), El("div", { className: styles_module_css_default.installedMeta }, `${i.version ?? "未知版本"} · ${i.source === "skills" ? "skill" : "profile"}`), verifMap[i.localName] ? El("div", { className: `${styles_module_css_default.activationChip} ${verifMap[i.localName].state === "live" ? styles_module_css_default.activationLive : verifMap[i.localName].state === "broken" ? styles_module_css_default.activationBroken : verifMap[i.localName].state === "inert" ? styles_module_css_default.activationInert : ""}` }, activationText(verifMap[i.localName])) : null, checking ? El("div", { className: styles_module_css_default.updateHint }, "检测中…") : renderCheck(i)), confirming === i.localName ? El("div", { className: styles_module_css_default.installedActions }, El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm}`,
+				onClick: () => setConfirming(null)
+			}, "取消"), El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm} ${styles_module_css_default.btnDanger}`,
+				disabled: busy,
+				onClick: () => void uninstall(i)
+			}, "确认卸载")) : El("div", { className: styles_module_css_default.installedActions }, El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm} ${styles_module_css_default.btnGhost}`,
+				disabled: updating !== null || busy || !i.pluginId || verifying !== null,
+				onClick: () => void verifyOne(i)
+			}, verifying === i.localName ? "验证中…" : "验证"), approving === i.localName ? El("span", { className: styles_module_css_default.updateHint }, "放行构建脚本…") : null, updateMap[i.localName]?.hasUpdate ? El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm} ${styles_module_css_default.btnPrimary}`,
+				disabled: updating !== null || busy,
+				onClick: () => void updatePlugin(i)
+			}, updating === i.localName ? "更新中…" : "更新") : null, El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm}`,
+				disabled: !i.pluginId,
+				onClick: () => setConfirming(i.localName)
+			}, "卸载"))))), unmatched.length > 0 ? El("div", { className: styles_module_css_default.section }, El("div", { className: styles_module_css_default.sectionHead }, El(Icon, {
+				d: ICON_PACKAGE,
+				size: 14,
+				className: styles_module_css_default.sectionIcon
+			}), El("h3", { className: styles_module_css_default.sectionTitle }, "其他已装"), El("span", { className: styles_module_css_default.sectionNote }, `${unmatched.length} 个 · 未收录市场`)), El("div", { className: styles_module_css_default.unmatched }, ...unmatched.slice(0, showAllUnmatched ? unmatched.length : 5).map((i, idx) => El("span", {
+				key: `${i.localName}-${idx}`,
+				className: styles_module_css_default.unmatchedChip
+			}, i.localName)), unmatched.length > 5 ? El("button", {
+				type: "button",
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnGhost} ${styles_module_css_default.btnSm}`,
+				onClick: () => setShowAllUnmatched((v) => !v)
+			}, showAllUnmatched ? "收起" : `查看详细（${unmatched.length} 个）`) : null)) : null);
+		}
+		function SettingsTab(props) {
+			const { profile, onChanged } = props;
+			const [ghLogin, setGhLogin] = (0, react.useState)(() => localStorage.getItem(GH_LOGIN_KEY));
+			const [ghBusy, setGhBusy] = (0, react.useState)(false);
+			const [ghError, setGhError] = (0, react.useState)("");
+			const [deviceInfo, setDeviceInfo] = (0, react.useState)(null);
+			const [patInput, setPatInput] = (0, react.useState)("");
+			const [mode, setMode] = (0, react.useState)(profile?.modeOverride ?? "auto");
+			const [profileName, setProfileName] = (0, react.useState)("web");
+			const [versions, setVersions] = (0, react.useState)({});
+			const [logState, setLogState] = (0, react.useState)("");
+			const [backupBusy, setBackupBusy] = (0, react.useState)("");
+			const [importSummary, setImportSummary] = (0, react.useState)("");
+			const backupFileRef = (0, react.useRef)(null);
+			(0, react.useEffect)(() => {
+				setMode(profile?.modeOverride ?? "auto");
+				api("config").then((c) => {
+					if (c?.versions) setVersions(c.versions);
+				}).catch(() => {});
+			}, [profile]);
+			const saveSettings = async (patch) => {
+				try {
+					await api("settings:update", { patch });
+					onChanged();
+				} catch (e) {
+					alert(`保存失败：${e.message}`);
+				}
+			};
+			const [ghPoll, setGhPoll] = (0, react.useState)("idle");
+			const [pollDetail, setPollDetail] = (0, react.useState)("");
+			const [pollCount, setPollCount] = (0, react.useState)(0);
+			/** 导出：RPC 取备份对象 → 浏览器下载 JSON（含收藏；绝不含凭据） */
+			const exportBackup = async () => {
+				setBackupBusy("exporting");
+				try {
+					const backup = await api("backup:export", { favorites: readFavorites() });
+					const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+					const url = URL.createObjectURL(blob);
+					const a = document.createElement("a");
+					a.href = url;
+					a.download = `dsh-market-backup-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json`;
+					a.click();
+					URL.revokeObjectURL(url);
+					toast("备份已导出（浏览器下载）");
+				} catch (e) {
+					toast(`导出失败：${e.message}`, 3500);
+				} finally {
+					setBackupBusy("");
+				}
+			};
+			/** 导入：读 JSON → RPC 合并恢复（补装缺失、不动后来装的）→ 收藏并集合并 */
+			const onBackupFile = (e) => {
+				const file = e.target.files?.[0];
+				e.target.value = "";
+				if (!file || backupBusy) return;
+				(async () => {
+					setBackupBusy("importing");
+					setImportSummary("");
+					try {
+						let backup;
+						try {
+							backup = JSON.parse(await file.text());
+						} catch {
+							throw new Error("文件不是合法 JSON");
+						}
+						const r = await api("backup:import", { backup });
+						const incoming = backup.favorites ?? [];
+						if (incoming.length > 0) writeFavorites([.../* @__PURE__ */ new Set([...readFavorites(), ...incoming])]);
+						setImportSummary(`补装 ${r.restored.length} · 本机已有 ${r.already.length} · 未匹配 ${r.unmatched.length}` + (r.failed.length ? ` · 失败 ${r.failed.length}` : "") + (r.requiresRestart ? " · 重启 harness 后生效" : ""));
+						if (r.failed.length > 0) {
+							const names = r.failed.slice(0, 3).map((f) => f.name).join("、");
+							setImportSummary((s) => `${s}\n失败：${names}${r.failed.length > 3 ? " 等" : ""}`);
+						}
+						onChanged();
+						toast(r.failed.length === 0 ? "备份恢复完成" : "备份恢复完成（部分条目失败，见摘要）", 3600);
+					} catch (err) {
+						toast(`导入失败：${err.message}`, 4e3);
+					} finally {
+						setBackupBusy("");
+					}
+				})();
+			};
+			const pollIntervalRef = (0, react.useRef)(null);
+			const clearPoll = () => {
+				if (pollIntervalRef.current !== null) {
+					window.clearInterval(pollIntervalRef.current);
+					pollIntervalRef.current = null;
+				}
+			};
+			(0, react.useEffect)(() => clearPoll, []);
+			const startDeviceFlow = async () => {
+				clearPoll();
+				setGhBusy(true);
+				setGhError("");
+				setDeviceInfo(null);
+				setGhPoll("waiting");
+				try {
+					const d = await api("gh:deviceCode", { body: {
+						client_id: GH_CLIENT_ID,
+						scope: "read:user"
+					} });
+					if (!d.device_code) {
+						setGhError(`设备流不可用：${d.error_description ?? d.error ?? "未知错误"}`);
+						setGhPoll("idle");
+						setGhBusy(false);
+						return;
+					}
+					setDeviceInfo({
+						verification_uri: d.verification_uri ?? "",
+						user_code: d.user_code ?? ""
+					});
+					setGhPoll("polling");
+					setPollCount(0);
+					setPollDetail("第 1 次轮询…");
+					let localCount = 0;
+					pollIntervalRef.current = window.setInterval(async () => {
+						try {
+							const t = await api("gh:token", { body: {
+								client_id: GH_CLIENT_ID,
+								device_code: d.device_code,
+								grant_type: "urn:ietf:params:oauth:grant-type:device_code"
+							} });
+							localCount++;
+							setPollCount(localCount);
+							if (t.access_token) {
+								clearPoll();
+								setGhPoll("finishing");
+								setPollDetail("拿到 token，正在同步加星…");
+								await finishBind(t.access_token, "device");
+								setGhPoll("done");
+							} else if (t.error === "authorization_pending") setPollDetail(`第 ${localCount} 次：GitHub 尚未确认授权（继续等待…）`);
+							else if (t.error === "slow_down") setPollDetail(`第 ${localCount} 次：GitHub 要求放慢轮询（继续等待…）`);
+							else {
+								clearPoll();
+								setGhError(t.error_description ?? t.error ?? "授权失败");
+								setGhPoll("idle");
+								setGhBusy(false);
+							}
+						} catch (e) {
+							clearPoll();
+							setGhError(e.message);
+							setGhPoll("idle");
+							setGhBusy(false);
+						}
+					}, (d.interval ?? 5) * 1e3);
+				} catch (e) {
+					setGhError(e.message);
+					setGhBusy(false);
+				}
+			};
+			const finishBind = async (token, method) => {
+				try {
+					const user = await api("gh:user", { token });
+					localStorage.setItem(GH_TOKEN_KEY, token);
+					localStorage.setItem(GH_LOGIN_KEY, user.login);
+					localStorage.setItem(GH_METHOD_KEY, method);
+					setGhLogin(user.login);
+					setGhBusy(false);
+					setDeviceInfo(null);
+					await api("profile:update", { starredFullNames: await api("gh:starred", { token }) });
+					onChanged();
+				} catch (e) {
+					setGhError(`绑定失败：${e.message}`);
+					setGhBusy(false);
+				}
+			};
+			const bindWithPat = async () => {
+				if (!patInput.trim()) return;
+				setGhBusy(true);
+				setGhError("");
+				try {
+					await finishBind(patInput.trim(), "pat");
+					setPatInput("");
+				} catch (e) {
+					setGhError(e.message);
+					setGhBusy(false);
+				}
+			};
+			const unbind = () => {
+				localStorage.removeItem(GH_TOKEN_KEY);
+				localStorage.removeItem(GH_LOGIN_KEY);
+				localStorage.removeItem(GH_METHOD_KEY);
+				setGhLogin(null);
+				onChanged();
+			};
+			return El("div", { className: styles_module_css_default.tabBody }, El("div", { className: styles_module_css_default.settingCard }, El("div", { className: styles_module_css_default.settingHead }, El("span", { className: styles_module_css_default.settingIc }, El(Icon, {
+				d: ICON_GITHUB,
+				size: 15
+			})), El("span", { className: styles_module_css_default.settingTitle }, "GitHub 账户"), El("span", { className: `${styles_module_css_default.settingStatus} ${ghLogin ? styles_module_css_default.statusOk : styles_module_css_default.statusOff}` }, ghLogin ? "已绑定" : "未绑定")), ghLogin ? El("div", null, El("p", { className: styles_module_css_default.ghTip }, `已绑定 @${ghLogin}，读取公开加星用于个性化推荐（token 仅存本机浏览器）。`), El("div", { className: styles_module_css_default.settingsRow }, El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm}`,
+				onClick: unbind
+			}, "解除绑定"))) : El("div", null, El("div", { className: styles_module_css_default.fieldRow }, El("div", { className: styles_module_css_default.field }, El("label", { className: styles_module_css_default.fieldLabel }, "Token（Personal Access Token）"), El("input", {
+				className: styles_module_css_default.input,
+				type: "password",
+				placeholder: "ghp_…",
+				value: patInput,
+				onChange: (e) => setPatInput(e.target.value)
+			}))), El("div", { className: styles_module_css_default.settingsRow }, El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnPrimary}`,
+				disabled: ghBusy,
+				onClick: () => void bindWithPat()
+			}, "Token 绑定（完整功能）"), El("button", {
+				className: styles_module_css_default.btn,
+				disabled: ghBusy,
+				onClick: () => void startDeviceFlow()
+			}, "快速授权（仅推荐）")), El("p", { className: styles_module_css_default.ghTip }, "Token 绑定 = 完整功能（读取加星推荐 + 一键加星）；快速授权只能读取公开加星做推荐。", " ", El("a", {
+				href: "https://github.com/settings/tokens/new?scopes=public_repo,read:user&description=dsh-market",
+				target: "_blank",
+				rel: "noopener noreferrer",
+				className: styles_module_css_default.ghLink
+			}, "生成 Token（public_repo + read:user）", El(Icon, {
+				d: ICON_EXTERNAL,
+				size: 11,
+				className: styles_module_css_default.inlineIcon
+			}))), deviceInfo ? El("div", { className: styles_module_css_default.deviceFlow }, El("p", null, "在 GitHub 输入授权码："), El("code", { className: styles_module_css_default.deviceCode }, deviceInfo.user_code), El("p", null, El("a", {
+				href: deviceInfo.verification_uri,
+				target: "_blank",
+				rel: "noopener noreferrer"
+			}, "前往 GitHub 授权", El(Icon, {
+				d: ICON_EXTERNAL,
+				size: 11,
+				className: styles_module_css_default.inlineIcon
+			}))), El("p", { className: styles_module_css_default.deviceFlowTip }, "输入授权码后，请点击 GitHub 页面上的「Authorize / 授权」按钮完成确认，然后回到这里等待自动绑定。"), El("p", { className: styles_module_css_default.ghPollState }, ghPoll === "polling" ? pollDetail || "等待授权…（授权完成后自动绑定）" : ghPoll === "finishing" ? pollDetail || "授权成功，正在同步加星…" : ghPoll === "done" ? El("span", { className: styles_module_css_default.ghDone }, El(Icon, {
+				d: ICON_CHECK,
+				size: 13,
+				className: styles_module_css_default.inlineIcon
+			}), "绑定完成") : ""), ghPoll === "polling" && pollCount >= 36 ? El("p", { className: styles_module_css_default.deviceFlowTip }, "已等待较久：请确认 GitHub 页面已完成「Authorize」确认；若授权码已过期（15 分钟），点「重新获取授权码」。") : null, El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm}`,
+				disabled: ghBusy,
+				onClick: () => void startDeviceFlow()
+			}, "重新获取授权码")) : null, ghError ? El("p", { className: styles_module_css_default.error }, ghError) : null)), El("div", { className: styles_module_css_default.settingCard }, El("div", { className: styles_module_css_default.settingHead }, El("span", { className: styles_module_css_default.settingIc }, El(Icon, {
+				d: ICON_MODE,
+				size: 15
+			})), El("span", { className: styles_module_css_default.settingTitle }, "推荐偏好")), El("div", { className: styles_module_css_default.field }, El("label", { className: styles_module_css_default.fieldLabel }, "推荐模式"), El("select", {
+				className: styles_module_css_default.select,
+				value: mode,
+				onChange: (e) => {
+					setMode(e.target.value);
+					saveSettings({ modeOverride: e.target.value });
+				}
+			}, El("option", { value: "auto" }, "自动（按画像判断）"), El("option", { value: "novice" }, "新手模式"), El("option", { value: "veteran" }, "个性化模式"))), El("div", { className: styles_module_css_default.field }, El("label", { className: styles_module_css_default.fieldLabel }, "目标 Profile"), El("input", {
+				className: styles_module_css_default.input,
+				value: profileName,
+				onChange: (e) => {
+					setProfileName(e.target.value);
+					saveSettings({ profile: e.target.value });
+				}
+			})), El("p", { className: styles_module_css_default.ghTip }, `已装 skill 目录：从本机 skills 目录自动检测`), El("div", { className: styles_module_css_default.dividerLine }), El("button", {
+				className: styles_module_css_default.btn,
+				onClick: onChanged
+			}, "刷新推荐数据")), El("div", { className: styles_module_css_default.settingCard }, El("div", { className: styles_module_css_default.settingHead }, El("span", { className: styles_module_css_default.settingIc }, El(Icon, {
+				d: ICON_PACKAGE,
+				size: 15
+			})), El("span", { className: styles_module_css_default.settingTitle }, "备份与恢复")), El("p", { className: styles_module_css_default.ghTip }, "导出已装清单 / 收藏 / 偏好为 JSON；换机或重装后导入，只补装缺失的插件，绝不动后来装的。备份不含任何凭据。"), El("div", { className: styles_module_css_default.settingsRow }, El("button", {
+				className: styles_module_css_default.btn,
+				disabled: backupBusy !== "",
+				onClick: () => void exportBackup()
+			}, backupBusy === "exporting" ? "导出中…" : "导出备份"), El("button", {
+				className: styles_module_css_default.btn,
+				disabled: backupBusy !== "",
+				onClick: () => backupFileRef.current?.click()
+			}, backupBusy === "importing" ? "恢复中…" : "导入恢复"), El("input", {
+				type: "file",
+				accept: "application/json,.json",
+				style: { display: "none" },
+				ref: backupFileRef,
+				onChange: onBackupFile
+			})), importSummary ? El("p", {
+				className: styles_module_css_default.ghTip,
+				style: {
+					whiteSpace: "pre-line",
+					marginTop: 6
+				}
+			}, importSummary) : null), El("div", { className: styles_module_css_default.settingCard }, El("div", { className: styles_module_css_default.settingHead }, El("span", { className: styles_module_css_default.settingIc }, El(Icon, {
+				d: ICON_CLOCK,
+				size: 15
+			})), El("span", { className: styles_module_css_default.settingTitle }, "关于")), El("p", { className: styles_module_css_default.ghTip }, "数据缓存于本地（GitHub Actions 每日抓取）。"), versions["@dsh-market/plugin"] ? El("div", { className: styles_module_css_default.versionRow }, El("span", { className: styles_module_css_default.versionLabel }, "插件版本"), El("code", { className: styles_module_css_default.versionCode }, `${versions["@dsh-market/plugin"] ?? "?"}`, versions["@dsh-market/core"] ? ` · core ${versions["@dsh-market/core"]}` : "")) : null, El("div", { className: styles_module_css_default.versionRow }, El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm}`,
+				disabled: logState === "copying",
+				onClick: () => void (async () => {
+					setLogState("copying");
+					try {
+						const ok = await copyText(await api("log:export"));
+						setLogState(ok ? "copied" : "failed");
+					} catch {
+						setLogState("failed");
+					}
+					setTimeout(() => setLogState(""), 2200);
+				})()
+			}, logState === "copying" ? "导出中…" : "导出操作日志"), El("span", { className: styles_module_css_default.updateHint }, logState === "copied" ? "已复制到剪贴板 ✓（含宿主版本/时区/最近 200 条）" : logState === "failed" ? "复制失败，请重试" : "复制安装/更新/卸载记录，粘给 AI 可大幅加速排查"))));
+		}
+		function PacksTab(props) {
+			const { packs } = props;
+			const [query, setQuery] = (0, react.useState)("");
+			const [expanded, setExpanded] = (0, react.useState)(null);
+			const ql = query.trim().toLowerCase();
+			const visible = [...packs].sort((a, b) => b.scoreTotal - a.scoreTotal).filter((p) => !ql || p.name.toLowerCase().includes(ql) || (p.descriptionZh ?? "").toLowerCase().includes(ql) || p.author.toLowerCase().includes(ql) || p.tags.some((t) => t.toLowerCase().includes(ql)));
+			return El("div", { className: styles_module_css_default.tabBody }, El("div", { className: styles_module_css_default.searchWrap }, El("span", { className: styles_module_css_default.searchWrapIcon }, El(Icon, {
+				d: ICON_SEARCH,
+				size: 15
+			})), El("input", {
+				className: styles_module_css_default.searchInput,
+				placeholder: "搜索整合包：翻译 / 安全 / MCP / 环境…",
+				value: query,
+				onChange: (e) => setQuery(e.target.value)
+			}), query.length > 0 ? El("button", {
+				className: styles_module_css_default.searchClear,
+				"aria-label": "清除",
+				onClick: () => setQuery("")
+			}, El(Icon, {
+				d: ICON_CLOSE,
+				size: 13
+			})) : null), packs.length === 0 ? El("div", { className: styles_module_css_default.emptyState }, "整合包正式协议开发中，暂未开放收录——敬请期待。") : visible.length === 0 ? El("div", { className: styles_module_css_default.emptyState }, "没有匹配的整合包，换个关键词试试。") : El("div", {
+				className: styles_module_css_default.list,
+				style: {
+					display: "flex",
+					flexDirection: "column",
+					gap: 10
+				}
+			}, ...visible.map((p) => {
+				const { total, ok, inMarket } = p.entryStats;
+				const rate = total > 0 ? Math.round(ok / total * 100) : 0;
+				const open = expanded === p.id;
+				return El("div", {
+					key: p.id,
+					className: styles_module_css_default.card
+				}, El("div", { className: styles_module_css_default.cardTop }, El("span", {
+					className: styles_module_css_default.cardStars,
+					style: {
+						background: "var(--mkt-purple-bg)",
+						color: "var(--mkt-purple)",
+						borderRadius: 6,
+						padding: "2px 8px",
+						fontSize: 10
+					}
+				}, "PACK"), El("span", { className: styles_module_css_default.cardStars }, `★ ${fmtStars(p.stars)}`)), El("div", { className: styles_module_css_default.cardName }, p.name), El("div", { className: styles_module_css_default.cardDesc }, p.descriptionZh ?? "（无简介）"), El("div", { style: {
+					display: "flex",
+					alignItems: "center",
+					gap: 6,
+					fontSize: 11,
+					color: rate >= 80 ? "var(--mkt-rate-ok)" : rate >= 50 ? "var(--mkt-rate-warn)" : "var(--mkt-rate-danger)",
+					padding: "4px 8px",
+					borderRadius: 6,
+					background: "var(--mkt-bg)",
+					marginBottom: 8
+				} }, `✓ ${ok}/${total} 条目可解析 · ${inMarket} 已在市场`, El("b", {}, `${rate}%`)), El("div", { className: styles_module_css_default.cardActions }, El("span", { style: {
+					fontSize: 12,
+					fontWeight: 600,
+					color: "var(--mkt-purple)"
+				} }, `${p.scoreTotal} 实用分`), El("button", {
+					className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm} ${styles_module_css_default.btnGhost}`,
+					onClick: () => setExpanded(open ? null : p.id)
+				}, open ? "收起条目" : "查看条目")), open ? El("div", { style: {
+					display: "flex",
+					flexDirection: "column",
+					gap: 4,
+					marginTop: 8,
+					paddingTop: 8,
+					borderTop: "1px solid var(--mkt-border)"
+				} }, ...p.entries.map((e, i) => El("div", {
+					key: `${e.id}-${i}`,
+					style: {
+						display: "flex",
+						alignItems: "center",
+						gap: 8,
+						fontSize: 11,
+						color: e.resolved?.ok ? "inherit" : "#B33A3A",
+						padding: "3px 0"
+					}
+				}, El("span", {}, e.resolved?.ok ? "✓" : "✗"), El("code", { style: { fontSize: 10.5 } }, e.id), El("span", { style: {
+					fontSize: 10,
+					color: "var(--mkt-text3)"
+				} }, e.type), El("span", { style: {
+					marginLeft: "auto",
+					fontSize: 10,
+					color: "var(--mkt-text3)"
+				} }, e.resolved?.ok ? e.resolved.inMarket ? "已在市场" : "可安装" : e.resolved?.reason ?? "解析失败")))) : null);
+			})));
+		}
+		function FavoritesTab(props) {
+			const { plugins, onInstall, onTagClick, refreshTick, onGotoRecommend } = props;
+			const favIds = (0, react.useMemo)(() => readFavorites(), [refreshTick]);
+			const items = plugins.filter((p) => favIds.includes(p.id));
+			return El("div", { className: styles_module_css_default.tabBody }, El("div", { className: styles_module_css_default.sectionHead }, El(Icon, {
+				d: ICON_STAR_OUTLINE,
+				size: 14,
+				className: styles_module_css_default.sectionIcon
+			}), El("h3", { className: styles_module_css_default.sectionTitle }, "我的收藏"), El("span", { className: styles_module_css_default.sectionNote }, `${items.length} 个`)), items.length === 0 ? El("div", { className: styles_module_css_default.emptyState }, El("div", { className: styles_module_css_default.emptyIcon }, El(Icon, {
+				d: ICON_STAR_OUTLINE,
+				size: 44
+			})), El("div", { className: styles_module_css_default.emptyTitle }, "还没有收藏任何插件"), El("div", { className: styles_module_css_default.emptyDesc }, "在推荐或搜索页点击星标，把喜欢的插件收藏到这里。"), El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnPrimary}`,
+				onClick: onGotoRecommend
+			}, "去逛逛")) : El("div", { className: styles_module_css_default.grid2 }, ...items.map((p) => El(PluginCard, {
+				key: p.id,
+				plugin: p,
+				onInstall,
+				onTagClick
+			}))));
+		}
+		function MarketPanel(props) {
+			const { onClose, mode = "overlay" } = props;
+			const storeOpen = (0, react.useSyncExternalStore)(subscribe, getOpen, getOpen);
+			const open = mode === "main" ? true : storeOpen;
+			const [tab, setTab] = (0, react.useState)("recommend");
+			const [plugins, setPlugins] = (0, react.useState)([]);
+			const [profile, setProfile] = (0, react.useState)(null);
+			const [installed, setInstalled] = (0, react.useState)([]);
+			const [packs, setPacks] = (0, react.useState)([]);
+			const [recs, setRecs] = (0, react.useState)([]);
+			const [loading, setLoading] = (0, react.useState)(false);
+			const [installTarget, setInstallTarget] = (0, react.useState)(null);
+			const [refreshKey, setRefreshKey] = (0, react.useState)(0);
+			const [sceneState, setSceneState] = (0, react.useState)({
+				loading: false,
+				recs: [],
+				sceneTags: []
+			});
+			const [selfUpdate, setSelfUpdate] = (0, react.useState)(null);
+			const [selfUpdating, setSelfUpdating] = (0, react.useState)(false);
+			const [selfDismissed, setSelfDismissed] = (0, react.useState)(false);
+			const [loadError, setLoadError] = (0, react.useState)(null);
+			const [resuming, setResuming] = (0, react.useState)(null);
+			const loadAll = async () => {
+				setLoading(true);
+				setLoadError(null);
+				try {
+					const [pl, prof, inst] = await Promise.all([
+						api("plugins"),
+						api("profile:read"),
+						api("installed")
+					]);
+					setPlugins(pl);
+					setProfile(prof);
+					setInstalled(inst);
+					api("packs").then((pk) => setPacks(pk)).catch(() => {});
+					const counts = /* @__PURE__ */ new Map();
+					for (const i of inst) {
+						if (!i.plugin) continue;
+						for (const t of i.plugin.tags) {
+							if (!/[\u4e00-\u9fff]/.test(t)) continue;
+							if ([
+								"效率工具",
+								"开发辅助",
+								"AI 增强",
+								"AI增强",
+								"自动化"
+							].includes(t)) continue;
+							counts.set(t, (counts.get(t) ?? 0) + 1);
+						}
+					}
+					const sceneTags = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t);
+					const r = await api("recommend", { options: {
+						limit: 24,
+						excludeIds: inst.filter((i) => i.pluginId).map((i) => i.pluginId),
+						sceneTags
+					} });
+					setRecs(r);
+				} catch (e) {
+					console.error("market load failed:", e);
+					setLoadError(e);
+				} finally {
+					setLoading(false);
+				}
+			};
+			(0, react.useEffect)(() => {
+				if (open) loadAll();
+			}, [open, refreshKey]);
+			(0, react.useEffect)(() => {
+				if (!open || selfDismissed) return;
+				api("update:self", { force: true }).then((r) => setSelfUpdate(r)).catch(() => {});
+			}, [open, selfDismissed]);
+			(0, react.useEffect)(() => {
+				if (!open) return;
+				const raw = localStorage.getItem(PENDING_INSTALL_KEY);
+				if (!raw) return;
+				let entry;
+				try {
+					entry = JSON.parse(raw);
+				} catch {
+					localStorage.removeItem(PENDING_INSTALL_KEY);
+					return;
+				}
+				let alive = true;
+				let polls = 0;
+				setResuming({ pluginName: entry.pluginName });
+				const tick = async () => {
+					polls += 1;
+					try {
+						const s = await api("ai:install:status", { installId: entry.installId });
+						if (!alive) return;
+						if (s.running && polls < 200) {
+							setTimeout(() => {
+								if (alive) tick();
+							}, 3e3);
+							return;
+						}
+						localStorage.removeItem(PENDING_INSTALL_KEY);
+						setResuming(null);
+						if (s.running) return;
+						if (s.known === false) return;
+						if (s.cancelled) toast(`「${entry.pluginName}」安装已取消`, 3e3);
+						else if (s.ok) {
+							toast(`「${entry.pluginName}」安装完成`, 4e3);
+							setRefreshKey((k) => k + 1);
+						} else toast(`「${entry.pluginName}」安装失败：${s.error ?? "未知原因"}`, 5e3);
+					} catch {
+						if (alive && polls < 200) setTimeout(() => {
+							if (alive) tick();
+						}, 3e3);
+					}
+				};
+				tick();
+				return () => {
+					alive = false;
+				};
+			}, [open]);
+			/** 插件自身更新：引导式（P0）——运行中不能就地覆盖自己，给出停 harness 后的命令并复制 */
+			const applySelfUpdate = async () => {
+				setSelfUpdating(true);
+				try {
+					const r = await api("update:self", { apply: true });
+					if (r.needsManual) {
+						const cmd = r.manualCommand ?? "dsh plugin --profile web add @dsh-market/plugin@latest";
+						if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) navigator.clipboard.writeText(cmd).catch(() => {});
+						toast(`已复制更新命令：${cmd}。请停止 harness 后运行，再重启 harness 生效。`, 5600);
+						setSelfDismissed(true);
+						return;
+					}
+					if (r.applied) {
+						setSelfUpdate(null);
+						setSelfDismissed(true);
+						toast(`插件更新完成（${r.latest}），重启 harness 后生效`);
+					} else toast(`更新失败：${r.applyOutput ?? "未知错误"}。若提示文件被占用，需先停止 harness 后重试`, 5e3);
+				} catch (e) {
+					toast(`更新失败：${e.message}。若提示文件被占用，需先停止 harness 后重试`, 5e3);
+				} finally {
+					setSelfUpdating(false);
+				}
+			};
+			if (!open) return null;
+			const installedIds = new Set(installed.filter((i) => i.pluginId).map((i) => i.pluginId));
+			const onTagClick = (t) => {
+				setSearchSeed(t);
+				setTab("search");
+			};
+			const onInstalledChanged = () => setRefreshKey((k) => k + 1);
+			const onFetchScene = async () => {
+				setSceneState({
+					loading: true,
+					recs: [],
+					sceneTags: []
+				});
+				try {
+					const tags = (await api("scene:context")).sceneTags ?? [];
+					if (tags.length === 0) {
+						setSceneState({
+							loading: false,
+							recs: [],
+							sceneTags: []
+						});
+						return;
+					}
+					const r = await api("recommend", { options: {
+						limit: 24,
+						excludeIds: installed.filter((i) => i.pluginId).map((i) => i.pluginId),
+						sceneTags: tags
+					} });
+					setSceneState({
+						loading: false,
+						recs: r.filter((x) => x.origin === "scene"),
+						sceneTags: tags
+					});
+				} catch (e) {
+					console.error("fetch scene failed:", e);
+					setSceneState({
+						loading: false,
+						recs: [],
+						sceneTags: []
+					});
+				}
+			};
+			const onSwitchMode = async () => {
+				const cur = profile?.modeOverride ?? "auto";
+				const next = cur === "novice" || cur === "auto" && (profile?.confidence ?? 0) < .4 ? "auto" : "novice";
+				try {
+					await api("settings:update", { patch: { modeOverride: next } });
+					if (next === "novice") markQuizTriggered();
+					onInstalledChanged();
+				} catch (e) {
+					console.error("switch mode failed:", e);
+				}
+			};
+			const tabs = [
+				{
+					id: "recommend",
+					label: "推荐"
+				},
+				{
+					id: "search",
+					label: "搜索"
+				},
+				{
+					id: "packs",
+					label: "整合包"
+				},
+				{
+					id: "favorites",
+					label: "收藏"
+				},
+				{
+					id: "installed",
+					label: "已装"
+				},
+				{
+					id: "settings",
+					label: "设置"
+				}
+			];
+			const inMain = mode === "main";
+			return El("div", inMain ? { className: styles_module_css_default.mainHost } : {
+				className: styles_module_css_default.backdrop,
+				onClick: onClose
+			}, El("div", inMain ? { className: `${styles_module_css_default.panel} ${styles_module_css_default.panelInMain}` } : {
+				className: styles_module_css_default.panel,
+				onClick: (e) => e.stopPropagation()
+			}, El("div", { className: styles_module_css_default.header }, El("span", { className: styles_module_css_default.titleIcon }, El(MarketLogo, {
+				size: 24,
+				color: "var(--mkt-brand)",
+				eyeColor: "#FFFFFF"
+			})), El("span", { className: styles_module_css_default.title }, "插件市场"), El("span", { className: styles_module_css_default.subtitle }, `${plugins.length} 个插件`), El("button", {
+				className: styles_module_css_default.headerClose,
+				onClick: onClose,
+				"aria-label": "关闭"
+			}, El(Icon, {
+				d: ICON_CLOSE,
+				size: 14
+			}))), selfUpdate?.hasUpdate ? El("div", { className: styles_module_css_default.selfUpdateBar }, El("span", { className: styles_module_css_default.selfUpdateText }, selfUpdating ? "正在更新插件…" : `插件有新版本 ${selfUpdate.current ?? "?"} → ${selfUpdate.latest ?? "?"}`), selfUpdating ? null : El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm} ${styles_module_css_default.btnPrimary}`,
+				onClick: () => void applySelfUpdate()
+			}, "获取命令"), selfUpdating ? null : El("button", {
+				className: `${styles_module_css_default.btn} ${styles_module_css_default.btnSm} ${styles_module_css_default.btnGhost}`,
+				onClick: () => setSelfDismissed(true)
+			}, "忽略")) : null, resuming ? El("div", { className: styles_module_css_default.selfUpdateBar }, El("span", { className: styles_module_css_default.selfUpdateText }, `正在后台安装「${resuming.pluginName}」…可离开此页面，完成后会提示`)) : null, El("div", { className: styles_module_css_default.tabs }, ...tabs.map((t) => El("button", {
+				key: t.id,
+				className: `${styles_module_css_default.tab} ${tab === t.id ? styles_module_css_default.tabOn : ""}`,
+				onClick: () => setTab(t.id)
+			}, t.label))), El("div", { className: styles_module_css_default.body }, loadError ? El(ErrorOutlet, {
+				error: loadError,
+				label: "数据加载",
+				onRetry: () => void loadAll()
+			}) : tab === "recommend" ? El(Boundary, {
+				key: tab,
+				label: "推荐 Tab"
+			}, El(RecommendTab, {
+				plugins,
+				profile,
+				recs,
+				loading,
+				installedIds,
+				onInstall: setInstallTarget,
+				onTagClick,
+				onSwitchMode,
+				onQuizSubmit: async (tags) => {
+					await api("profile:update", { quizTags: tags });
+					onInstalledChanged();
+				},
+				sceneState,
+				onFetchScene
+			})) : tab === "search" ? El(Boundary, {
+				key: tab,
+				label: "搜索 Tab"
+			}, El(SearchTab, {
+				plugins,
+				onInstall: setInstallTarget,
+				onTagClick
+			})) : tab === "packs" ? El(Boundary, {
+				key: tab,
+				label: "整合包 Tab"
+			}, El(PacksTab, {
+				packs,
+				onInstallPack: (pack) => {
+					window.open(`https://github.com/${pack.id}`, "_blank");
+				}
+			})) : tab === "favorites" ? El(Boundary, {
+				key: tab,
+				label: "收藏 Tab"
+			}, El(FavoritesTab, {
+				plugins,
+				onInstall: setInstallTarget,
+				onTagClick,
+				refreshTick: refreshKey,
+				onGotoRecommend: () => setTab("recommend")
+			})) : tab === "installed" ? El(Boundary, {
+				key: tab,
+				label: "已装 Tab"
+			}, El(InstalledTab, {
+				installed,
+				loading,
+				onChanged: onInstalledChanged
+			})) : El(Boundary, {
+				key: tab,
+				label: "设置 Tab"
+			}, El(SettingsTab, {
+				profile,
+				onChanged: onInstalledChanged
+			}))), installTarget ? El(Boundary, {
+				key: installTarget.id,
+				label: "安装弹窗"
+			}, El(InstallModal, {
+				plugin: installTarget,
+				onDone: onInstalledChanged,
+				onClose: () => setInstallTarget(null)
+			})) : null));
+		}
+		//#endregion
+		//#region src/client/index.ts
+		/**
+		* @dsh-market/plugin client half —— 双路注册（按宿主能力探测，同一份产物兼容两代 DSH）：
+		*
+		*  A. 0.1.5+ 标准面板入口：`sidebar.panellist`（左栏导航图标）+ `main`（中央面板）。
+		*     按契约，panellist 的 `id` 必须与 main 的 `key` 同名——sidebar 点击时调
+		*     `layout.selectPanel(id)`，而 selectPanel 会按 key 反查 main 注册项，对不上直接抛错。
+		*  B. ≤0.1.4 旧入口：`sidebar.footer.action`（侧栏底部按钮）+ `shell.overlay`（浮层模态）。
+		*
+		*  探测点：`layout.selectPanel`。两代 `root` slot 的子节点完全不同——旧版是
+		*  `sidebar`/`conversation`/`details`/`shell.overlay`（**没有 main、也没有 panellist**），
+		*  新版是 `sidebar`/`main`/`rightbar`/`shell.overlay`；layout 服务的方法集同样不重叠：
+		*  旧版 `attachPanels/toggleSidebar/openDetails/closeDetails`，新版 `selectPanel/...`。
+		*  两代都 `provide('layout')`，故 `inject: ['slots', 'layout']` 在两代均成立；同时 inject
+		*  layout 也保证了探测时它已就绪（只 inject slots 的话可能先于 layout 就绪而误判成旧版）。
+		*/
+		/** 面板 id == main slot 的 key（两者必须同名，见文件头 A） */
+		const PANEL_ID = "dsh-market";
+		/** 旧版入口按钮：侧边栏底部「设置」旁的图标按钮（issue #101：独占一行 + 16px 图标对齐官方） */
+		function MarketTrigger(props) {
+			const open = (0, react.useSyncExternalStore)(subscribe, getOpen, getOpen);
+			return (0, react.createElement)("button", {
+				className: styles_module_css_default.trigger,
+				onClick: toggle,
+				title: "插件市场",
+				"aria-label": "插件市场",
+				"data-active": open || void 0
+			}, (0, react.createElement)("span", { className: styles_module_css_default.triggerIcon }, (0, react.createElement)(MarketLogo, {
+				size: 16,
+				color: open ? "currentColor" : "currentColor"
+			})), props.wide ? (0, react.createElement)("span", { className: styles_module_css_default.triggerLabel }, "插件市场") : null);
+		}
+		/**
+		* 0.1.5 左栏导航图标。owner 传入 `{ size, active }`，并把图标渲染在 `.panelRow`
+		* 之内（未选中 color=label-secondary、选中=label-primary），所以这里用
+		* currentColor 即可自动跟随选中态，不需要自己读 active 改色。
+		*/
+		function MarketRailIcon(props) {
+			return (0, react.createElement)(MarketLogo, {
+				size: props.size,
+				color: "currentColor"
+			});
+		}
+		const inject = ["slots", "layout"];
+		function apply(ctx) {
+			const layout = ctx.get("layout");
+			if (typeof layout?.selectPanel === "function") {
+				ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({
+					name: "sidebar.panellist",
+					id: PANEL_ID,
+					order: 5,
+					label: "插件市场"
+				}, (props) => (0, react.createElement)(MarketRailIcon, props)));
+				ctx.slots.inject("main", () => ctx.slots.register({
+					name: "main",
+					key: PANEL_ID
+				}, () => (0, react.createElement)(Boundary, {
+					key: PANEL_ID,
+					label: "面板整体"
+				}, (0, react.createElement)(MarketPanel, {
+					mode: "main",
+					onClose: () => layout.selectPanel?.(null)
+				}))));
+				return;
+			}
+			ctx.slots.inject("sidebar.footer.action", () => ctx.slots.register({
+				name: "sidebar.footer.action",
+				id: PANEL_ID,
+				order: 5,
+				label: "插件市场"
+			}, (props) => (0, react.createElement)(MarketTrigger, { wide: props.wide })));
+			ctx.slots.inject("shell.overlay", () => ctx.slots.register({
+				name: "shell.overlay",
+				id: "dsh-market-panel",
+				order: 10
+			}, () => (0, react.createElement)(Boundary, {
+				key: "dsh-market-panel",
+				label: "面板整体"
+			}, (0, react.createElement)(MarketPanel, {
+				mode: "overlay",
+				onClose: () => setOpen(false)
+			}))));
+		}
+		//#endregion
+		exports.apply = apply;
+		exports.inject = inject;
+		return module.exports;
+	}
+});
+
+//# sourceMappingURL=client.js.map

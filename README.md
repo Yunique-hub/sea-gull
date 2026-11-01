@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.17-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [当前状态](docs/CURRENT.md) · [文档索引](docs/README.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,7 +17,7 @@
 
 ---
 
-当前 **v1.0.17** 适配官方 Windows Harness **0.2.1-rc.3**（rc.5 的 preset 缩进漂移已在 #43 兼容；但 rc.5 上插件不加载，见 [VERIFICATION S](docs/VERIFICATION.md)），引擎为 dsh-purge **1.1.82**（固定上游正式版提交 [6318442](https://github.com/YuJunZhiXue/dsh-purge/tree/6318442a88ea7459d0135d0a07f31776c5d6a7b1)）。采用最新正式版快照，保留海鸥 rc.3 兼容修改。
+当前 **v1.1.0** 适配官方 Windows Harness **0.2.1-rc.3**（rc.5 的 preset 缩进漂移已在 #43 兼容；但 rc.5 上插件不加载，见 [VERIFICATION S](docs/VERIFICATION.md)），引擎为 dsh-purge **1.1.82**（固定上游正式版提交 [6318442](https://github.com/YuJunZhiXue/dsh-purge/tree/6318442a88ea7459d0135d0a07f31776c5d6a7b1)）。采用最新正式版快照，保留海鸥 rc.3 兼容修改。
 
 1.0.15 修正面板显示与项目创建反馈：本地靶场旧文案改为“不参与放行判定”；面板同时显示海鸥版本与 purge 版本；空项目名提交给出可见错误。详见[1.0.15 发布说明](docs/releases/UPGRADE-1.0.15.md)。
 
@@ -31,7 +31,7 @@
 
 1.0.9 修复「恢复默认」的备份失败和同秒备份覆盖问题：备份失败即停止，每次备份使用唯一文件名。真机校验脚本同步支持当前注入标记、纯 Markdown 人格、五个原生技能，并检查范围闸确已移除。分析与本轮桌面结果见[项目审查](docs/reviews/PROJECT-REVIEW-2026-10-25.md)及[验证记录 M](docs/VERIFICATION.md#m-109-全面审查与桌面回归2026-10-25)。
 
-一键更新同时修复**已安装**的插件市场：升级至已验证的 0.4.16，修复 BOM 设置导致错误回退到 `web`、旧 core 遮蔽新依赖、bundle 校验误报重启，以及跨 profile 混列旧版本。没有市场的用户不会被额外安装。pnpm 完成后还会逐文件校验 purge 运行副本，避免同版本陈旧代码被误报为更新成功。详见[本次验证记录](docs/VERIFICATION.md#k-插件市场与-purge-运行副本修复2026-10-24)。
+一键更新同时修复**已安装**的插件市场：升级至已验证的 0.4.16，修复 BOM 设置导致错误回退到 `web`、旧 core 遮蔽新依赖、bundle 校验误报重启，以及跨 profile 混列旧版本。一键安装默认部署 vendored 市场（离线可装），更新沿用同一份快照。pnpm 完成后还会逐文件校验 purge 运行副本，避免同版本陈旧代码被误报为更新成功。详见[本次验证记录](docs/VERIFICATION.md#k-插件市场与-purge-运行副本修复2026-10-24)。
 
 保留用户保存的**海鸥人格**、5 个海鸥技能、项目创建与切换修复、立即插话、独立排队、安装/更新和回退保护。1.0.13 起移除上游的本地靶场范围闸：插件不再注册 `agent/pre-step` / `tools/pre-execute` 拦截，也不按目标地址、任务类别或边界措辞拦请求；证据账本等工程功能保留。上游已下架随包技能库与知识库入口；本机已有数据保留，旧 23 个技能仅在源码中作历史存档，不再自动分发。
 
@@ -58,6 +58,7 @@
 | 来源 | 提供什么 |
 |---|---|
 | [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.82 | 宿主兼容、演练台、证据账本（范围闸已移除）；保留 88 条本地补丁定义 |
+| [@dsh-market/plugin](vendor/dsh-market/plugin) 0.4.16 | 插件市场（浏览/搜索/一键安装/已装管理），vendored，随安装器离线部署 |
 | [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | 海鸥人格（整合版 §0–§23）+ 5 个领域技能 |
 
 合并不是拼盘——`SOUL.md` 不能直接当 DSH 提示词（插值白名单、ChatML 信封、技能目录协议
@@ -251,6 +252,7 @@ bash verify-e2e.sh       # 端到端：金丝雀注入 + 出活 + A/B 对照（�
 │   ├── skills/                   5 个部署技能 + redteam 23 个历史存档
 │   └── tools/patch_profile.py    profile JSON 幂等改写 / 运行副本同步
 ├── vendor/dsh-purge/             上游宿主层引擎（保留 LICENSE，改动见 NOTICE）
+├── vendor/dsh-market/            内置插件市场（MIT + Apache-2.0，见 NOTICE）
 ├── vendor/dsh-agent-teams/       AgentTeams 运行快照（MIT，见 NOTICE）
 ├── tests/                        Node 回归 + 冒烟（假 DSH_HOME）
 ├── docs/

@@ -98,3 +98,14 @@
 - 不在海鸥 vendor 中复制市场完整源码。Update 模式只对已有安装执行版本、BOM 设置及旧依赖归档处理。
 - `src/tools/patch_profile.py` 对已验证的 core 0.4.13 的 dist/verify.js 和 dist/installed.js 作本地兼容修改，识别 bundle patch 并按所选 profile 扫描，原文件先备份。未知 core 版本停止自动修改。
 - tests/fixtures/market-verify-original.js.txt 为该版本原始校验函数片段，用于复现漏读 bundle 的问题。
+
+## 7. 插件市场快照（`vendor/dsh-market/`）
+
+| 文件 | 说明 |
+|---|---|
+| `vendor/dsh-market/plugin/` | `@dsh-market/plugin` 0.4.16 原样快照（MIT）：`lib/`、`cordis.patch.yml`、README 未改 |
+| `vendor/dsh-market/core/` | `@dsh-market/core` 0.4.13 原样快照（MIT） |
+| `vendor/dsh-market/schema/` | `@dsh-market/schema` 0.1.4 原样快照（MIT） |
+| `vendor/dsh-market/fuse.js/` | `fuse.js` 7.5.0 原样快照（Apache-2.0），`core` 的唯一外部依赖 |
+
+安装器把四个包复制到 `$DSH_HOME/plugins/@dsh-market/`，profile 用四个 `file:` 依赖挂载，bundles 只加 `@dsh-market/plugin`（它的 `cordis.patch.yml` 自己 insert），不访问 npm registry。

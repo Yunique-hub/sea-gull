@@ -8,7 +8,7 @@
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.0.17"
+VERSION="1.1.0"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
@@ -256,6 +256,8 @@ if [ "$UNINSTALL" = 1 ]; then
   fi
   "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/patch_profile.py")" --remove "$(winpath "$PROFILE_DIR/package.json")" "$PLUGIN_ID" \
     || die "profile 移除失败，保留插件文件"
+    "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/patch_profile.py")" --remove-market "$(winpath "$PROFILE_DIR/package.json")" || true
+    rm -rf "$DSH_HOME/plugins/@dsh-market" "$PROFILE_DIR/node_modules/@dsh-market" "$PROFILE_DIR/node_modules/fuse.js"
   rm -rf "$PLUGIN_DIR" "$DSH_HOME/prompt-inject.md" \
          "$DSH_HOME/rules/seagull-fullbreak.md" "$DSH_HOME/rules/seagull-fullbreak.json" \
          "$DSH_HOME/rules/archived/seagull-fullbreak.md" "$DSH_HOME/rules/archived/seagull-fullbreak.json" \
@@ -297,7 +299,23 @@ if [ "$UPDATE" = 1 ]; then
     || die "插件市场配置修复失败，备份已保留"
 fi
 
-# ── 3. pnpm install ────────────────────────────────────────────────
+# ── 2b. 插件市场（vendored）────────────────────────────────────────
+  if [ "$UNINSTALL" -ne 1 ] && [ -f "$ROOT/vendor/dsh-market/plugin/package.json" ]; then
+    step "插件市场"
+    mkdir -p "$DSH_HOME/plugins/@dsh-market"
+    for pkg in plugin core schema fuse.js; do
+      src="$ROOT/vendor/dsh-market/$pkg"
+      dst="$DSH_HOME/plugins/@dsh-market/$pkg"
+      [ -f "$src/package.json" ] || die "安装包缺少市场组件: $pkg"
+      rm -rf "$dst"
+      cp -R "$src" "$dst"
+    done
+    "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/patch_profile.py")" --add-market "$(winpath "$PROFILE_DIR/package.json")" \
+      || die "插件市场挂载失败，备份已保留"
+    ok "插件市场就位: $DSH_HOME/plugins/@dsh-market"
+  fi
+
+  # ── 3. pnpm install ────────────────────────────────────────────────
 DEPENDENCIES_READY=0
 if [ "$NO_PNPM" = 0 ] && [ -n "$NODE_EMB" ] && [ -n "$PNPM_EMB" ]; then
   step "pnpm install"
