@@ -36,6 +36,15 @@ test('toolkit choice validation has no side effects and saving preserves existin
   assert.equal(run(chosen, '--validate-only').status, 0); assert.equal(fs.readFileSync(file, 'utf8'), original); assert.ok(!fs.existsSync(chosen));
   assert.notEqual(run('relative').status, 0); assert.notEqual(run(file).status, 0); assert.equal(fs.readFileSync(file, 'utf8'), original);
   assert.equal(run(chosen).status, 0); const config = JSON.parse(fs.readFileSync(file)); assert.equal(config.toolkitDir, chosen); assert.equal(config.env.FOFA_KEY, 'fixture'); assert.equal(config.tools.nmap, 'existing'); assert.equal(config.custom, true);
+  const installed = fs.readFileSync(file, 'utf8'); assert.equal(run(chosen).status, 0); assert.equal(fs.readFileSync(file, 'utf8'), installed);
+});
+test('unchanged toolkit choice preserves the config byte for byte', t => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'seagull-choice-unchanged-')); t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const file = path.join(home, 'redteam/config.json'), chosen = path.join(home, 'chosen tools'); fs.mkdirSync(path.dirname(file));
+  const original = JSON.stringify({ toolkitDir: chosen, custom: true }, null, 4) + '\n'; fs.writeFileSync(file, original);
+  const helper = fileURLToPath(new URL('../src/tools/configure_toolkit.py', import.meta.url));
+  const result = spawnSync(python.command, [...python.args, helper, home, chosen], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr); assert.equal(fs.readFileSync(file, 'utf8'), original); assert.ok(!fs.existsSync(file + '.bak-seagull'));
 });
 test('managed teams stage, update and unmount preserve unrelated profile settings and workspace archives', t => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'seagull-teams-')); t.after(() => fs.rmSync(home, { recursive: true, force: true }));

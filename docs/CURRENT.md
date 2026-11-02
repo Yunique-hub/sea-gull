@@ -37,7 +37,7 @@
 
 | 检查 | 状态 |
 |---|---|
-| `node --test tests/*.test.mjs` | **175/175** 通过，详见 [VERIFICATION U](VERIFICATION.md) |
+| `node --test tests/*.test.mjs` | **176/176** 通过，详见 [VERIFICATION U](VERIFICATION.md) |
 | `bash tests/smoke.sh` | 全绿 |
 | `verify.ps1` / `verify.sh` | **25/25、28/28**，均包含 profile 副本检查 |
 | dsh-purge rc.5 运行状态 | **70/72 已应用、0 待处理、0 漂移、2 无需处理** |

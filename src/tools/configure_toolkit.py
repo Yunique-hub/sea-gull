@@ -15,6 +15,9 @@ if not isinstance(data, dict):
     raise SystemExit('现有工具配置格式无效，未修改')
 if '--validate-only' in sys.argv[3:]:
     raise SystemExit(0)
+if file.exists() and data.get('toolkitDir') == str(directory):
+    print('工具安装目录未变化：' + str(directory))
+    raise SystemExit(0)
 if file.exists():
     backup(file)
 data['toolkitDir'] = str(directory)

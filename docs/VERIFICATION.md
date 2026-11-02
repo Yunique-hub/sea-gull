@@ -999,20 +999,20 @@ run `dsh plugin --profile desktop install` if its dependency is not installed
 - Bash 入口同样支持 `--uninstall`；Windows 桌面端调用受控还原脚本，其他平台执行等价的密封包恢复和活动目录清理。
 - 删除目标必须严格等于安装根下的 `resources/app` 且不能是重解析点；官方 `app.asar` 与 `.sealed.bak` 都缺失时，在修改 profile、插件和规则前失败退出。
 - 卸载只摘除海鸥托管的 purge、市场和 AgentTeams 挂载及对应插件文件，保留已有 `prompt-inject.md`、项目、技能、偏好、账号、凭据、工具目录和历史备份。
-- 安装预检新增 `--preinstall` 模式，只准备 profile bundle 与构建权限，不再提前向用户的 `cordis.patch.yml` 写入正文；正式安装仍由既有同步流程管理 bundle。
+- 安装预检新增 `--preinstall` 模式，只准备 profile bundle 与构建权限，不再提前向用户的 `cordis.patch.yml` 写入正文；工具目录未变化时也不再重新序列化红队配置。正式安装仍由既有同步流程管理 bundle。
 
 ### U.2 自动化验证
 
 | 验收项 | 结果 |
 |---|---|
-| `node --test tests/*.test.mjs` | 175/175 通过 |
+| `node --test tests/*.test.mjs` | 176/176 通过 |
 | `cd vendor/dsh-purge && node --test` | 40/40 通过 |
 | `bash tests/smoke.sh` | 全部通过 |
 | PowerShell AST / `bash -n` | 通过 |
 | `powershell -File verify.ps1` | 25/25 通过 |
 | `bash verify.sh` | 28/28 通过 |
 | 缺少官方密封包的预检 | 非零退出；profile、插件、规则和用户提示词均零修改 |
-| 用户数据防回归 | 卸载后 `prompt-inject.md` 逐字节不变；预安装不写 profile 正文 |
+| 用户数据防回归 | 卸载后 `prompt-inject.md` 逐字节不变；预安装不写 profile 正文；工具目录未变时红队配置零写入 |
 
 ### U.3 真实桌面闭环
 
