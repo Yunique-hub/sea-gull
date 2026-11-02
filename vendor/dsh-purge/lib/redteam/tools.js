@@ -26,7 +26,7 @@ import {
   platformSummary,
   toolkitDirOf,
 } from './platform-config.js'
-import { maxAgentsOf, DEFAULT_MAX_AGENTS, MAX_AGENTS_LIMIT } from './settings.js'
+import { maxAgentsOf } from './settings.js'
 import { EvidenceLedger, UnknownRegistry } from './evidence-ledger.mjs'
 
 /**
@@ -178,11 +178,6 @@ function sessionInfoOf(exec) {
       : undefined
   } catch { parentId = undefined }
   return { id: id, parentId: parentId, session: session }
-}
-
-/** 会话 id（兼容旧调用点）。 */
-function sessionOf(exec) {
-  return sessionInfoOf(exec).id
 }
 
 /**
@@ -425,7 +420,7 @@ export function apply(ctx) {
   if (!store) {
     ctx.logger?.warn?.('redteam-tools: host ctx.redteam unavailable — tools will report store_missing')
     store = {
-      openEngagement: () => { throw new Error('redteam store unavailable') },
+      openEngagement: () => { throw new Error('红队资产库不可用') },
       listEngagements: () => [],
       stats: () => ({}),
     }
@@ -491,7 +486,7 @@ export function apply(ctx) {
     },
     output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
     async execute(args, exec) {
-      const list = store.listEngagements()
+      const list = store.listEngagements({ stats: true })
       const wanted = typeof args.engagement === 'string' ? args.engagement.trim() : ''
       if (wanted === '') {
         return JSON.stringify({
@@ -984,7 +979,7 @@ export function apply(ctx) {
     async execute(args, exec) {
       const id = resolveEngagement(store, exec, args.engagement)
       const asset = store.getAsset(id, args.id)
-      if (asset === undefined) return JSON.stringify({ ok: false, error: 'asset not found' })
+      if (asset === undefined) return JSON.stringify({ ok: false, error: '资产不存在' })
       return JSON.stringify({ ok: true, asset }, null, 2)
     },
   })))
@@ -1038,7 +1033,7 @@ export function apply(ctx) {
     async execute(args, exec) {
       const id = resolveEngagement(store, exec, args.engagement)
       const found = store.listPrompts(id).find((p) => p.role === args.role)
-      if (found === undefined) return JSON.stringify({ ok: false, error: 'unknown role' })
+      if (found === undefined) return JSON.stringify({ ok: false, error: '未知角色' })
       return JSON.stringify({
         ok: true, role: found.role, title: found.title,
         updated_at: found.updated_at, prompt: found.content,
@@ -1125,7 +1120,7 @@ export function apply(ctx) {
     output: { schema: { type: 'string' }, render: (_args, value) => text(value) },
     async execute(args, exec) {
       const id = resolveEngagement(store, exec, args.engagement)
-      const result = store.listVulns(id, { ...args, engagement: undefined, limit: Math.min(Number(args.limit) || 50, 200) })
+      const result = store.listVulns(id, { ...args, engagement: undefined, evidenceLimit: 20000, limit: Math.min(Number(args.limit) || 50, 200) })
       return JSON.stringify({ ok: true, engagement: id, total: result.total, items: result.items, stats: store.vulnStats(id) }, null, 2)
     },
   })))
@@ -2072,11 +2067,11 @@ export function apply(ctx) {
   })))
 
   function ledgerOf(engagementId) {
-    if (typeof store.db !== 'function') throw new Error('redteam store unavailable')
+    if (typeof store.db !== 'function') throw new Error('红队资产库不可用')
     return new EvidenceLedger(store.db(engagementId))
   }
   function unknownsOf(engagementId) {
-    if (typeof store.db !== 'function') throw new Error('redteam store unavailable')
+    if (typeof store.db !== 'function') throw new Error('红队资产库不可用')
     return new UnknownRegistry(store.db(engagementId))
   }
 

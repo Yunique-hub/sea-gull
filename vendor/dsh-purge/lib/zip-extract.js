@@ -127,7 +127,24 @@ function attempt(file, args, extra = {}) {
 export function extractZipArchive(zipPath, dest, tools = unzipTools()) {
   fs.mkdirSync(dest, { recursive: true });
   const notes = [];
+  /* 外部工具（tar/unzip/python/powershell）不看条目名：压缩包里写 ../ 或绝对路径
+     就能把文件落到 dest 之外（zip-slip）。先用 Node 读中央目录把每个条目过一遍
+     safeZipName，校验不过就不交给外部工具。 */
+  let entriesSafe = false;
+  try {
+    const buf = fs.readFileSync(zipPath);
+    const isZip = buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4b;
+    if (isZip) {
+      for (const name of listZipEntries(buf)) safeZipName(name);
+      entriesSafe = true;
+    } else {
+      entriesSafe = true; /* 非 zip（如 tar.gz）交给外部工具 */
+    }
+  } catch (error) {
+    notes.push(`entries: ${error && error.message ? error.message : error}`);
+  }
   for (const tool of tools) {
+    if (!entriesSafe) continue;
     if (tool === "node") {
       try {
         extractZipBuffer(fs.readFileSync(zipPath), dest);

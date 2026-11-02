@@ -1,6 +1,6 @@
 # 架构
 
-当前 1.0.14 使用 Harness 0.2.1-rc.3 / purge 1.1.82；本地靶场范围闸已移除（不再注册 `agent/pre-step` / `tools/pre-execute` 拦截），旧技能仅源码存档。当前差异见根 NOTICE，评审见 `docs/reviews/`，发布记录见 `docs/releases/`，验证见 `docs/VERIFICATION.md`。以下 2.1/2.2 保留上游与 hermes 的历史快照，当前补丁数与人格结构以 [CURRENT](CURRENT.md) 为准。
+当前 1.1.1 使用 Harness 0.2.1-rc.5 / purge 1.1.87；本地靶场范围闸已移除（不再注册 `agent/pre-step` / `tools/pre-execute` 拦截），旧技能仅源码存档。当前差异见根 NOTICE，评审见 `docs/reviews/`，发布记录见 `docs/releases/`，验证见 `docs/VERIFICATION.md`。以下 2.1/2.2 保留上游与 hermes 的历史快照，当前补丁数与人格结构以 [CURRENT](CURRENT.md) 为准。
 
 ## 1. 为什么是「合并」而不是「选一个」
 
@@ -8,7 +8,7 @@
 
 | 层 | 谁负责 | 产物 |
 |---|---|---|
-| 宿主层（审批/沙箱/hook/身份段/提示词组装） | dsh-purge | 88 条补丁定义 |
+| 宿主层（审批/沙箱/hook/身份段/提示词组装） | dsh-purge | 91 条补丁定义 |
 | 行为层（人格/输出契约/领域技能） | hermes-seagull | SOUL + 5 技能 |
 | 工具层（红队打法/隧道/凭据/横向） | dsh-purge | 23 红队技能 + 演练台 |
 
@@ -18,7 +18,7 @@
 
 ### 2.1 dsh-purge 1.1.72（历史快照）
 
-> 下面写的是 1.1.72 快照的 86 条定义；当前 1.0.14 为 88 条，见 [CURRENT](CURRENT.md)。
+> 下面写的是 1.1.72 快照的 86 条定义；当前 1.1.1 为 91 条，见 [CURRENT](CURRENT.md)。
 
 ```
 bin/dsh-purge.js       CLI：--status/--apply/--revert/--uninstall/--edit

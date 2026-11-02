@@ -20,6 +20,8 @@ import { spawn, execFileSync } from 'node:child_process'
 import { request as httpsRequest } from 'node:https'
 import { dispatch, dispatchAsync } from './store-core.js'
 import { startToolkitInstall, toolkitInstallStatus } from './tool-installer.js'
+import { assertPathWithin } from './validate.js'
+import { validSkillName } from '../skills.js'
 /* 技能可用性判定与 redteam_preflight 共用同一份实现（环境变量 / 本机路径 / 占位符） */
 import { checkSkill, officialSkillSummaries, skillLibraryOf, summarizeSkills } from './skill-availability.js'
 import { maxAgentsOf, maxAgentsSourceOf, saveMaxAgents, DEFAULT_MAX_AGENTS, MAX_AGENTS_LIMIT } from './settings.js'
@@ -81,9 +83,9 @@ function resolvePluginSkillsDir() {
 const PLUGIN_SKILLS_DIR = resolvePluginSkillsDir()
 
 function readOfficialSkill(name) {
-  if (typeof name !== 'string' || name.length === 0) return { ok: false, error: 'name required' }
+  if (typeof name !== 'string' || name.length === 0) return { ok: false, error: '缺少 name 参数' }
   const found = officialSkillSummaries().find((skill) => skill.name === name)
-  if (!found) return { ok: false, error: 'skill not found: ' + name }
+  if (!found) return { ok: false, error: '技能不存在: ' + name }
   return {
     ok: true,
     name: found.name,
@@ -327,8 +329,8 @@ async function updatePreflight(ctx) {
   /* ① 开发态（源码软链）：profile 里没有这个包名 → 不能用包管理器更新 */
   const devLinked = declared === null && !existsSync(join(installedDir, 'package.json'))
   if (devLinked) {
-    blockers.push("This is a **development install** (the profile dependencies do not list " + pkg.name + " and it is source-symlinked or mounted manually), so package-manager updates do not apply.")
-    notes.push("For a development install, upgrade in this repository: `git pull && npm run build:client`, then restart DeepSeek Harness.")
+    blockers.push("这是**开发态安装**（profile 依赖里没有 " + pkg.name + "，且是源码软链或手动挂载），包管理器更新不适用。")
+    notes.push("开发态安装请在仓库内升级：`git pull && npm run build:client`，然后重启 DeepSeek Harness。")
   }
 
   /* ② 有智能体在跑：重启会打断它们 */
@@ -352,7 +354,7 @@ async function updatePreflight(ctx) {
     }
   } catch { /* 注册表不可用就不挡（只是少了一层保护） */ }
   if (running.length > 0) {
-    blockers.push("There are " + running.length + " agent(s) running (" + running.map((r) => r.label).join(', ') + "): updating restarts the current host and will interrupt them. Wait for them to finish.")
+    blockers.push("当前有 " + running.length + " 个智能体在跑（" + running.map((r) => r.label).join(', ') + "）：更新会重启当前宿主并打断它们，等它们跑完再更新。")
   }
   return { dir, declared, packageManager: packageManagerOf(dir), devLinked, running, blockers, notes }
 }
@@ -387,14 +389,14 @@ function fetchJsonFromGithub(url) {
         res.on('data', (chunk) => {
           if (body.length + chunk.length > BODY_CAP) {
             try { res.destroy(new Error('body too large')) } catch { /* 忽略 */ }
-            resolveP({ ok: false, error: 'response body too large' })
+            resolveP({ ok: false, error: '响应体过大' })
             return
           }
           body += chunk
         })
         res.on('end', () => {
           try { resolveP({ ok: true, data: JSON.parse(body) }) }
-          catch { resolveP({ ok: false, error: 'JSON parse error' }) }
+          catch { resolveP({ ok: false, error: 'JSON 解析失败' }) }
         })
       })
       // req.setTimeout 要 socket 分配后才生效,DNS 查询阶段卡死不触发。外加 setTimeout 兜底。
@@ -421,7 +423,7 @@ function isPrereleaseName(name) {
 async function checkLatestFromGithub(homepage) {
   const repo = githubRepoOf(homepage)
   const r = await fetchJsonFromGithub(`https://api.github.com/repos/${repo}/tags?per_page=50`)
-  if (!r.ok || !Array.isArray(r.data)) return { ok: false, error: r.error || "GitHub tags unavailable" }
+  if (!r.ok || !Array.isArray(r.data)) return { ok: false, error: r.error || "GitHub 标签获取失败" }
   let latest = null
   for (const row of r.data) {
     const name = String(row && row.name || '').trim()
@@ -433,7 +435,7 @@ async function checkLatestFromGithub(homepage) {
     if (isPrereleaseName(ver)) continue
     if (!latest || versionLess(latest, ver)) latest = ver
   }
-  if (!latest) return { ok: false, error: "No recognizable stable release tag on GitHub" }
+  if (!latest) return { ok: false, error: "GitHub 上没有可用的稳定版标签" }
   return { ok: true, latest, registry: 'github' }
 }
 
@@ -765,17 +767,17 @@ async function handleSkillOp(ctx, request) {
         cached: availability.cached,
         broken: Array.from(availability.byName.values()).filter((x) => x.status === 'broken')
           .map((x) => ({ name: x.name, problems: x.problems, needs_user: x.needs_user })),
-        note: "Availability = the skill file exists and its body can be loaded. Missing tools, keys, and VPS placeholders are recorded as gaps and do not mark the whole skill unavailable.",
+        note: '可用 = 技能文件存在且正文能读取。缺工具、缺 key、VPS 占位符未填只记为待补项，不会把整条技能判为不可用。',
       },
       bySource: Array.from(bySource, ([k, n]) => ({ key: k, n })).sort((a, b) => b.n - a.n),
       byDir: Array.from(byDir, ([k, n]) => ({ key: k, n })).sort((a, b) => b.n - a.n),
-      note: "Red team skills and official skills are separate. Tool-path checks apply only to red team skills; official skills live in $DSH_HOME/skills and are invoked by the host per task.",
+      note: '红队技能与官方技能是两个库：工具路径检查只作用于红队技能；官方技能在 $DSH_HOME/skills，由宿主按任务调用。',
       items,
     })
   }
   if (request.library === 'official') return readOfficialSkill(request.name)
   if (typeof request.name !== 'string' || request.name.length === 0) {
-    return { ok: false, error: 'name required' }
+    return { ok: false, error: '缺少 name 参数' }
   }
   try {
     const skill = await skillsSvc.get(request.name, { scope })
@@ -799,7 +801,7 @@ async function handleSkillOp(ctx, request) {
 function handleSkillOpFromPluginDir(request) {
   const dir = resolvePluginSkillsDir() || PLUGIN_SKILLS_DIR
   if (!dir || !existsSync(dir)) {
-    return { ok: false, error: "The bundled skills/redteam directory does not exist, and the host skills service is unavailable" }
+    return { ok: false, error: "随包 skills/redteam 目录不存在，宿主 skills 服务也不可用" }
   }
   const files = readdirSync(dir).filter((f) => f.endsWith('.md'))
   const parseMeta = (text) => {
@@ -868,20 +870,23 @@ function handleSkillOpFromPluginDir(request) {
         cached: false,
         broken: Array.from(byName.values()).filter((x) => x.status === 'broken')
           .map((x) => ({ name: x.name, problems: x.problems, needs_user: x.needs_user })),
-        note: "Self-check against this package's skill files (including the Env adapt config.json). Tool paths, keys, and VPS placeholders are recorded only as gaps and do not mark the whole skill unavailable.",
+        note: "按本包的技能文件自检（含环境适配 config.json）。工具路径、key、VPS 占位符只记为待补项，不会把整条技能判为不可用。",
       },
       bySource: [{ key: 'plugin', n: items.length }],
       byDir: [{ key: dir, n: items.length }],
-      note: "The bundled skills/redteam has " + items.length + " skill(s); availability was checked against their bodies and this machine's config.",
+      note: "随包 skills/redteam 共 " + items.length + " 条技能；可用性按技能正文与本机配置实测。",
       items,
     })
   }
   if (request.library === 'official') return readOfficialSkill(request.name)
   if (typeof request.name !== 'string' || request.name.length === 0) {
-    return { ok: false, error: 'name required' }
+    return { ok: false, error: '缺少 name 参数' }
   }
-  const file = join(dir, request.name.endsWith('.md') ? request.name : (request.name + '.md'))
-  if (!existsSync(file)) return { ok: false, error: 'skill not found: ' + request.name }
+  /* name 会直接拼进路径：必须挡掉 `../` 与绝对路径（这条兜底路径曾能读任意 *.md）。 */
+  const skillName = request.name.replace(/\.md$/i, '')
+  if (!validSkillName(skillName)) return { ok: false, error: '技能名不合法: ' + request.name }
+  const file = assertPathWithin(join(dir, skillName + '.md'), [dir])
+  if (!existsSync(file)) return { ok: false, error: '技能不存在: ' + request.name }
   let content = ''
   try { content = readFileSync(file, 'utf8') } catch (error) {
     return { ok: false, error: error && error.message ? error.message : String(error) }
@@ -889,7 +894,7 @@ function handleSkillOpFromPluginDir(request) {
   const meta = parseMeta(content)
   return {
     ok: true,
-    name: request.name.replace(/\.md$/i, ''),
+    name: skillName,
     description: meta.description,
     whenToUse: meta.whenToUse,
     provider: 'dsh-purge',
@@ -1002,7 +1007,7 @@ async function handleUpdateOp(ctx, request) {
   }
   /* updateApply */
   if (pre.blockers.length > 0) {
-    return { ok: false, error: "Cannot update now: " + pre.blockers.join(' '), blockers: pre.blockers, notes: pre.notes }
+    return { ok: false, error: "现在无法更新： " + pre.blockers.join(' '), blockers: pre.blockers, notes: pre.notes }
   }
   /* target 会被原样拼进 `npm install <target>`：不校验就等于把"装任意包并重启进程"
      暴露给浏览器侧输入。只接受纯 semver（可带 v 前缀），其余一律拒绝并说清原因。 */
@@ -1047,7 +1052,7 @@ export function apply(ctx) {
                 return {
                   kind: 'reject',
                   reason: status.message
-                    || "Environment not adapted: open dsh-purge → Env adapt to configure the tools, or confirm Skip for now before sending.",
+                    || "环境未适配：打开 dsh-purge → Env adapt 配置工具，或先确认「暂时跳过」再发送。",
                   messages: [],
                 }
               }
@@ -1088,32 +1093,29 @@ export function apply(ctx) {
         sendJson(res, 405, { ok: false, error: 'POST only' })
         return
       }
-      /* 来源校验：本机回环一律放行（官方桌面端 Origin 常是 app:// / file://，
-         旧逻辑会把 Origin.host 判空后直接 403，导致技能库/知识库/SQL 全挂）。
-         非回环才要求 Origin 与 Host 同源。 */
-      const remote = req.socket && req.socket.remoteAddress ? String(req.socket.remoteAddress) : ''
-      const loopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1'
+      /* 来源校验：**不能**因为 remoteAddress 是回环就放行 —— 浏览器访问本机服务时
+         它本来就是 127.0.0.1，等于任何网页都能 POST 进来改数据（CSRF）。
+         以 Origin 与 Host 是否一致为准；桌面端 Origin 是 app:// 或 null，仅在 Host 为本机时放行。 */
       const host = typeof req.headers.host === 'string' ? req.headers.host : ''
       const hostLocal = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(host)
+      const site = String(req.headers['sec-fetch-site'] || '').toLowerCase()
       const origin = req.headers.origin
       const originOk = (() => {
-        if (loopback) return true
-        /* 官方桌面端：Origin 常为 app:// / null，Host 仍是 127.0.0.1:port */
-        if (hostLocal) {
-          if (origin === undefined || origin === '' || origin === 'null') return true
-          if (typeof origin === 'string' && /^app:/i.test(origin)) return true
-          try {
-            const oh = new URL(origin).host
-            if (oh === host || oh === '' ) return true
-          } catch { /* fall through */ }
-        }
-        if (typeof origin !== 'string' || origin === '') return false
-        let originHost = null
-        try { originHost = new URL(origin).host } catch { originHost = null }
-        return originHost !== null && originHost === host
+        /* 浏览器自己标的跨站请求直接拒（也覆盖 sandbox iframe 的 Origin: null）。 */
+        if (site === 'cross-site' || site === 'same-site') return false
+        if (origin === undefined || origin === '') return true   /* 非浏览器客户端（curl / 脚本） */
+        if (origin === 'null') return hostLocal && (site === '' || site === 'none')
+        if (/^app:/i.test(String(origin))) return hostLocal
+        try { return new URL(origin).host === host } catch { return false }
       })()
       if (!originOk) {
         sendJson(res, 403, { ok: false, error: 'cross-origin request rejected' })
+        return
+      }
+      /* 只收 JSON：跨站"简单请求"（text/plain 表单）过不了这一关。 */
+      const ctype = String(req.headers['content-type'] || '').toLowerCase()
+      if (!ctype.includes('application/json')) {
+        sendJson(res, 415, { ok: false, error: 'content-type must be application/json' })
         return
       }
       try {
@@ -1144,7 +1146,7 @@ export function apply(ctx) {
             if (!skillResult || skillResult.ok === false) {
               skillResult = {
                 ok: false,
-                error: "Skill read failed: " + (skillErr && skillErr.message ? skillErr.message : String(skillErr)),
+                error: "技能读取失败： " + (skillErr && skillErr.message ? skillErr.message : String(skillErr)),
               }
             }
           } else {

@@ -11,7 +11,7 @@ const script = fileURLToPath(new URL('../src/tools/managed_teams.py', import.met
 const vendor = fileURLToPath(new URL('../vendor/dsh-agent-teams', import.meta.url));
 const name = '@nanmicoder/dsh-agent-teams';
 for (const shell of process.platform === 'win32' ? ['bash', 'powershell'] : ['bash']) {
-  test(shell + ' fresh installation without an explicit toolkit choice stops before deployment', t => {
+  test(shell + ' fresh installation uses a non-interactive per-user toolkit default', t => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'seagull-first-choice-')); t.after(() => fs.rmSync(home, { recursive: true, force: true }));
     const pkg = path.join(home, 'profiles/desktop/package.json'); fs.mkdirSync(path.dirname(pkg), { recursive: true });
     const original = '{"dependencies":{},"dsh":{"profile":{"bundles":[]}}}'; fs.writeFileSync(pkg, original);
@@ -20,7 +20,11 @@ for (const shell of process.platform === 'win32' ? ['bash', 'powershell'] : ['ba
     const args = shell === 'bash' ? [path.join(repo, 'install.sh'), '--dsh-home', home, '--app-root', app, '--profile', 'desktop', '--no-pnpm'] : ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(repo, 'install.ps1'), '-DshHome', home, '-AppRoot', app, '-Profile', 'desktop', '-NoPnpm'];
     const program = shell === 'powershell' ? 'powershell.exe' : process.platform === 'win32' ? path.join(process.env.ProgramFiles, 'Git/bin/bash.exe') : 'bash';
     const r = spawnSync(program, args, { env, encoding: 'utf8', timeout: 30000, input: '' });
-    assert.notEqual(r.status, 0, r.stdout + r.stderr); assert.match(r.stdout + r.stderr, /工具安装目录/); assert.equal(fs.readFileSync(pkg, 'utf8'), original); assert.ok(!fs.existsSync(path.join(home, 'plugins')));
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout + r.stderr, /使用安全默认值/);
+    const config = JSON.parse(fs.readFileSync(path.join(home, 'redteam/config.json'), 'utf8'));
+    assert.match(config.toolkitDir.replace(/\\/g, '/'), /\/SeaGull\/toolkit$|\/seagull\/toolkit$/i);
+    assert.ok(fs.existsSync(path.join(home, 'plugins/dsh-purge/package.json')));
   });
 }
 test('toolkit choice validation has no side effects and saving preserves existing settings', t => {

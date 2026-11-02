@@ -16,12 +16,15 @@ import {
   isMnemonPluginMessage,
   isRedteamSession,
   installAssembleGuard,
+  clearAssembleGuard,
   modePromptText,
   peelChatmlEnvelope,
   escapeDshInterpolation,
   rewritePromptAssembly,
 } from "./identity.js";
 import { capabilityProtocolText, CAPABILITY_SECTION } from "./capability-protocol.js";
+import { registerAnchor, anchorTextFor, ANCHOR_SECTION } from "./anchor.js";
+import { installSubagentControl } from "./subagent-control.js";
 import { installSubagentRoleCapture, resolveSubagentRoleText } from "./redteam/role-section.js";
 import * as rewind from "./rewind.js";
 import * as continueRetry from "./continue-retry.js";
@@ -78,7 +81,26 @@ const DEFAULTS = {
   // Codex 风格：教模型主动发现 skill / MCP；不改官方注册与工具面。
   capabilityProtocol: true,
   hooksDenyBypass: true,
+  anchorMode: "off",      // 海鸥人格单源：默认不追加第二段提示词锚点
+  subagentControl: true,  // false 立即回滚子代理审批接管
 };
+
+/* YAML 里写成 "false" 的布尔会被 JS 当真值：两个默认开启的开关一旦被写成字符串，
+   用户以为关了其实还开着。统一收敛一次。 */
+export const BOOLEAN_CONFIG_KEYS = [
+  "enabled", "autoApplyOnStart", "autoUpdateOnStart", "autoRevertOnMissing",
+  "injectOnce", "stripMnemon", "verbose", "autoRetry", "autoContinue",
+  "capabilityProtocol", "hooksDenyBypass", "subagentControl",
+];
+
+export function normalizeConfig(raw) {
+  const cfg = { ...DEFAULTS, ...(raw || {}) };
+  for (const key of BOOLEAN_CONFIG_KEYS) {
+    const value = cfg[key];
+    if (typeof value === "string") cfg[key] = !/^(false|0|no|off)$/i.test(value.trim());
+  }
+  return cfg;
+}
 
 const log = (config, ...args) => {
   if (config?.verbose) console.log("[dsh-purge]", ...args);
@@ -166,10 +188,18 @@ function renderStatus(state) {
     ? state.display_patches
     : core.groupPatchesForDisplay(core.ALL_PATCHES, state.patch_status || {});
   const displayTally = core.tallyDisplayPatches(displayRows);
-  out.push(`补丁 / patches: ${displayTally.applied}/${displayTally.total || 0} applied, ${displayTally.pending} pending`);
+  out.push(`补丁 / patches: ${displayTally.applied}/${displayTally.total || 0} applied, ${displayTally.pending} pending`
+    + (displayTally.drifted ? `, ${displayTally.drifted} drifted（官方原文已改，需更新 pattern）` : ""));
+  if (state.host_version) {
+    const supported = state.host_supported !== false;
+    const compat = supported
+      ? ""
+      : `  ← 未适配：插件声明 ${state.host_target || "?"}`;
+    out.push(`宿主 / host: ${state.host_version}${compat}`);
+  }
   for (const row of displayRows) {
     const s = row.status || "n/a";
-    const mark = s === "applied" ? "✓" : s === "pending" ? "✗" : "·";
+    const mark = s === "applied" ? "✓" : s === "pending" ? "✗" : s === "drifted" ? "!" : "·";
     const patch = core.ALL_PATCHES.find((item) => item.id === row.id);
     const label = patch ? patch.name : `patch-${row.id}`;
     const layer = patch ? `${patch.layer}/${patch.layer_en}` : row.layer || "";
@@ -185,11 +215,15 @@ function injectAllowedNow(config) {
 }
 
 /** 提示词框自改 > prompt-inject.md > 加密默认（见 rules.resolveInjectText）。 */
-// mtime 节流:400ms setInterval + 每 pre-step + 每 preset-selected + 每 readInjectFallback
-// 的高频触发下,disk sync + 3 次 hashOverride + 2 次模块级赋值一轮能点 20 次。
-// 短窗复用上次结果:home 没换 + 文件 mtime 没变 + 距上次 < 200ms,直接返回缓存。
-let hungCache = { home: "", mtime: 0, at: 0, resolved: null };
-const HUNG_CACHE_MS = 200;
+// 缓存按 (home, mtime, 提交版本) 失效，不再靠 200ms 时间窗：
+// host 每轮 refresh 都会调 __dshPurgeHungPrompt，时间窗一过就全量 sync + 解密 23KB，
+// 桌面宿主在这段时间里被拖住（#194）。只有文件或内存正文真的变了才重算。
+let hungCache = { home: "", mtime: 0, rev: -1, resolved: null };
+// 风暴熔断：正常一轮请求只有个位数调用；10s 内上百次说明有循环在踩，
+// 直接返回上一次结果，避免继续拖住宿主主线程。
+const HUNG_STORM_WINDOW_MS = 10000;
+const HUNG_STORM_LIMIT = 120;
+let hungStorm = { at: 0, calls: 0, tripped: false };
 function statInjectMtimeMs(home) {
   if (!home) return 0;
   try {
@@ -200,11 +234,12 @@ function refreshHungOperator(dshHome = core.findDshHome()) {
   const home = core.pinDshHome() || dshHome || core.findDshHome();
   const now = Date.now();
   const mtimeBefore = statInjectMtimeMs(home);
+  const rev = core.committedOverrideRevision();
   if (
     hungCache.resolved
     && hungCache.home === home
     && hungCache.mtime === mtimeBefore
-    && now - hungCache.at < HUNG_CACHE_MS
+    && hungCache.rev === rev
   ) {
     return hungCache.resolved;
   }
@@ -212,6 +247,19 @@ function refreshHungOperator(dshHome = core.findDshHome()) {
   // 否则 resolveInjectText 会一直返回启动时钉住的那一版。
   if (hungCache.home === home && hungCache.mtime !== mtimeBefore) {
     try { core.clearCommittedOverride(home); } catch { /* 旧宿主没有该导出时保持兼容 */ }
+  }
+  if (now - hungStorm.at > HUNG_STORM_WINDOW_MS) {
+    hungStorm = { at: now, calls: 0, tripped: false };
+  }
+  hungStorm.calls += 1;
+  if (hungStorm.calls > HUNG_STORM_LIMIT) {
+    if (!hungStorm.tripped) {
+      hungStorm.tripped = true;
+      purgeLog("host.hungStorm", { calls: hungStorm.calls, windowMs: HUNG_STORM_WINDOW_MS });
+    }
+    if (hungCache.resolved) return hungCache.resolved;
+    const pinned = core.hungOperatorPrompt() || "";
+    if (pinned) return { text: pinned, source: "storm", ruleId: null };
   }
   try { core.syncPromptInjectOnDiskSync(home); } catch { /* 同步失败仍按 resolve 走 */ }
   const resolved = rules.resolveInjectText(home);
@@ -225,8 +273,13 @@ function refreshHungOperator(dshHome = core.findDshHome()) {
     core.rememberCommittedOverride(home, text);
   }
   const out = { ...resolved, text: text || resolved.text };
-  // 用 sync 之后的 mtime 存 cache,下次高频轮询(文件没被外部动)直接命中。
-  hungCache = { home, mtime: statInjectMtimeMs(home), at: now, resolved: out };
+  // 用 sync 之后的 mtime + 最新提交版本存 cache，下次高频轮询直接命中。
+  hungCache = {
+    home,
+    mtime: statInjectMtimeMs(home),
+    rev: core.committedOverrideRevision(),
+    resolved: out,
+  };
   return out;
 }
 
@@ -240,28 +293,54 @@ function installHungPromptGlobal() {
   //   2) hungOperatorPrompt   — 上次挂上的内存钉子(进程生命周期)
   //   3) readPromptInjectFileSync — 直读磁盘 prompt-inject.md,绕过 sync/resolve
   //   4) defaultOverrideText — 加密槽解包,除非插件安装残缺否则非空
+  // 超时熔断（#194）：这是 host 主线程同步调用的函数，一次全量 resolve 若被磁盘/解密
+  // 拖到秒级，宿主就整段挂住。连续慢调用后进入冷却期，只交内存里已挂上的正文。
+  const HUNG_SLOW_MS = 1500;
+  const HUNG_SLOW_COOLDOWN_MS = 30000;
+  let hungSlowAt = 0;
+  let hungDepth = 0;
   const fn = () => {
     const norm = (s) => peelChatmlEnvelope(String(s || "").replace(/\r\n/g, "\n"));
+    // 重入保护：同一轮里再进来只回内存钉子，绝不再走磁盘。
+    if (hungDepth > 0) return norm(core.hungOperatorPrompt());
+    if (hungSlowAt && Date.now() - hungSlowAt < HUNG_SLOW_COOLDOWN_MS) {
+      const pinned = norm(core.hungOperatorPrompt());
+      if (pinned) {
+        purgeLog("host.hungFn", { tier: "breaker", bytes: pinned.length });
+        return pinned;
+      }
+    }
     let home = "";
     try { home = core.findDshHome(); } catch { home = ""; }
+    hungDepth += 1;
+    const started = Date.now();
     try {
-      const text = norm(refreshHungOperator(home).text);
-      if (text) { purgeLog("host.hungFn", { tier: "refresh", bytes: text.length }); return text; }
-    } catch (e) { purgeLog("host.hungFn", { tier: "refresh", err: String(e?.message || e) }); }
-    try {
-      const hung = norm(core.hungOperatorPrompt());
-      if (hung) { purgeLog("host.hungFn", { tier: "hung", bytes: hung.length }); return hung; }
-    } catch (e) { purgeLog("host.hungFn", { tier: "hung", err: String(e?.message || e) }); }
-    try {
-      const disk = norm(core.readPromptInjectFileSync(home));
-      if (disk) { purgeLog("host.hungFn", { tier: "disk", bytes: disk.length }); return disk; }
-    } catch (e) { purgeLog("host.hungFn", { tier: "disk", err: String(e?.message || e) }); }
-    try {
-      const sealed = norm(core.defaultOverrideText());
-      if (sealed) { purgeLog("host.hungFn", { tier: "sealed", bytes: sealed.length }); return sealed; }
-    } catch (e) { purgeLog("host.hungFn", { tier: "sealed", err: String(e?.message || e) }); }
-    purgeLog("host.hungFn", { tier: "empty", bytes: 0 });
-    return "";
+      try {
+        const text = norm(refreshHungOperator(home).text);
+        if (text) { purgeLog("host.hungFn", { tier: "refresh", bytes: text.length }); return text; }
+      } catch (e) { purgeLog("host.hungFn", { tier: "refresh", err: String(e?.message || e) }); }
+      try {
+        const hung = norm(core.hungOperatorPrompt());
+        if (hung) { purgeLog("host.hungFn", { tier: "hung", bytes: hung.length }); return hung; }
+      } catch (e) { purgeLog("host.hungFn", { tier: "hung", err: String(e?.message || e) }); }
+      try {
+        const disk = norm(core.readPromptInjectFileSync(home));
+        if (disk) { purgeLog("host.hungFn", { tier: "disk", bytes: disk.length }); return disk; }
+      } catch (e) { purgeLog("host.hungFn", { tier: "disk", err: String(e?.message || e) }); }
+      try {
+        const sealed = norm(core.defaultOverrideText());
+        if (sealed) { purgeLog("host.hungFn", { tier: "sealed", bytes: sealed.length }); return sealed; }
+      } catch (e) { purgeLog("host.hungFn", { tier: "sealed", err: String(e?.message || e) }); }
+      purgeLog("host.hungFn", { tier: "empty", bytes: 0 });
+      return "";
+    } finally {
+      hungDepth -= 1;
+      const cost = Date.now() - started;
+      if (cost >= HUNG_SLOW_MS) {
+        hungSlowAt = Date.now();
+        purgeLog("host.hungFn", { tier: "slow", ms: cost });
+      }
+    }
   };
   globalThis.__dshPurgeHungPrompt = fn;
   return fn;
@@ -524,17 +603,45 @@ function installMnemonMessageStrip(ctx, config = {}) {
   } catch { /* 死 ctx 时无 effect，靠下一次 apply 覆盖 */ }
 }
 
+// assemble 可能被 guard 和 waterfall 各处理一次；同一对象只改写一次。
+const liveRewriteCache = new WeakMap();
+
 function rewriteLiveAssembly(config, assembled, context, decision = { mode: "full", taskKind: "general" }) {
+  // 同一份 assembly 可能同时经过 assemble guard 和 system-prompt/assemble 瀑布：
+  // 第二次进来内容没变，没必要再走一遍 22k 正文处理。WeakMap 随对象回收，不累积。
+  // 缓存键必须带上配置与会话签名：宿主复用同一个 assembly 对象时，光按对象做键
+  // 会把上一轮的改写结果套到这一轮（改了开关/换了会话却看不到变化）。
+  const sigHome = config.enabled !== false ? core.findDshHome() : "";
+  const sigPolicy = config.enabled !== false && sigHome ? rules.readWorkspacePolicy(sigHome) : "always";
+  const sigRedteam = config.enabled !== false && isRedteamSession(context);
+  const sigRevision = config.enabled !== false ? core.committedOverrideRevision() : "";
+  const cacheSig = [
+    config.enabled !== false,
+    config.capabilityProtocol !== false,
+    config.stripMnemon !== false,
+    config.anchorMode || "",
+    config.subagentControl !== false,
+    decision && decision.mode,
+    decision && decision.taskKind,
+    sigRedteam,
+    sigPolicy,
+    sigRevision,
+    (() => { try { const h = context?.agent?.session?.header || {}; return `${h.id || h.sessionId || ""}|${h.cwd || ""}`; } catch { return ""; } })(),
+  ].join("");
+  if (assembled && typeof assembled === "object") {
+    const cached = liveRewriteCache.get(assembled);
+    if (cached && cached.sig === cacheSig) return cached.value;
+  }
   const enabled = config.enabled !== false;
-  const redteam = enabled && isRedteamSession(context);
+  const redteam = sigRedteam;
   const full = enabled ? readInjectFallback(context) : "";
-  const dshHome = enabled ? core.findDshHome() : "";
+  const dshHome = sigHome;
   let cwd = "";
   try { cwd = String(context?.agent?.session?.header?.cwd || "").trim(); } catch { /* ignore */ }
   if (dshHome && cwd) {
     try { rules.writeLastCwd(dshHome, cwd); } catch { /* ignore */ }
   }
-  const policy = enabled && dshHome ? rules.readWorkspacePolicy(dshHome) : "always";
+  const policy = sigPolicy;
   // 提示词框为空时才启用勾选的本地 cwd 规则兜底;避免跟 prompt-inject.md 叠加污染。
   let localInject = "";
   if (enabled && dshHome && !String(full || "").trim()) {
@@ -542,7 +649,6 @@ function rewriteLiveAssembly(config, assembled, context, decision = { mode: "ful
   }
   const effectiveFull = String(full || "").trim() ? full : localInject;
   const inject = effectiveFull;
-  const anchorApplied = false;
   const hasInject = Boolean(String(inject || "").trim());
   let dropWorkspaceBaseline = false;
   if (enabled) {
@@ -559,8 +665,20 @@ function rewriteLiveAssembly(config, assembled, context, decision = { mode: "ful
     context,
     roleText,
     dropWorkspaceBaseline,
+    anchorText: enabled ? anchorTextFor(config) : "",
   });
+  const anchorApplied = Array.isArray(rewritten?.sections)
+    && rewritten.sections.some((section) => String(section?.name || "") === ANCHOR_SECTION);
   const closerFollow = closerFollowBytes(rewritten?.sections);
+  // 主会话审批策略探针：never 会让 decide() 在 approval/request 瀑布之前直接 rejected，
+  // 这是「一直拒绝」最直接的证据，必须随每轮装配打出来。
+  const approvalPolicy = (() => {
+    try {
+      const session = context?.agent?.session;
+      const svc = context?.agent?.ctx?.get?.("approval");
+      return typeof svc?.effectivePolicy === "function" ? svc.effectivePolicy(session) : "n/a";
+    } catch { return "n/a"; }
+  })();
   purgeLog("assemble.rewrite", {
     enabled,
     redteam,
@@ -575,12 +693,19 @@ function rewriteLiveAssembly(config, assembled, context, decision = { mode: "ful
     cap: config.capabilityProtocol !== false,
     strip: config.stripMnemon !== false,
     policy,
+    approval: approvalPolicy,
     dropWorkspaceBaseline,
     injectHead: Array.isArray(rewritten?.sections) && rewritten.sections[0]?.name === "dsh-purge",
+    // 接上锚点之后最后一段的 name 是 dsh-purge:anchor，不是 dsh-purge。
+    injectTail: Array.isArray(rewritten?.sections) && rewritten.sections.length > 0
+      && /^dsh-purge(:|$)/.test(String(rewritten.sections[rewritten.sections.length - 1]?.name || "")),
     chatml: Array.isArray(rewritten?.sections) && /<project_instructions>|<\|im_start\|>/i.test(String(rewritten.sections[0]?.text || "")),
     afterCloser: closerFollow,
     cwd,
   });
+  if (assembled && typeof assembled === "object" && rewritten && typeof rewritten === "object") {
+    liveRewriteCache.set(assembled, { sig: cacheSig, value: rewritten });
+  }
   return rewritten;
 }
 
@@ -593,21 +718,6 @@ function closerFollowBytes(sections) {
   const at = joined.lastIndexOf(closer);
   if (at < 0) return -1;
   return joined.length - (at + closer.length);
-}
-
-/** 注册表若已经按旧文件算过 rev，立刻 rebuilt，让页面拿到的地址和缓存一致（#63）。 */
-function publishClientBundleRevs(ctx, packageNames) {
-  if (!Array.isArray(packageNames) || packageNames.length === 0) return;
-  let mods = null;
-  try {
-    mods = ctx?.get?.("clientModules", false);
-  } catch {
-    mods = null;
-  }
-  if (!mods || typeof mods.rebuilt !== "function") return;
-  for (const id of packageNames) {
-    try { mods.rebuilt(id); } catch { /* 这一包还没进注册表，下次快照会读到新文件 */ }
-  }
 }
 
 /** Cordis 的 ctx 是 Proxy：未声明 inject 时点属性会抛 "cannot get property ... without inject"，所以两段都要包 try。 */
@@ -777,6 +887,9 @@ function installIdentityOverride(ctx, config = {}) {
     return d;
   };
   const rewriteFn = (assembled, context) => {
+    // 停用后旧 guard（包括隔离 loopCtx 上那份）必须立刻失效。不枚举 prompt：
+    // 每个 rewriteFn 都捕获同一个 ctx，读一个运行时标志即可。
+    if (ctx.__dshPurgeDisabled === true) return assembled;
     // [方案2] installAssembleGuard 走的也是这条路径,同样决策 full/anchor。
     const decision = shouldInjectAssembly(context);
     logAssembleDecision("rewriteFn", decision);
@@ -864,7 +977,11 @@ function installIdentityOverride(ctx, config = {}) {
     }
     try {
       const iso = (loopCtx && loopCtx.ctx) || loopCtx;
-      if (iso && iso !== ctx) registerPromptSections(iso, config);
+      if (iso && iso !== ctx) {
+        registerPromptSections(iso, config);
+        // 不补这一行，切换隔离上下文后锚点会消失。
+        registerAnchor(iso, config);
+      }
     } catch { /* 隔离层还没有 systemPrompt */ }
     wrapAssemble("prepareAssemble");
     return prompt || null;
@@ -923,6 +1040,9 @@ function installIdentityOverride(ctx, config = {}) {
       delete ctx.__dshPurgeSessionHook;
       delete ctx.__dshPurgePresetHook;
       delete ctx.__dshPurgePreStepHook;
+      /* 这两面 flag 以前没人清：热重载后 MnemonStrip / RegionGate 以为还装着，直接跳过。 */
+      delete ctx.__dshPurgeMnemonStrip;
+      delete ctx.__dshPurgeRegionGate;
       // [v10] AssembleHook 也要清。原漏删,ctx 复用时新 apply 看到 flag=true 直接跳过
       // ctx.on("system-prompt/assemble", ...),cordis event listener 永远不装 → 新对话首轮
       // 完全依赖 400ms setInterval wrapAssemble 的 guard,时间窗没赶上就 inject 真空。
@@ -1517,14 +1637,36 @@ async function handleSkillsCommand(rawInput) {
   }
 }
 
+/**
+ * 停用插件时把运行期钩子收干净。
+ * 宿主侧的补丁还在（要等用户 Apply/卸载才还原），它们靠 typeof 判断调用全局钩子；
+ * 这里把全局钩子换成空实现 —— 既不会让宿主崩，也不会在停用后继续注入提示词。
+ */
+function resetRuntimeHooks(ctx) {
+  for (const key of [
+    "__dshPurgeSessionHook", "__dshPurgePresetHook", "__dshPurgePreStepHook",
+    "__dshPurgeAssembleHook", "__dshPurgeMnemonStrip", "__dshPurgeRegionGate",
+  ]) {
+    try { delete ctx[key]; } catch { /* ignore */ }
+  }
+  try { globalThis.__dshPurgeHungPrompt = () => ""; } catch { /* ignore */ }
+  try { globalThis.__dshPurgePrepareAssemble = () => null; } catch { /* ignore */ }
+  // guard 的 dispose 是 noop，停用后 slot.rewrite 仍指向旧闭包（enabled:true）→ 继续注入。
+  try { clearAssembleGuard(ctx.systemPrompt); } catch { /* 无 systemPrompt 时无需清理 */ }
+  // 隔离 loopCtx 上的 guard 与主 ctx 共用这个标志，一次置位全部失效。
+  try { ctx.__dshPurgeDisabled = true; } catch { /* ignore */ }
+}
+
 export function apply(ctx, config) {
-  const cfg = { ...DEFAULTS, ...(config || {}) };
+  const cfg = normalizeConfig(config);
   if (!cfg.enabled) {
     purgeLog("boot", { enabled: false });
     try { clearOwnedSelectedDefault({ ctx, dshHome: core.findDshHome() }); } catch { /* 停用不被清默认挡住 */ }
     try { removeStaleAgentPresetDir(core.findDshHome(), "redteam"); } catch { /* ignore */ }
+    resetRuntimeHooks(ctx);
     return;
   }
+  try { delete ctx.__dshPurgeDisabled; } catch { /* ignore */ }
   cancelClearOwnedSelectedDefault();
   try {
     ctx.effect(() => () => {
@@ -1652,6 +1794,15 @@ function applyHostHooks(ctx, cfg) {
     const home = core.pinDshHome() || core.findDshHome();
     refreshHungOperator(home);
   } catch { /* 主目录尚未就绪 */ }
+  // 桌面端 office 技能缺失会让启动直接退出；异步补回，别挡启动热路径。
+  if (hostctl.currentSurface() === "desktop") {
+    setImmediate(() => {
+      try {
+        const office = core.healOfficeSkillsRuntimeOnDisk();
+        if (office && office.healed) purgeLog("heal-office-skills", office);
+      } catch { /* 没装桌面或目录不可写 */ }
+    });
+  }
   installIdentityOverride(ctx, cfg);
   // 2026-10-30：本地靶场范围闸已移除，不再注册任何目标判定拦截钩子。
   installFreshFullAccess(ctx);
@@ -1659,6 +1810,22 @@ function applyHostHooks(ctx, cfg) {
   installCwdCapture(ctx);
   installMnemonMessageStrip(ctx, cfg);
   registerPromptSections(ctx, cfg);
+  // 子代理审批修复保持启用；海鸥默认 anchorMode=off，不追加第二段人格提示词。
+  // 两者都返回 disposer，统一挂到 ctx.effect 回收；
+  // 老宿主没有 effect 时靠 cordis scope 自己回收。
+  try {
+    const disposeAnchor = registerAnchor(ctx, cfg);
+    const disposeSubagent = installSubagentControl(ctx, cfg);
+    try {
+      ctx.effect(() => () => {
+        try { disposeAnchor?.(); } catch { /* 释放过就忽略 */ }
+        try { disposeSubagent?.(); } catch { /* 释放过就忽略 */ }
+      });
+    } catch { /* 已释放 */ }
+  } catch (e) {
+    purgeLog("apply-hooks", { name: "anchor/subagent", err: String(e?.message || e) });
+  }
+
   // 本次 apply 作用域内的 continue-retry 状态；旧 ctx dispose 会把这些闭包一并带走。
   const continuePluginCfg = cfg;
   const savedContinueSettings = continueRetry.loadSettings(core.findDshHome());
@@ -1911,9 +2078,13 @@ function installWebServer(ctx, cfg) {
               patches_applied: state.ai_base ? (state.display_applied ?? state.patches_applied) : 0,
               patches_pending: state.display_pending ?? state.patches_pending,
               patches_skipped: state.display_skipped ?? state.patches_skipped ?? 0,
+              patches_drifted: state.display_drifted ?? state.patches_drifted ?? 0,
               patches_ready: state.display_ready ?? state.patches_ready ?? 0,
               patches_na: state.patches_na || 0,
               patches_total: state.ai_base ? (state.display_total ?? state.patches_total ?? 0) : 0,
+              host_version: state.host_version || "",
+              host_target: state.host_target || "",
+              host_supported: state.host_supported !== false,
               patches_lost: reapply.patchesLostAfterHostReset(),
               patch_status: state.patch_status,
               patches: (state.display_patches || []).map((p) => ({

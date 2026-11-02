@@ -9,9 +9,10 @@
  *
  * 借鉴 Z3r0：系统配置集中、可在 UI 里改（FOFA / 路径类），而不是只靠 shell 引导。
  */
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs"
 import { homedir, platform as osPlatform } from 'node:os'
 import { delimiter, isAbsolute, join, resolve, sep } from 'node:path'
+import { atomicWriteFileSync } from './atomic-write.js'
 
 /** 配置文件路径。 */
 export function configPathOf(root) {
@@ -39,8 +40,8 @@ export const TOOL_CATALOG = [
   { id: 'fscan', label: 'fscan', names: ['fscan.exe', 'fscan'] },
   { id: 'gogo', label: 'gogo', names: ['gogo.exe', 'gogo'] },
   { id: 'suo5', label: 'suo5', names: ['suo5.exe', 'suo5-windows-amd64.exe', 'suo5-linux-amd64', 'suo5'] },
-  { id: 'frpc', label: "frp client", names: ['frpc.exe', 'frpc'] },
-  { id: 'frps', label: "frp server", names: ['frps.exe', 'frps'] },
+  { id: 'frpc', label: "frp 客户端", names: ['frpc.exe', 'frpc'] },
+  { id: 'frps', label: "frp 服务端", names: ['frps.exe', 'frps'] },
   { id: 'chisel', label: 'chisel', names: ['chisel.exe', 'chisel'] },
   { id: 'ffuf', label: 'ffuf', names: ['ffuf.exe', 'ffuf'] },
   /* names 是候选文件名，不是某台机器的绝对路径。adapt 是发行版常见别名，目录里碰见才用。 */
@@ -145,7 +146,7 @@ export function savePlatformConfig(patch, root) {
     else next.tools[t.id] = String(next.tools[t.id]).trim()
   }
   const file = configPathOf(dir)
-  writeFileSync(file, JSON.stringify(next, null, 2), 'utf8')
+  atomicWriteFileSync(file, JSON.stringify(next, null, 2))
   return loadPlatformConfig(dir)
 }
 
@@ -271,7 +272,7 @@ export function resolveTool(id, options = {}) {
     if (existsSync(abs)) {
       return { id, label: def.label, path: abs, source: 'config', names: def.names }
     }
-    return { id, label: def.label, path: null, source: 'missing', names: def.names, configured: abs, note: "Configured path not found: " + abs }
+    return { id, label: def.label, path: null, source: 'missing', names: def.names, configured: abs, note: "已配置的路径不存在： " + abs }
   }
   const findOpts = { rejectPython: !!def.rejectPython, adapt: def.adapt }
   const toolkit = toolkitDirOf(cfg, root)
@@ -348,16 +349,16 @@ export function platformSummary(root) {
     },
     adapt,
     hint: adapt.kali
-      ? "Kali detected. System packages are recognized by their distro filenames: impacket-secretsdump, httpx-toolkit (the Python /usr/bin/httpx is not treated as a scanner). fscan, gogo, suo5, frp, chisel, dnsx, subfinder and ksubdomain are not shipped with Kali, so they show as not found unless they are in /usr/bin or ~/go/bin."
+      ? "已检测到 Kali。系统包按发行版文件名认：impacket-secretsdump、httpx-toolkit（不把 Python 的 /usr/bin/httpx 当成扫描器）。fscan、gogo、suo5、frp、chisel、dnsx、subfinder、ksubdomain 不是 Kali 自带命令，没放进 /usr/bin 或 ~/go/bin 就会显示未找到。"
       : (win
-        ? "Currently adapted for Windows: run in a Kali VM, or fill in tool paths / auto-assign a whole-folder toolkit on this page. For the egress proxy see \"Egress status\" below."
-        : "Currently adapted for Linux: use setup.sh to install the toolkit, or fill paths in manually / auto-assign a whole-folder toolkit on this page. For the egress proxy see \"Egress status\" below."),
+        ? "当前按 Windows 适配：在 Kali 虚拟机里跑，或在本页手填工具路径 / 选整包文件夹自动分配。出网代理见下方「出网状态」。"
+        : "当前按 Linux 适配：用 setup.sh 安装工具包，或在本页手填路径 / 选整包文件夹自动分配。出网代理见下方「出网状态」。"),
     egress: {
       http_proxy: process.env.HTTP_PROXY || process.env.http_proxy || '',
       https_proxy: process.env.HTTPS_PROXY || process.env.https_proxy || '',
       all_proxy: process.env.ALL_PROXY || process.env.all_proxy || '',
       no_proxy: process.env.NO_PROXY || process.env.no_proxy || '',
-      note: "Read-only view of the process environment; changing the system/terminal proxy requires a host restart. For per-command proxies use the cn-proxy-pool skill — it does not change this machine's network config.",
+      note: "只读进程环境；改系统/终端代理后需重启宿主。命令级代理请用技能 cn-proxy-pool，不改本机网络配置。",
     },
   }
 }
@@ -365,12 +366,12 @@ export function platformSummary(root) {
 /** 探测本机是否 Kali / 同系演练发行版。 */
 export function detectKali() {
   if (osPlatform() !== 'linux') {
-    return { kali: false, source: null, detail: "Not a Linux host" }
+    return { kali: false, source: null, detail: "非 Linux 宿主" }
   }
   try {
     const text = readFileSync('/etc/os-release', 'utf8')
     if (/ID\s*=\s*"?kali"?/i.test(text) || /ID_LIKE\s*=[^\n]*kali/i.test(text) || /NAME\s*=\s*".*Kali/i.test(text)) {
-      return { kali: true, source: 'os-release', detail: "os-release identifies Kali" }
+      return { kali: true, source: 'os-release', detail: "os-release 标明 Kali" }
     }
   } catch { /* ignore */ }
   const markers = [
@@ -406,11 +407,11 @@ export function scanFolderForTools(dir, options = {}) {
   const assigned = {}
   const hits = []
   if (!root || !existsSync(root)) {
-    return { ok: false, error: "Folder not found: " + root, assigned, hits }
+    return { ok: false, error: "文件夹不存在： " + root, assigned, hits }
   }
   let st
   try { st = statSync(root) } catch {
-    return { ok: false, error: "Cannot read folder: " + root, assigned, hits }
+    return { ok: false, error: "无法读取文件夹： " + root, assigned, hits }
   }
   if (!st.isDirectory()) {
     return { ok: false, error: "Not a folder: " + root, assigned, hits }
@@ -549,23 +550,23 @@ export function envAdaptStatus(root) {
   if (kaliInfo.kali) {
     ready = true
     reason = 'kali'
-    message = "Kali detected; by default the local tools are used directly (PATH / default lookup)."
+    message = "已检测到 Kali，默认直接使用本机工具（PATH / 默认查找）。"
   } else if (skipped) {
     ready = true
     reason = 'skipped'
-    message = "You chose to skip tool setup for now; chat works normally (scanning skills may be unavailable)."
+    message = "已选择暂时跳过工具配置，可以正常对话（扫描类技能可能不可用）。"
   } else if (savedPaths) {
     ready = true
     reason = 'configured'
-    message = "Saved tool paths are still in place; updating the plugin will not ask you to reconfigure. Found " + found + '/' + tools.length + " tools so far."
+    message = "已保存的工具路径仍然有效，更新插件不会要求重新配置。当前找到 " + found + '/' + tools.length + " 个工具。"
   } else if (found >= 2) {
     ready = true
     reason = 'tools-found'
-    message = "This machine already finds " + found + " tools, so it counts as ready."
+    message = "本机已能找到 " + found + " 个工具，视为就绪。"
   } else {
     ready = false
     reason = 'need-config'
-    message = "Kali not detected and tools are not configured. Open dsh-purge → Environment setup and fill in paths or pick a whole-folder toolkit to auto-assign; you can also confirm skip-setup for now and keep chatting."
+    message = "未检测到 Kali，且工具尚未配置。打开 dsh-purge → 环境适配，填写路径或选整包文件夹自动分配；也可以确认「暂时跳过」，继续对话。"
   }
 
   return {

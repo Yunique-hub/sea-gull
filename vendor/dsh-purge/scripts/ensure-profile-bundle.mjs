@@ -51,6 +51,9 @@ function ensureProfileInsert(profileDir) {
   const result = ensureProfileBodyInsert(profileDir);
   if (result.wrote) {
     process.stdout.write(`dsh-purge: wrote body insert (${result.path})\n`);
+  } else if (result.ok === false) {
+    // 宿主 / 用户自己的 cordis.patch.yml 内容，宁可不动也别写坏（#191）
+    process.stdout.write(`dsh-purge: skipped body insert, unrecognized patch body (${result.path})\n`);
   } else {
     process.stdout.write(`dsh-purge: insert already in ${result.path}\n`);
   }

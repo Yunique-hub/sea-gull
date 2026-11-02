@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 海鸥一键更新：获取最新源码，保留现有提示词与配置。
-# curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh | bash
+# curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh | bash -s -- --apply
 set -euo pipefail
 update_repo="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 update_branch="${SEAGULL_BRANCH:-main}"

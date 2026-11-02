@@ -1,7 +1,7 @@
 ﻿# 海鸥 · DeepSeek Harness 全破 harness —— 通用一键安装（Windows PowerShell）
 #
 #   本地:   powershell -ExecutionPolicy Bypass -File install.ps1
-#   远程:   iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))
+#   远程:   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))) -Apply
 #           本文件带 UTF-8 BOM（PS 5.1 -File 解码中文需要）；裸 `irm | iex` 会把 BOM 当作首个字符送进 iex，
 #           导致 param() 块失配并报「赋值表达式无效」。远程管道必须先用 TrimStart 剥掉 BOM。
 #   卸载:   powershell -File install.ps1 -Uninstall
@@ -21,7 +21,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 if ($Update -and $Uninstall) { throw "-Update 和 -Uninstall 不能同时使用" }
-$VERSION = "1.1.0"
+$VERSION = "1.1.1"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -107,7 +107,7 @@ if ($DryRun) {
   Say "  2. profile   $ProfDir\package.json"
   Say "  3. pnpm      $(if ($NoPnpm -or -not $Node -or -not $Pnpm) { '跳过' } else { 'install @ ' + $ProfDir })"
   Say "  4. 资产      prompt-inject.md / skills（单源，无 rules 副本） → $DH"
-  if ($Apply) { Say "  5. Apply     desktop 会解 asar 且需宿主退出" }
+  if ($Apply) { Say "  5. Apply     desktop 自动解包、换包并重启宿主" }
   Say ""
   Write-Host "--DryRun：未改动任何文件" -ForegroundColor Yellow
   exit 0
@@ -154,9 +154,8 @@ if (-not $Update -and -not $Uninstall -and (Test-Path (Join-Path $TeamsSource "p
   $toolConfig = Join-Path $DH "redteam\config.json"
   if (Test-Path $toolConfig) { $ToolkitDir = (Get-Content -LiteralPath $toolConfig -Raw -Encoding UTF8 | ConvertFrom-Json).toolkitDir }
   if (-not $ToolkitDir) {
-    if ([Console]::IsInputRedirected) { Die "首次安装请用 -ToolkitDir 指定工具安装目录，或在交互式终端运行安装器" }
-    $ToolkitDir = Read-Host "首次安装：请输入工具安装目录（不覆盖已有工具）"
-    if (-not $ToolkitDir) { Die "必须自行设置工具安装目录" }
+    $ToolkitDir = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "SeaGull\toolkit" } else { Join-Path $DH "toolkit" }
+    Say "未指定工具目录，使用安全默认值: $ToolkitDir"
   }
 }
 
@@ -255,11 +254,21 @@ if (-not $Uninstall -and (Test-Path (Join-Path $MarketSrc "plugin\package.json")
 $DependenciesReady = $false
 if (-not $NoPnpm -and $Node -and $Pnpm) {
   Step "pnpm install"
+  $SavedCI = [Environment]::GetEnvironmentVariable("CI", "Process")
   Push-Location $ProfDir
   try {
-    & $Node $Pnpm install --reporter=append-only
+    $PnpmPreflight = Join-Path $PlugDir "scripts\ensure-profile-bundle.mjs"
+    if (Test-Path -LiteralPath $PnpmPreflight -PathType Leaf) {
+      & $Node $PnpmPreflight
+      if ($LASTEXITCODE -ne 0) { throw "pnpm 构建许可预检失败" }
+    }
+    $env:CI = "true"
+    & $Node $Pnpm install --reporter=append-only --no-frozen-lockfile
     if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败：检查 registry / file: 路径后重试；备份已保留" }
-  } finally { Pop-Location }
+  } finally {
+    [Environment]::SetEnvironmentVariable("CI", $SavedCI, "Process")
+    Pop-Location
+  }
   if (-not (Test-Path -LiteralPath (Join-Path $ProfDir "node_modules\$PluginId\package.json"))) { Die "依赖未就位: node_modules/$PluginId" }
   $DependenciesReady = $true
 }
@@ -321,12 +330,19 @@ if ($Apply) {
   if (-not $Node) { Die "没有 node，无法 Apply" }
   Step "Apply"
   if ($Profile -eq "desktop" -and $Sealed) {
-    Push-Location $PlugDir
-    try { Invoke-DshCli "lib\reapply-cli.js" } finally { Pop-Location }
-    Say ""
-    Warn "密封桌面宿主：请完全退出 DeepSeek Harness，再执行："
-    Say "    Move-Item `"$AppRoot\resources\app.asar`" `"$AppRoot\resources\app.asar.sealed.bak`""
-    Say "    然后重新打开 DeepSeek Harness。"
+    $DesktopApplyHelper = Join-Path $Here "src\tools\complete_desktop_apply.ps1"
+    & $DesktopApplyHelper -AppRoot $AppRoot -PrepareOnly
+    if ($LASTEXITCODE -ne 0) { Die "无法安全退出桌面端并准备官方基线" }
+    try {
+      Push-Location $PlugDir
+      try { Invoke-DshCli "lib\reapply-cli.js" @("--no-swap", "--fresh-extract") } finally { Pop-Location }
+    } catch {
+      & $DesktopApplyHelper -AppRoot $AppRoot -StartOfficialOnly
+      throw
+    }
+    & $DesktopApplyHelper -AppRoot $AppRoot
+    if ($LASTEXITCODE -ne 0) { Die "桌面换包或重启验证失败" }
+    Ok "桌面换包与重启已完成"
   } else {
     Invoke-DshCli (Join-Path $PlugDir "bin\dsh-purge.js") @("--apply")
     Say ""; Say "重启 DeepSeek Harness 生效。"
@@ -340,10 +356,7 @@ Say ""
 Say "下一步"
 if (-not $Apply) {
   if ($Sealed) {
-    Say "  密封桌面宿主（官方 EXE），三步："
-    Say "    1) 完全退出 DeepSeek Harness"
-    Say "    2) 重开 → 会话标题旁点 dsh-purge → Clean 页 → Apply"
-    Say "    （或 install.ps1 -Apply，再按提示挪 asar）"
+    Say "  自动应用: 重新运行本安装器并加 -Apply（会自动换包并重启）"
   } else {
     Say "  重启 DeepSeek Harness → 会话标题旁点 dsh-purge → Apply"
   }

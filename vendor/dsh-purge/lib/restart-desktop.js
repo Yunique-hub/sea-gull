@@ -77,19 +77,40 @@ function rmTree(dir) {
   }
 }
 
-function pidsForImage(image) {
-  const out = execFileSync("tasklist", ["/FI", `IMAGENAME eq ${image}`, "/FO", "CSV", "/NH"], {
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: 8000,
-  });
+/** 按安装根路径找进程，不按映像名：DSH NEXT / 改名版进程名不同，写死会误杀同名第三方。 */
+function listWindowsPids(exe) {
+  if (!exe) return [];
+  let out = "";
+  try {
+    out = execFileSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-Command",
+      // 用 '|' 分隔：PowerShell 单引号字符串不解释 `t，路径里也不允许 '|'。
+      // 先统一输出编码：中文安装路径在 OEM 代码页下会被 execFileSync(utf8) 读成乱码。
+      "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " +
+      "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath } | ForEach-Object { $_.ProcessId.ToString() + '|' + $_.ExecutablePath }",
+    ], { encoding: "utf8", windowsHide: true, timeout: 10000 });
+  } catch {
+    return [];
+  }
+  const want = String(exe).toLowerCase().replace(/\\/g, "/");
+  const root = want.slice(0, want.lastIndexOf("/"));
   const pids = [];
   for (const line of String(out || "").split(/\r?\n/)) {
-    const cols = line.split(",");
-    const pid = Number(String(cols[1] || "").replace(/"/g, "").trim());
-    if (pid) pids.push(pid);
+    const bar = line.indexOf("|");
+    if (bar < 0) continue;
+    const pid = Number(line.slice(0, bar).trim());
+    const ep = line.slice(bar + 1).trim().toLowerCase().replace(/\\/g, "/");
+    if (!pid || !ep) continue;
+    if (ep === want || (root && ep.startsWith(`${root}/`))) pids.push(pid);
   }
-  return pids;
+  return [...new Set(pids)];
+}
+
+function listDesktopPids(exe = info.execPath) {
+  if (process.platform === "darwin") return listDarwinPids(exe);
+  if (process.platform !== "win32") return listPosixPids(exe);
+  // 助手自己若仍是 Electron 映像，绝不能进待杀名单（#133）。
+  return listWindowsPids(exe).filter((pid) => pid !== process.pid);
 }
 
 function darwinBundleOf(exe) {
@@ -179,22 +200,6 @@ function listPosixPids(exe) {
     pids.push(pid);
   }
   return [...new Set(pids)];
-}
-
-function listDesktopPids(exe = info.execPath) {
-  if (process.platform === "darwin") return listDarwinPids(exe);
-  if (process.platform !== "win32") return listPosixPids(exe);
-  const images = ["DeepSeek Harness.exe", "DSH Desktop.exe", "DSH NEXT.exe"];
-  const pids = [];
-  for (const image of images) {
-    try {
-      pids.push(...pidsForImage(image));
-    } catch {
-      // 该进程名不存在
-    }
-  }
-  // 助手自己若仍是 Electron 映像，绝不能进待杀名单（#133）。
-  return pids.filter((pid) => pid !== process.pid);
 }
 
 function signalPids(pids, signal) {
@@ -462,7 +467,14 @@ if (info.respawn === false) {
 }
 
 if (info.asar && !asarReleased) {
-  log("asar still sealed; not relaunching");
+  // 桌面端已经在上面的 killApp 分支被杀掉；这里直接退出就是"应用凭空消失"。
+  // Windows 的 PS1 分支早已改成失败时拉起原版 + 留 rename-pending，这里对齐。
+  try {
+    fs.writeFileSync(`${info.asar}.rename-pending`, new Date().toISOString());
+  } catch { /* 锁写不上也要先把用户拉回来 */ }
+  log("asar still sealed; relaunching original app");
+  relaunchDesktop();
+  await sleep(400);
   process.exit(1);
 }
 

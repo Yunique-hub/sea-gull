@@ -180,10 +180,11 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 			"saved.own": "已保存自己的服务器",
 			"saved.own.dropped": "已保存。有 {n} 行不是单个 IP 或主机名，已丢掉",
 			"metric.purged": "已写入",
-			"metric.purged.skip": "已写入。跳过 {n} 项，本机没有这些文件",
+			"metric.purged.skip": "已写入。{n} 项无需处理，本机没有这些文件或历史改动",
 			"metric.pendingShort": "待处理 {n}",
 			"metric.unmatchedShort": "没对上 {n}",
-			"metric.skipShort": "跳过 {n}",
+			"metric.driftedShort": "漂移 {n}",
+			"metric.skipShort": "无需处理 {n}",
 			"metric.unlocated.count": "—",
 			"metric.shim": "shim",
 			"metric.shim.na": "本端不需要",
@@ -196,8 +197,9 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 			"status.off": "已关闭",
 			"status.pending": "待应用",
 			"status.unmatched": "没对上",
-			"status.skipped": "跳过",
-			"apply.hint": "没改提示词框不用点保存，默认就是这份，启动和应用会写进 prompt-inject.md。只有自己改过再点保存才会覆盖。点应用打补丁。待应用=原文还在。跳过=当前版本不需要或组件未安装。点「恢复默认」会先把现有提示词备份成 prompt-inject.md.bak-<时间戳>，再写入默认正文。",
+			"status.drifted": "已漂移",
+			"status.skipped": "无需处理",
+			"apply.hint": "没改提示词框不用点保存，默认就是这份，启动和应用会写进 prompt-inject.md。只有自己改过再点保存才会覆盖。点应用打补丁。待应用=原文还在。无需处理=当前版本不需要、组件未安装或历史改动本就不存在。漂移=官方原文已改，这条补丁没打上，需要更新 pattern。点「恢复默认」会先把现有提示词备份成 prompt-inject.md.bak-<时间戳>，再写入默认正文。",
 			"flow.title": "清洗流程",
 			"flow.apply": "应用",
 			"flow.revert": "还原",
@@ -217,6 +219,7 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 			"unpack.restarting": "补丁已写入。点「重启」后客户端会自己重新打开。",
 			"restart.fullQuit": "正在重启，客户端会自己重新打开。",
 			"warn.noInject": "官方始终用默认提示词。红队开了规则集就只用规则集；没开时用去掉 CTF 的默认提示词，再接红队操作。两边都空会提示必须添加。",
+			"warn.hostVersion": "当前宿主是 {v}，插件适配的是 {t}。官方原文对不上时补丁会显示「漂移」，建议换回适配的宿主版本。",
 			"need.prompt": "提示词和规则集都是空的，必须先添加提示词，或启用一条有内容的规则集。",
 			"btn.restoreInject": "恢复默认",
 			"saved.restoreInject": "已恢复默认提示词",
@@ -540,10 +543,11 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 			"saved.own": "Own servers saved",
 			"saved.own.dropped": "Saved. {n} lines were not a single IP or hostname and were dropped",
 			"metric.purged": "Written",
-			"metric.purged.skip": "Written. Skipped {n}; those files are not on this install",
+			"metric.purged.skip": "Written. {n} not needed; those files or historical changes are not on this install",
 			"metric.pendingShort": "Pending {n}",
 			"metric.unmatchedShort": "No match {n}",
-			"metric.skipShort": "Skipped {n}",
+			"metric.driftedShort": "Drifted {n}",
+			"metric.skipShort": "Not needed {n}",
 			"metric.unlocated.count": "—",
 			"metric.shim": "shim",
 			"metric.shim.na": "Not needed here",
@@ -556,8 +560,9 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 			"status.off": "Off",
 			"status.pending": "Pending",
 			"status.unmatched": "No match",
-			"status.skipped": "Skipped",
-			"apply.hint": "If you did not edit the prompt box, do not save. The default is already used and is written to prompt-inject.md on start/apply. Save only after you change it. Apply writes host patches. Pending = original text still present. Skipped = not needed for this version or the component is not installed. Restore default backs up the current prompt to prompt-inject.md.bak-<timestamp> before writing the default body.",
+			"status.drifted": "Drifted",
+			"status.skipped": "Not needed",
+			"apply.hint": "If you did not edit the prompt box, do not save. The default is already used and is written to prompt-inject.md on start/apply. Save only after you change it. Apply writes host patches. Pending = original text still present. Not needed = this version does not need it, the component is absent, or the historical change is already gone. Drifted = the official source changed, this patch did not land and its pattern needs an update. Restore default backs up the current prompt to prompt-inject.md.bak-<timestamp> before writing the default body.",
 			"flow.title": "Clean flow",
 			"flow.apply": "Apply",
 			"flow.revert": "Restore",
@@ -577,6 +582,7 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 			"unpack.restarting": "Patches are written. Click Restart and the client opens again by itself.",
 			"restart.fullQuit": "Restarting. The client will open again by itself.",
 			"warn.noInject": "Official mode always uses the default prompt. Red team uses only the active rule set; otherwise it uses the default prompt without the CTF section, then the red team steps. If both are empty you will be asked to add a prompt.",
+			"warn.hostVersion": "This host is {v}, but the plugin targets {t}. When the official source no longer matches, patches show up as “drifted” — switch back to the targeted host version.",
 			"need.prompt": "Both the prompt and the rule set are empty. Add a prompt, or enable a rule that has content.",
 			"btn.restoreInject": "Reset default",
 			"saved.restoreInject": "Default prompt restored",
@@ -1143,6 +1149,23 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 .dshp-dock[data-theme="white"] .dshp-dock-body .rt-err{color:#9a3434!important}
 .dshp-dock[data-theme="dusk"] .dshp-dock-body .rt-err{color:#f0b4b4!important}
 .dshp-dock-body .rt-rep-http,.dshp-dock-body pre{background:var(--rt-well)!important;color:var(--dshp-ink)!important;border:1px solid var(--dshp-line)!important}
+/* #196：暗色宿主里 --dsw-alias-brand-primary 解析为近白色（neutral-bluish-50 #f9fafb），
+   任何“品牌色作底 + 白字”的按钮都会变成白底白字。暗色下主按钮统一改用绿色实底。 */
+body[data-ds-dark-theme] .dshp-btn-primary,
+.dshp-root[data-theme="dusk"] .dshp-btn-primary,
+.dshp-dock[data-theme="dusk"] .dshp-btn-primary,
+.dshp-restart-mask[data-theme="dusk"] .dshp-btn-primary{background:#3d8f68!important;border-color:#3d8f68!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
+body[data-ds-dark-theme] .dshp-btn-primary:hover:not(:disabled),
+.dshp-root[data-theme="dusk"] .dshp-btn-primary:hover:not(:disabled),
+.dshp-dock[data-theme="dusk"] .dshp-btn-primary:hover:not(:disabled),
+.dshp-restart-mask[data-theme="dusk"] .dshp-btn-primary:hover:not(:disabled){background:#347a59!important;border-color:#347a59!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
+body[data-ds-dark-theme] .rt-btn-primary,
+body[data-ds-dark-theme] .rt-btn-primary:hover:not(:disabled),
+.dshp-dock[data-theme="dusk"] .rt-btn-primary,
+.dshp-dock[data-theme="dusk"] .rt-btn-primary:hover:not(:disabled),
+body[data-ds-dark-theme] .dshp-dock-body .rt-btn-primary,
+.dshp-dock[data-theme="dusk"] .dshp-dock-body .rt-btn-primary{background:#3d8f68!important;border-color:#3d8f68!important;color:#fff!important;-webkit-text-fill-color:#fff!important;backdrop-filter:none}
+body[data-ds-dark-theme] .rt-rep-step-no,.dshp-dock[data-theme="dusk"] .rt-rep-step-no{background:#3d8f68;color:#fff}
 `;
 
 		function formatSize(bytes) {
@@ -1156,6 +1179,7 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 			if (st === "applied" || st === "already") return "ok";
 			if (st === "pending") return "wait";
 			if (st === "unmatched") return "bad";
+			if (st === "drifted") return "bad";
 			if (st === "na") return "ok";
 			if (st === "missing_file" || st === "skipped" || st === "unlocated" || st === "off") return "miss";
 			return "bad";
@@ -1166,6 +1190,7 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 			if (st === "off") return t("status.skipped");
 			if (st === "pending") return t("status.pending");
 			if (st === "unmatched") return t("status.unmatched");
+			if (st === "drifted") return t("status.drifted");
 			if (st === "skipped") return t("status.skipped");
 			if (st === "missing_file") return t("skip");
 			if (st === "unlocated") return t("status.unlocated");
@@ -1302,12 +1327,13 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 		}
 
 		function tallyPatches(rows) {
-			const out = { applied: 0, pending: 0, unmatched: 0, skipped: 0, total: 0 };
+			const out = { applied: 0, pending: 0, unmatched: 0, skipped: 0, drifted: 0, total: 0 };
 			for (const row of rows || []) {
 				out.total += 1;
 				if (row.st === "applied" || row.st === "already") out.applied += 1;
 				else if (row.st === "pending") out.pending += 1;
 				else if (row.st === "unmatched") out.unmatched += 1;
+				else if (row.st === "drifted") out.drifted += 1;
 				else out.skipped += 1;
 			}
 			return out;
@@ -1332,6 +1358,7 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 				const notes = [];
 				if (tally.pending) notes.push(t("metric.pendingShort", { n: tally.pending }));
 				if (tally.unmatched) notes.push(t("metric.unmatchedShort", { n: tally.unmatched }));
+				if (tally.drifted) notes.push(t("metric.driftedShort", { n: tally.drifted }));
 				if (tally.skipped) notes.push(t("metric.skipShort", { n: tally.skipped }));
 				const expanded = !!open[key];
 				return h("div", { key: key, className: "dshp-group" },
@@ -1545,6 +1572,7 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 		}
 
 		function PurgifySection() {
+			useEffect(() => () => stopRestartPolling(), []);
 			const t = useT();
 			const tRef = useRef(t);
 			tRef.current = t;
@@ -1825,12 +1853,12 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 						},
 					}));
 					const applyContent = action === "apply" ? readPromptBox() : "";
-					fetch("/dsh-purge/" + action, {
+					/* 走 apiJson：apply/revert 本来就配了 240s/120s 超时，裸 fetch 会挂死在半路。 */
+					apiJson("/dsh-purge/" + action, {
 						method: "POST",
 						headers: { "content-type": "application/json" },
 						body: JSON.stringify(action === "apply" ? { content: applyContent } : {}),
 					})
-						.then((r) => r.json())
 						.then((d) => {
 							if (ticket !== actionTicket.current) return;
 							if (responseNeedsPrompt(d)) {
@@ -1910,12 +1938,11 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 					setAskRestart(false);
 					setNotice({ kind: "idle", text: "" });
 					const content = readPromptBox();
-					fetch("/dsh-purge/override", {
+					apiJson("/dsh-purge/override", {
 						method: "POST",
 						headers: { "content-type": "application/json" },
 						body: JSON.stringify({ content: content }),
 					})
-						.then((r) => r.json())
 						.then((d) => {
 							if (ticket !== actionTicket.current) return;
 							if (!d.ok || responseNeedsPrompt(d)) {
@@ -1983,6 +2010,7 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 			}, [defaultOverride, t]);
 
 			const waitHostAfterUninstall = useCallback((tr) => {
+				stopRestartPolling();
 				const started = Date.now();
 				const ping = () => {
 					fetch("/", { cache: "no-store", credentials: "same-origin" })
@@ -2005,9 +2033,9 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 						setUninstallBusy(false);
 						return;
 					}
-					setTimeout(ping, 500);
+					restartPollTimer = setTimeout(ping, 500);
 				};
-				setTimeout(ping, 800);
+				restartPollTimer = setTimeout(ping, 800);
 			}, []);
 
 			const doUninstall = useCallback(() => {
@@ -2045,7 +2073,7 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 			const desktopLikely = hostSurface === "desktop" || clientGuessSurface() === "desktop";
 			const sealedReady = !located && desktopLikely && !!(s && (s.asar_still_sealed || s.desktop_exe || s.desktop_install));
 			const patchesLost = !located && !!(s && s.patches_lost);
-			const tally = located ? tallyPatches(patchRowsOf(s)) : { applied: 0, pending: 0, unmatched: 0, skipped: 0, total: 0 };
+			const tally = located ? tallyPatches(patchRowsOf(s)) : { applied: 0, pending: 0, unmatched: 0, skipped: 0, drifted: 0, total: 0 };
 			const total = tally.total;
 			const applied = tally.applied;
 			const job = s && s.apply_progress;
@@ -2058,6 +2086,7 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 			const metricNotes = [];
 			if (tally.pending) metricNotes.push(t("metric.pendingShort", { n: tally.pending }));
 			if (tally.unmatched) metricNotes.push(t("metric.unmatchedShort", { n: tally.unmatched }));
+			if (tally.drifted) metricNotes.push(t("metric.driftedShort", { n: tally.drifted }));
 			if (tally.skipped) metricNotes.push(t("metric.skipShort", { n: tally.skipped }));
 
 			const versions = (updateInfo && updateInfo.versions) || [];
@@ -2194,6 +2223,7 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 				h("p", { className: "dshp-hint", style: { margin: "8px 0 0", color: "var(--dshp-mute)", fontSize: 12 } }, t("apply.hint")),
 				s && !s.ai_base ? h("p", { className: "dshp-hint", style: { margin: "8px 0 0", color: "var(--dshp-danger, #c44)", fontSize: 12 } }, hostText(t, "warn.noRoot", hostSurface)) : null,
 				s && s.ai_base && s.override_status === "missing" ? h("p", { className: "dshp-hint", style: { margin: "8px 0 0", color: "var(--dshp-mute)", fontSize: 12 } }, t("warn.noInject")) : null,
+				s && s.ai_base && s.host_supported === false ? h("p", { className: "dshp-hint", style: { margin: "8px 0 0", color: "var(--dshp-danger, #c44)", fontSize: 12 } }, t("warn.hostVersion", { v: s.host_version || "?", t: s.host_target || "?" })) : null,
 				askRestart ? h(RestartAsk, {
 					t: t,
 					theme: detectHostTheme(),
@@ -2881,7 +2911,15 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 			window.location.reload();
 		}
 
+		/* 重启/卸载后的 500ms 轮询共用一个定时器：组件卸载或流程取消时要能停掉，
+		   否则面板关掉之后它还会跑到 90 秒超时。 */
+		let restartPollTimer = 0;
+		function stopRestartPolling() {
+			if (restartPollTimer) { clearTimeout(restartPollTimer); restartPollTimer = 0; }
+		}
+
 		function waitForRestart(setNotice, setBusy, t) {
+			stopRestartPolling();
 			const started = Date.now();
 			// 必须先看到旧进程掉线，再等新进程就绪；否则同进程立刻 200 会被当成「重启成功」又弹重启。
 			let sawDown = false;
@@ -2907,9 +2945,9 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 					setBusy(false);
 					return;
 				}
-				setTimeout(ping, 500);
+				restartPollTimer = setTimeout(ping, 500);
 			};
-			setTimeout(ping, 800);
+			restartPollTimer = setTimeout(ping, 800);
 		}
 
 		let restartOnce = false;
@@ -2986,6 +3024,7 @@ body[data-ds-dark-theme] .dshp-launch{background:color-mix(in srgb,var(--dsw-ali
 		}
 
 		function SettingsRoot(props) {
+			useEffect(() => () => stopRestartPolling(), []);
 			const t = typeof props.t === "function" ? props.t : ((key) => key);
 			const [theme, setTheme] = useState(readTheme);
 			useEffect(() => {
@@ -4327,11 +4366,34 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       try { return String(window.location.hash || '') === '#redteam-full' } catch { return false }
     }
 
-    const api = (req) => fetch('/redteam/api', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(req),
-    }).then((res) => res.json())
+    /* 与宿主半侧其它接口同一套约定：有超时、判 res.ok、非 JSON 响应给出可读错误。
+       直接 res.json() 时后端回 HTML/空体只会抛 "Unexpected token '<'"，状态码也丢了。 */
+    const API_TIMEOUT_MS = 120000
+    const api = (req) => {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS)
+      return fetch('/redteam/api', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(req),
+        signal: ctrl.signal,
+      })
+        .then((res) => res.text().then((text) => {
+          let data = null
+          try { data = text ? JSON.parse(text) : null } catch { throw new Error(res.status + ' non-json: ' + text.slice(0, 120)) }
+          if (!res.ok) throw new Error((data && data.error) || (res.status + ' ' + res.statusText))
+          return data
+        }))
+        .finally(() => clearTimeout(timer))
+    }
+    /* 每次加载取号，异步回来先比号：切靶标后旧响应直接丢弃，别盖掉新靶标的数据。 */
+    const useLoadSeq = () => {
+      const ref = React.useRef(0)
+      return {
+        take: () => ++ref.current,
+        live: (my) => my === ref.current,
+      }
+    }
 
     let ui = { open: true, tab: 'assets' }
     const subs = new Set()
@@ -4371,15 +4433,30 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       'vuln-scan': '漏洞发现', exploit: '漏洞利用', internal: '内网渗透',
     }
 
-    const fmt = (s) => (s ? String(s).replace('T', ' ').slice(0, 16) : '—')
+    /* 服务端时间一律是 toISOString()（UTC），直接截串会让东八区早 8 小时。 */
+    const pad2 = (n) => String(n).padStart(2, '0')
+    const asLocal = (s) => {
+      const d = new Date(s)
+      return Number.isNaN(d.getTime()) ? null : d
+    }
+    const fmt = (s) => {
+      if (!s) return '—'
+      const d = asLocal(s)
+      if (d === null) return String(s).replace('T', ' ').slice(0, 16)
+      return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate())
+        + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())
+    }
     const shotCache = new Map()
     const shotLoading = new Map()
+    /* base64 常驻内存：只留最近 200 张，避免跨靶标无限累积。 */
+    const SHOT_CACHE_LIMIT = 200
     const shotSrc = (eng, id) => shotCache.get(eng + ':' + id) || null
     const loadShot = (eng, id) => {
       const key = eng + ':' + id
       if (shotCache.has(key) || shotLoading.has(key)) return
       const p = api({ op: 'shotData', engagement: eng, id: id }).then((r) => {
         shotCache.set(key, r && r.base64 ? 'data:' + (r.mime || 'image/png') + ';base64,' + r.base64 : '')
+        while (shotCache.size > SHOT_CACHE_LIMIT) shotCache.delete(shotCache.keys().next().value)
         shotLoading.delete(key)
         const snap = Object.assign({}, ui)
         for (const f of Array.from(subs)) {
@@ -4392,7 +4469,8 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
     const ShotImage = ({ eng, shot, height }) => {
       const [zoom, setZoom] = React.useState(false)
       const src = shotSrc(eng, shot.id)
-      if (src === null) { loadShot(eng, shot.id); }
+      /* 拉图放在 effect 里：render 期间发请求 + 写外部 store 会让同一帧重复触发。 */
+      React.useEffect(() => { if (src === null) loadShot(eng, shot.id) }, [eng, shot.id, src])
       const card = shot.kind === 'card'
       return h('div', { className: 'rt-shot' },
         src === null
@@ -4429,8 +4507,14 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
     }
     /** 发现时间在列表里只留「月-日 时:分」：整行宽度紧张，完整时间进悬浮提示 */
     const fmtShort = (s) => {
-      const t = String(s || '').replace('T', ' ')
-      return t.length >= 16 ? t.slice(5, 16) : (t || '—')
+      if (!s) return '—'
+      const d = asLocal(s)
+      if (d === null) {
+        const t = String(s).replace('T', ' ')
+        return t.length >= 16 ? t.slice(5, 16) : t
+      }
+      return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate())
+        + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())
     }
     const provLabel = (p) => (p === 'passive' ? '被动' : p === 'active' ? '主动' : '未知')
 
@@ -4921,12 +5005,17 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [data, setData] = React.useState(null)
       const [err, setErr] = React.useState(null)
       const [day, setDay] = React.useState('')
+      const seq = useLoadSeq()
       React.useEffect(() => {
         if (!eng) return
+        const my = seq.take()
         setData(null)
         api({ op: 'discoveryTimeline', engagement: eng, limit: 200 })
-          .then((r) => { if (!r || r.ok === false) setErr((r && r.error) || '加载失败'); else { setErr(null); setData(r) } },
-            (e) => setErr(String((e && e.message) || e)))
+          .then((r) => {
+            if (!seq.live(my)) return
+            if (!r || r.ok === false) setErr((r && r.error) || '加载失败')
+            else { setErr(null); setData(r) }
+          }, (e) => { if (seq.live(my)) setErr(String((e && e.message) || e)) })
       }, [eng, refreshKey])
       if (err) return h('div', { className: 'rt-pane' }, h('div', { className: 'rt-err' }, err))
       if (!data) return h('div', { className: 'rt-empty' }, '加载中…')
@@ -4977,14 +5066,17 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [msg, setMsg] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
 
+      const seq = useLoadSeq()
       React.useEffect(() => {
         /* 无靶标也允许：服务端回内置默认，不再报 engagement required */
+        const my = seq.take()
         api(eng ? { op: 'prompts', engagement: eng } : { op: 'prompts' }).then((r) => {
+          if (!seq.live(my)) return
           if (!r || r.ok === false) { setMsg({ err: (r && r.error) || '读取失败' }); return }
           setRoles(r.roles || [])
           if (r.roles && r.roles.length) setActive((cur) => cur || r.roles[0].role)
           if (r.builtin) setMsg({ ok: '当前为内置默认提示词（创建靶标后可按靶标保存修改）' })
-        }, (e) => setMsg({ err: String((e && e.message) || e) }))
+        }, (e) => { if (seq.live(my)) setMsg({ err: String((e && e.message) || e) }) })
       }, [eng, refreshKey])
 
       React.useEffect(() => {
@@ -5560,7 +5652,8 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
 
       return h('div', { className: 'rt-main' }, toolbar, conclusion,
         h('div', { className: 'rt-subtabs' },
-          subTabBtn('vulns', '漏洞', state.total || 0),
+          /* 用实际渲染条数：total 是服务端 COUNT(*)，列表被 limit 截断时两者对不上。 */
+          subTabBtn('vulns', '漏洞', (state.items || []).length),
           subTabBtn('files', '攻击文件', allFiles.length),
           subTabBtn('creds', '凭据', creds.length),
           subTabBtn('access', '访问会话', accesses.length),
@@ -5614,14 +5707,17 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [view, setView] = React.useState('A')
       const [openId, setOpenId] = React.useState(null)
 
+      const seq = useLoadSeq()
       const load = () => {
         if (!eng) return
+        const my = seq.take()
         setLoading(true)
         api({ op: 'scoreChain', engagement: eng }).then((r) => {
+          if (!seq.live(my)) return
           setLoading(false)
           if (!r || r.ok === false) { setErr((r && r.error) || '读取失败'); return }
           setErr(null); setData(r)
-        }, (e) => { setLoading(false); setErr(String((e && e.message) || e)) })
+        }, (e) => { if (!seq.live(my)) return; setLoading(false); setErr(String((e && e.message) || e)) })
       }
       React.useEffect(load, [eng, refreshKey])
 
@@ -5820,21 +5916,28 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       /* 报告按阶段折叠：默认全开，折叠状态按靶标记住（阶段多时便于逐段交付） */
       const collapse = useCollapse('report:' + eng)
 
+      const seq = useLoadSeq()
       const load = () => {
         if (!eng) return
+        const my = seq.take()
         setBusy(true); setMsg(null)
         api({ op: 'scoreReport', engagement: eng }).then((r) => {
+          if (!seq.live(my)) return
           if (!r || r.ok === false) { setBusy(false); setErr((r && r.error) || '生成失败'); return }
           /* 老 host 只给平铺条目、不给阶段分组（或阶段行缺失）：自己按攻击链分组，
              否则报告页会误报"还没有可交付的成果"。分组数据取自 scoreChain。 */
           if ((!r.stages || r.stages.length === 0) && (r.items || []).length > 0) {
             api({ op: 'scoreChain', engagement: eng }).then((c) => {
+              if (!seq.live(my)) return
               setBusy(false); setErr(null); setData(Object.assign({}, r, { stages: groupByStage(r.items, c) }))
-            }, () => { setBusy(false); setErr(null); setData(r) })
+            }, () => {
+              if (!seq.live(my)) return
+              setBusy(false); setErr(null); setData(r)
+            })
             return
           }
           setBusy(false); setErr(null); setData(r)
-        }, (e) => { setBusy(false); setErr(String((e && e.message) || e)) })
+        }, (e) => { if (!seq.live(my)) return; setBusy(false); setErr(String((e && e.message) || e)) })
       }
       React.useEffect(load, [eng, refreshKey])
 
@@ -6042,15 +6145,18 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const collapse = useCollapse('files:' + eng)
       const [detail, setDetail] = React.useState(null)
 
+      const seq = useLoadSeq()
       const load = () => {
         if (!eng) return
+        const my = seq.take()
         setBusy(true)
         api({ op: 'attackFiles', engagement: eng }).then((r) => {
+          if (!seq.live(my)) return
           setBusy(false)
           if (!r || r.ok === false) { setErr((r && r.error) || '读取失败'); return }
           setErr(null)
           setFolders(r.items || [])
-        }, (e) => { setBusy(false); setErr(String((e && e.message) || e)) })
+        }, (e) => { if (!seq.live(my)) return; setBusy(false); setErr(String((e && e.message) || e)) })
       }
       React.useEffect(load, [eng, refreshKey])
 
@@ -6396,18 +6502,6 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [msg, setMsg] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
       const [folderPath, setFolderPath] = React.useState('')
-      const [installJob, setInstallJob] = React.useState(null)
-      React.useEffect(() => {
-        let active = true
-        const refreshInstall = () => api({ op: 'platformToolkitInstallStatus' }).then(r => {
-          if (!active) return
-          setInstallJob(r && r.job)
-          if (r && r.job && r.job.state !== 'running' && installJob && installJob.state === 'running') load()
-        }).catch(() => {})
-        refreshInstall()
-        const timer = setInterval(refreshInstall, 1000)
-        return () => { active = false; clearInterval(timer) }
-      }, [installJob && installJob.state])
 
       const applyDraftFrom = (r) => {
         const c = (r && r.config) || {}
@@ -6474,24 +6568,6 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       }
 
       const setTool = (id, value) => setDraft((d) => d ? Object.assign({}, d, { tools: Object.assign({}, d.tools, { [id]: value }) }) : d)
-      const chooseFolder = async () => {
-        try {
-          const picker = globalThis.__DSH_DIRECTORY_PICKER__
-          if (!picker || typeof picker.pick !== 'function') { setMsg({ err: '当前宿主没有原生目录选择器，请直接填写绝对路径' }); return }
-          const selected = await picker.pick()
-          if (selected) setFolderPath(typeof selected === 'string' ? selected : selected.path || '')
-        } catch (e) { setMsg({ err: '选择目录失败：' + String(e.message || e) }) }
-      }
-      const installTools = () => {
-        const dir = String(folderPath || '').trim()
-        if (!dir) { setMsg({ err: '请先选择工具安装目录' }); return }
-        setBusy(true); setMsg(null)
-        api({ op: 'platformInstallToolkit', dir }).then(r => {
-          setBusy(false)
-          if (!r || !r.ok) { setMsg({ err: r && r.error || '启动安装失败' }); return }
-          setInstallJob(r.job)
-        }, e => { setBusy(false); setMsg({ err: String(e.message || e) }) })
-      }
       const setEnv = (key, value) => setDraft((d) => d ? Object.assign({}, d, { env: Object.assign({}, d.env, { [key]: value }) }) : d)
 
       const runtime = (data && data.runtime) || {}
@@ -6511,7 +6587,7 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
           h('span', { className: 'rt-tag' + (found ? ' rt-tag-live' : ' rt-tag-warn') }, '工具 ' + found + '/' + tools.length),
           h('div', { className: 'rt-spacer' }),
           h('button', { className: 'rt-btn', disabled: busy, onClick: load }, busy ? '读取中…' : '刷新'),
-          h('button', { className: 'rt-btn rt-btn-primary', disabled: busy || !draft || installJob && installJob.state === 'running', onClick: save }, '保存')),
+          h('button', { className: 'rt-btn rt-btn-primary', disabled: busy || !draft, onClick: save }, '保存')),
         h('div', { className: 'rt-pane', style: { minHeight: 0 } },
         err ? h('div', { className: 'rt-err' }, err) : null,
         msg ? h('div', { className: msg.err ? 'rt-err' : 'rt-foot' }, msg.err || msg.ok) : null,
@@ -6519,29 +6595,21 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
           adapt.message
             || '均可选填：留空则用默认路径/自动查找。填了的覆盖默认。密钥类只在需要测绘/反弹时才填。'),
         h('div', { className: 'rt-card', style: { margin: '0 0 8px', fontSize: 12, lineHeight: 1.6 } },
-          h('div', { style: { fontWeight: 600, marginBottom: 6 } }, '工具安装目录'),
+          h('div', { style: { fontWeight: 600, marginBottom: 6 } }, '整包文件夹 → 自动分配工具'),
           h('div', { style: { marginBottom: 8, opacity: 0.9 } },
-            '选择目录后点「一键安装并配置」：保留已有工具，下载缺失的官方发布文件、校验 SHA-256 并保存路径。需要驱动或没有官方可用程序的项目会单独列出原因。'),
+            '工具都在同一个文件夹（含子目录）时，填路径后点「自动分配」：会写入 toolkitDir，并按文件名匹配 nmap / nuclei / fscan 等填到下方。'),
           h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
             h('input', {
-              className: 'rt-input', style: { flex: 1 }, 'aria-label': '工具安装目录',
+              className: 'rt-input', style: { flex: 1 },
               placeholder: '例如 D:\\pentest-tools 或 /opt/toolkit',
               value: folderPath,
               onChange: (e) => setFolderPath(e.target.value),
               onKeyDown: (e) => { if (e.key === 'Enter') assignFolder() },
             }),
-            h('button', { className: 'rt-btn', disabled: busy || installJob && installJob.state === 'running', onClick: chooseFolder }, '选择文件夹'),
             h('button', {
-              className: 'rt-btn rt-btn-primary', disabled: busy || installJob && installJob.state === 'running',
+              className: 'rt-btn rt-btn-primary', disabled: busy,
               onClick: assignFolder,
-            }, busy ? '扫描中…' : '扫描已有工具'),
-            h('button', { className: 'rt-btn rt-btn-primary', disabled: busy || installJob && installJob.state === 'running', onClick: installTools }, installJob && installJob.state === 'running' ? '正在安装…' : '一键安装并配置')),
-          installJob ? h('div', { role: 'status', style: { marginTop: 8 } },
-            h('div', null, ({ running: '正在安装', complete: '全部配置完成', partial: '已完成可安装项目，请查看下方待处理项', failed: '安装失败', interrupted: '上次安装被中断，可重新安装继续' })[installJob.state] || installJob.state),
-            installJob.error ? h('div', { className: 'rt-err' }, installJob.error) : null,
-            (installJob.tools || []).map(item => h('div', { key: item.id, style: { marginTop: 4 } },
-              item.label + '：' + (item.message || ({ checking: '检查中', extracting: '解压中' })[item.state] || item.state)
-              + (item.state === 'downloading' && item.total ? ' ' + Math.floor(100 * (item.bytes || 0) / item.total) + '%' : '')))) : null),
+            }, busy ? '扫描中…' : '自动分配'))),
         data && data.hint ? h('div', { className: 'rt-card', style: { margin: '0 0 8px', fontSize: 12, lineHeight: 1.6 } }, data.hint) : null,
         data && data.egress ? h('div', { className: 'rt-card', style: { margin: '0 0 8px', fontSize: 12, lineHeight: 1.55 } },
           h('div', { style: { fontWeight: 600, marginBottom: 6 } }, '出网状态（借鉴 Z3r0 egress，只读）'),
@@ -6637,15 +6705,18 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [form, setForm] = React.useState(null)
       const [msg, setMsg] = React.useState(null)
 
+      const seq = useLoadSeq()
       const load = () => {
         if (!eng) return
+        const my = seq.take()
         setBusy(true)
         api({ op: 'scores', engagement: eng }).then((r) => {
+          if (!seq.live(my)) return
           setBusy(false)
           if (!r || r.ok === false) { setErr((r && r.error) || '读取失败'); return }
           setErr(null)
           setData(r)
-        }, (e) => { setBusy(false); setErr(String((e && e.message) || e)) })
+        }, (e) => { if (!seq.live(my)) return; setBusy(false); setErr(String((e && e.message) || e)) })
       }
       React.useEffect(load, [eng, refreshKey])
 
@@ -6694,7 +6765,7 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
         }, (e) => { setBusy(false); setMsg({ err: String((e && e.message) || e) }) })
       }
 
-      const summary = (data && data.summary) || { achievedPoints: 0, pointCount: 0, hitPointCount: 0, hitCount: 0, selfCreatedHits: 0, serviceCappedHits: 0 }
+      const summary = (data && data.summary) || { achievedPoints: 0, pointCount: 0, hitPointCount: 0, hitCount: 0, countedHits: 0, selfCreatedHits: 0, serviceCappedHits: 0 }
       const items = (data && data.items) || []
 
       /* 按合并版的 8 个类别分组渲染（后端 ruleGroups 已排好序、组内按分值升序）。
@@ -7009,7 +7080,9 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
         }, (e) => { if (my === seq.current) setErr(String((e && e.message) || e)) })
           .finally(() => { if (my === seq.current) inflight.current = false })
       }
-      React.useEffect(() => { seq.current += 1; load() }, [eng, refreshKey])
+      /* 切靶标/刷新时把在途标记复位：旧请求的 finally 因序号不符不会清，
+         不复位的话这里会永久早退，5 秒轮询也全空转。 */
+      React.useEffect(() => { seq.current += 1; inflight.current = false; load() }, [eng, refreshKey])
       React.useEffect(() => {
         if (!eng || !auto) return undefined
         const timer = setInterval(load, 5000)
@@ -7131,13 +7204,16 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [msg, setMsg] = React.useState(null)
       const [copied, setCopied] = React.useState(null)
 
+      const seq = useLoadSeq()
       const load = () => {
         if (!eng) return
+        const my = seq.take()
         api({ op: 'sessions', engagement: eng }).then((r) => {
+          if (!seq.live(my)) return
           if (!r || r.ok === false) { setErr((r && r.error) || '读取失败'); return }
           setErr(null)
           setData(r)
-        }, (e) => setErr(String((e && e.message) || e)))
+        }, (e) => { if (seq.live(my)) setErr(String((e && e.message) || e)) })
       }
       React.useEffect(load, [eng, refreshKey])
 
@@ -7372,16 +7448,20 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [concurrency, setConcurrency] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
 
+      const seq = useLoadSeq()
       const load = () => {
+        const my = seq.take()
         setBusy(true)
         api({ op: eng ? 'prompts' : 'bootstrap', engagement: eng || undefined }).then((r) => {
+          if (!seq.live(my)) return
           setBusy(false)
           if (!r || r.ok === false) { setErr((r && r.error) || '读取失败'); return }
           setErr(null)
           if (r.roles) setRoles(r.roles)
-        }, (e) => { setBusy(false); setErr(String((e && e.message) || e)) })
+        }, (e) => { if (!seq.live(my)) return; setBusy(false); setErr(String((e && e.message) || e)) })
         /* 并发名额按"当前跑着的子智能体"算；host 侧读 subagents 注册表 */
         api({ op: 'agentsStatus' }).then((r) => {
+          if (!seq.live(my)) return
           if (r && r.ok !== false) setConcurrency(r)
         }, () => {})
       }

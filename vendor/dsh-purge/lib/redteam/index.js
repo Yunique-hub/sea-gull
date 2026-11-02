@@ -8,7 +8,7 @@
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readPresetDefinition, preparePresetDefinitions } from './preset-composition.js'
 import { scheduleClearOwnedSelectedDefault } from '../preset-default.js'
@@ -529,6 +529,14 @@ export function apply(ctx) {
         } catch (error) {
           for (const release of releases.reverse()) await release()
           throw error
+        }
+        /* 注册是异步的：cleanup 已经跑过（closed=true）时，当场撤掉全部预设。 */
+        if (closed) {
+          for (const release of releases.reverse()) {
+            try { await release() } catch { /* 已随宿主卸载 */ }
+          }
+          writeStatus({ ok: false, phase: 'closed-during-register' })
+          return
         }
         releaseDeclared = async () => {
           for (const release of releases.reverse()) await release()

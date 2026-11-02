@@ -170,6 +170,20 @@ function ioFor(explicit, targetPath) {
   return explicit ?? fsFor(targetPath);
 }
 
+/** 宿主 lib 里的文件（bin.js / sidecar）一律先写临时文件再 rename：
+ *  直接覆盖时被占用/断电会留下半截模块，宿主下次启动直接 import 失败。 */
+export function writeHostFileAtomic(nodeFs, fp, text) {
+  const tmp = `${fp}.${process.pid}.tmp`;
+  nodeFs.writeFileSync(tmp, text, "utf8");
+  try {
+    if (typeof nodeFs.renameSync === "function") nodeFs.renameSync(tmp, fp);
+    else nodeFs.writeFileSync(fp, text, "utf8");
+  } catch (error) {
+    try { nodeFs.unlinkSync(tmp); } catch { /* ignore */ }
+    throw error;
+  }
+}
+
 /** 源码 monorepo 的 apps/cli（tsdown 构建产物）。往这里注入/还原会动构建输出，缺 bak 时无法自愈（#41）。 */
 export function looksLikeSourceCliRoot(root, { fs, path: nodePath } = {}) {
   const p = nodePath ?? requirePath();
@@ -249,8 +263,8 @@ export function installHideConsoleIntoBin(aiBase, { fs, path: nodePath } = {}) {
     fileURLToPath(new URL("./child-process-hide.mjs", import.meta.url)),
     "utf8",
   );
-  nodeFs.writeFileSync(facadeSide, facadeSrc, "utf8");
-  nodeFs.writeFileSync(side, hideConsoleEntrySource(), "utf8");
+  writeHostFileAtomic(nodeFs, facadeSide, facadeSrc);
+  writeHostFileAtomic(nodeFs, side, hideConsoleEntrySource());
 
   let text = nodeFs.readFileSync(binJs, "utf8");
   if (text.includes(IMPORT_MARK) && text.includes(IMPORT_LINE.split(" //")[0])) {
@@ -266,7 +280,7 @@ export function installHideConsoleIntoBin(aiBase, { fs, path: nodePath } = {}) {
   } else {
     text = IMPORT_LINE + "\n" + text;
   }
-  nodeFs.writeFileSync(binJs, text, "utf8");
+  writeHostFileAtomic(nodeFs, binJs, text);
   return "injected";
 }
 
@@ -286,7 +300,7 @@ export function revertHideConsoleFromBin(aiBase, { fs, path: nodePath } = {}) {
       const text = nodeFs.readFileSync(binJs, "utf8");
       const next = text.replace(/^import "\.\/dsh-purge-hide-console\.js";.*\r?\n/gm, "");
       if (next !== text) {
-        nodeFs.writeFileSync(binJs, next, "utf8");
+        writeHostFileAtomic(nodeFs, binJs, next);
         changed = true;
       }
     } catch (e) {

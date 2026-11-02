@@ -5,9 +5,25 @@
 
 ## [Unreleased]
 
-### Known Issues
+## [1.1.1] - 2026-11-02
 
-- **Harness 0.2.1-rc.5 上插件不加载**：`-Apply` 返回 `ok:true / applied:61 / failed:0`，文件级补丁全部落地，但插件页把 `dsh-purge` 与 `@nanmicoder/dsh-agent-teams` 标成「异常 / 包不可用」，详情为 `dsh: cannot resolve profile bundle "dsh-purge" from the dsh installation or <profile>`。profile 的 `bundles`、`node_modules`、直接 `import()` 都正常；`dsh-client-runtime` / `dsh-client-ui-slots` 在 rc.3 与 rc.5 都缺，不是原因。首要嫌疑是 pnpm `file:` 依赖生成符号链接、rc.5 的 bundle 解析不跟随（**未确认**，见 [VERIFICATION S](docs/VERIFICATION.md)）。rc.3 不受影响。
+### Changed
+
+- 合并 dsh-purge 1.1.87（上游正式版提交 `335ddee90f4887981a4b2d2982c056a8f035c929`）：纳入桌面/Web 预检、独立桌面换包助手、原子状态写入、Web 回收、子任务控制与安装可靠性修复。
+- 保留海鸥单一人格源、WelcomeNotice 根挂载移除、Steer/Queue 行为、项目与技能刷新兼容、海鸥更新托管及本地范围闸移除；上游 anchor 人格功能默认关闭，避免出现第二人格源。
+- 一键安装/更新命令默认携带 Apply：下载、部署、依赖同步、补丁、密封包切换和桌面重启在一次终端输入中完成；首次安装使用用户目录下的安全工具目录默认值，不再停在交互提示。
+
+### Fixed
+
+- Harness 0.2.1-rc.5 的 profile bundle 解析与桌面换包路径按 1.1.87 更新，不再沿用 S 节中基于符号链接的未确认猜测。
+- PowerShell 远程命令改用剥 BOM 后的 scriptblock，既兼容 Windows PowerShell 5.1，又能把 `-Apply` 传给远程脚本。
+- 重复执行一键更新时先停止桌面端并从密封 `app.asar` 重新解包干净基线，再应用补丁、切换目录和重启；不再在正在运行的旧 `resources/app` 上增量重打，避免只剩少量文件命中。
+- rc.5 补丁状态契约按实际目标文件收敛：客户端热更新包参与重打，跨宿主候选允许部分文件命中，已落地 marker 和“宿主已无历史代码”可正确结算。桌面端由“待处理 3、漂移 7、跳过 2”收敛到“待处理 0、漂移 0、无需处理 2”。剩余两项是 rc.5 不包含对应旧组件，不是失败。
+
+### Validation
+
+- dsh-purge vendor 测试：40 通过 / 0 失败；安装器、版本同步与一键命令回归全部通过。
+- 完整仓库测试、真机安装/更新、数据保留和 rc.5 桌面端结果见 [VERIFICATION T](docs/VERIFICATION.md)；发布只记录实际完成的项目。
 
 ## [1.1.0] - 2026-11-01
 

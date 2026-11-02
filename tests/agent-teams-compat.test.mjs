@@ -1,7 +1,7 @@
 // AgentTeams 兼容声明必须与 dsh-purge 的 dshTarget 保持一致。
 //
-// 背景：compatibility.json 曾长期停在 0.2.1-rc.2，而实际宿主与 purge 的 dshTarget
-// 都是 0.2.1-rc.3。rc.3 因此落在"未声明但能跑"的区间——宿主再漂一个小版本就会以
+// 背景：compatibility.json 曾长期落后于 purge 的 dshTarget，宿主因此落在
+// "未声明但能跑"的区间——宿主再漂一个小版本就会以
 // 运行时异常暴露，而不是在安装期被拦住。这里锁死两处声明不能漂移。
 
 import assert from 'node:assert/strict';

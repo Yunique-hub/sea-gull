@@ -122,7 +122,7 @@ test("写前校验：重复顶层键 / 重复 allowBuilds 键 / 解析不了的�
   assert.equal(validateAllowBuildRewrite("allowBuilds:\n# 注释行放行\n  ssh2: true\n"), true);
 });
 
-test("pnpm-lock.yaml 里的 commit URL 优先于 master", () => {
+test("pnpm 11 只写裸包名，忽略 lock 中的 commit URL", () => {
   const dir = withTempProfile([
     "lockfileVersion: '9.0'",
     "",
@@ -136,14 +136,12 @@ test("pnpm-lock.yaml 里的 commit URL 优先于 master", () => {
     "",
   ].join("\n"));
   const specs = purgePnpmBuildSpecs(dir);
-  assert.deepEqual(specs, ["dsh-purge", `dsh-purge@${COMMIT_URL}`]);
+  assert.deepEqual(specs, ["dsh-purge"]);
 });
 
-test("lock 读不到（旧 master 记录 / 无文件）退回 package.json tarball", () => {
-  // 无 pnpm-lock.yaml 的临时目录 → 只用裸包名兜底逻辑应落到 package.json 的 master URL
+test("lock 读不到或仍指向 master 时也只写裸包名", () => {
   const dir = withTempProfile();
-  assert.deepEqual(purgePnpmBuildSpecs(dir), ["dsh-purge", `dsh-purge@${MASTER_URL}`]);
-  // lock 里 specifier 写死 master，也如实保留
+  assert.deepEqual(purgePnpmBuildSpecs(dir), ["dsh-purge"]);
   const dir2 = withTempProfile([
     "importers:",
     "",
@@ -154,10 +152,22 @@ test("lock 读不到（旧 master 记录 / 无文件）退回 package.json tarba
     "        version: '1.1.81'",
     "",
   ].join("\n"));
-  assert.deepEqual(purgePnpmBuildSpecs(dir2), ["dsh-purge", `dsh-purge@${MASTER_URL}`]);
+  assert.deepEqual(purgePnpmBuildSpecs(dir2), ["dsh-purge"]);
 });
 
-test("固定 commit 安装：重写后过期 master 键被换成 commit 键", () => {
+test("pnpm 11.28 injected file 依赖同时写包名与精确 file 键", () => {
+  const dir = withTempProfile();
+  fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({
+    dependencies: { "dsh-purge": "file:../../plugins/dsh-purge" },
+  }), "utf8");
+  const specs = purgePnpmBuildSpecs(dir);
+  assert.deepEqual(specs, ["dsh-purge", "dsh-purge@file:../../plugins/dsh-purge"]);
+  const next = rewritePnpmAllowBuilds("allowBuilds:\n  dsh-purge: true\n", dir);
+  assert.match(next, /^ {2}dsh-purge@file:\.\.\/\.\.\/plugins\/dsh-purge: true$/m);
+  assert.equal(validateAllowBuildRewrite(next), true);
+});
+
+test("固定 commit 安装：重写后所有 dsh-purge@ 历史键都清除", () => {
   const dir = withTempProfile([
     "lockfileVersion: '9.0'",
     "",
@@ -182,12 +192,12 @@ test("固定 commit 安装：重写后过期 master 键被换成 commit 键", ()
   ].join("\n");
   const next = rewritePnpmAllowBuilds(polluted, dir);
   const keys = next.split("\n").filter((line) => parseAllowBuildLine(line)).map((line) => parseAllowBuildLine(line).key);
-  assert.equal(keys.includes(`dsh-purge@${COMMIT_URL}`), true);
+  assert.equal(keys.includes("dsh-purge"), true);
+  assert.equal(keys.includes(`dsh-purge@${COMMIT_URL}`), false);
   assert.equal(keys.includes(`dsh-purge@${MASTER_URL}`), false);
   assert.equal(keys.includes("dsh-purge@https"), false);
   assert.equal(keys.includes("ssh2"), true);
-  // URL 键写回带引号，可被 yaml 解析方安全读取
-  assert.equal(next.split("\n").some((line) => line === `  "dsh-purge@${COMMIT_URL}": true`), true);
+  assert.equal(next.includes("dsh-purge@"), false);
 });
 
 test("幂等：健康文件重写输出等于输入，零写入", () => {
@@ -201,7 +211,6 @@ test("幂等：健康文件重写输出等于输入，零写入", () => {
     "  cpu-features: true",
     "  ssh2: true",
     '  dsh-purge: true',
-    `  "dsh-purge@${MASTER_URL}": true`,
     "",
   ].join("\n");
   fs.writeFileSync(fp, healthy, "utf8");

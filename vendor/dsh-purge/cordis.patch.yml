@@ -30,9 +30,31 @@
     personaPrefix: ""
     personaSuffix: Your working directory is {{cwd}}.
 
+# 本体 insert 写在用户层 profile/cordis.patch.yml（postinstall / 演练台自愈补）。
+# 这里只改已入队条目的 inject/config。再 insert 一次会 already queued（#152 / #154 / #159）。
 - id: dsh-purge
   name: dsh-purge
   inject: [systemPrompt, tools]
+  config:
+    enabled: true
+    autoApplyOnStart: false
+    autoUpdateOnStart: false
+    autoRevertOnMissing: false
+    injectOnce: false
+    stripMnemon: true
+    verbose: false
+    postPrompt: ""
+    postPromptOrder: 5100
+    autoRetry: true
+    retryMax: 3
+    autoContinue: false
+    continueMax: 3
+    continueText: "继续"
+    capabilityProtocol: true
+    hooksDenyBypass: true
+    # 海鸥人格只由 prompt-inject.md 提供；保留上游锚点实现但默认不追加第二段提示词。
+    anchorMode: off
+    subagentControl: true
 
 - insert:
     - id: dsh-purge
@@ -55,6 +77,8 @@
         continueText: "继续"
         capabilityProtocol: true
         hooksDenyBypass: true
+        anchorMode: off
+        subagentControl: true
 
     # 演练台：预设 + 技能落地（本插件 lib/redteam）
     - id: dsh-purge-redteam

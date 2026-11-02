@@ -51,8 +51,8 @@ function rmTree(dir) {
 }
 
 const ok = await waitFree();
-if (!ok) process.exit(1);
-
+/* 端口等不到也要清理：以前直接退出，插件的目录和文件就永远留在那里，
+   用户以为卸载成功，重启后插件还在。删不掉的会被 rmTree 吞掉，下一步照常。 */
 for (const dir of cleanup) rmTree(dir);
 if (info.helper) {
   try {
@@ -62,6 +62,9 @@ if (info.helper) {
   }
 }
 
+/* 端口没释放就不拉起新进程（会立刻撞端口），但上面的清理已经做完了。 */
+if (!ok) process.exit(1);
+
 const child = spawn(info.execPath, info.argv, {
   detached: true,
   stdio: "ignore",
@@ -70,6 +73,7 @@ const child = spawn(info.execPath, info.argv, {
   windowsHide: true,
   shell: false,
 });
+
 child.on("error", () => process.exit(1));
 child.unref();
 await new Promise((r) => setTimeout(r, 400));

@@ -25,6 +25,7 @@ function fixture(t, shell) {
   for (const file of ['install.sh', 'install.ps1', 'src/tools/patch_profile.py']) {
     write(path.join(repo, file), fs.readFileSync(path.join(root, file)));
   }
+  write(path.join(repo, 'src/tools/complete_desktop_apply.ps1'), 'param([string]$AppRoot)\nexit 0\n');
   write(path.join(repo, 'VERSION'), 'test');
   write(profile, original);
   write(path.join(other, 'profiles/desktop/package.json'), original);
@@ -41,7 +42,7 @@ process.exit(Number(process.env.TEST_CLI_FAIL || 0));`;
   write(path.join(repo, 'vendor/dsh-purge/lib/reapply-cli.js'), cli);
   write(path.join(app, 'resources/app.asar'), 'fixture');
   write(path.join(app, 'resources/runtime/primary-runtime/dependencies/pnpm/bin/pnpm.mjs'), `import fs from 'node:fs';
-process.exitCode = Number(process.env.TEST_PNPM_FAIL || 0);
+process.exitCode = process.env.CI === 'true' ? Number(process.env.TEST_PNPM_FAIL || 0) : 31;
 if (!process.exitCode && !process.env.TEST_NO_LINK) {
   fs.mkdirSync('node_modules/dsh-purge', { recursive: true });
   fs.copyFileSync('../../plugins/dsh-purge/package.json', 'node_modules/dsh-purge/package.json');

@@ -299,6 +299,7 @@ export async function reapplyInstalled(options = {}) {
     try {
       const opened = await core.openSealedDesktopHost({
         upgrade: options.upgrade === true,
+        forceExtract: options.forceExtract === true,
         forApply: true,
       });
       if (opened.aiBase) aiBase = opened.aiBase;

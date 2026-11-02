@@ -1,7 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { promises as fsp } from "node:fs";
-import http from "node:http";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
@@ -411,12 +410,11 @@ function requestBuffer(url, ms, headers, redirectsLeft = 5) {
       reject(e);
       return;
     }
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    if (parsed.protocol !== "https:") {
       reject(new Error(`update: unsupported protocol ${parsed.protocol}`));
       return;
     }
-    const lib = parsed.protocol === "http:" ? http : https;
-    const req = lib.request(parsed, {
+    const req = https.request(parsed, {
       method: "GET",
       headers: { "user-agent": "dsh-purge-update", accept: "*/*", ...headers },
     }, (res) => {

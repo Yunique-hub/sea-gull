@@ -2,13 +2,13 @@
 # 海鸥 · DeepSeek Harness 全破 harness —— 通用一键安装
 #
 #   本地:   bash install.sh [--profile desktop|web] [--dry-run]
-#   远程:   curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash
+#   远程:   curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash -s -- --apply
 #   卸载:   bash install.sh --uninstall
 #
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.1.0"
+VERSION="1.1.1"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
@@ -44,8 +44,8 @@ usage() {
   --profile <desktop|web>   目标宿主 profile（默认自动：有 desktop 用 desktop）
   --dsh-home <路径>         DSH 主目录（默认 $DSH_HOME 或 ~/.dsh）
   --app-root <路径>         DSH 安装目录（默认自动探测）
-  --toolkit-dir <路径>      工具安装目录（首次安装自行选择，更新保留）
-  --apply                  装完立刻尝试 Apply（desktop 会解 asar，需宿主已退出）
+  --toolkit-dir <路径>      工具安装目录（首次安装有安全默认值，更新保留）
+  --apply                  装完自动 Apply（desktop 自动换包并重启）
   --no-pnpm                跳过 pnpm install（离线/已装过时用）
   --dry-run                只打印计划，不落盘
   --uninstall              卸载（还原 profile、删插件与注入文件，保留技能）
@@ -181,7 +181,7 @@ else
   say "  3. pnpm      ${C_D}跳过${C_0}"
 fi
 say "  4. 资产      prompt-inject.md / rules/ / skills/ → $DSH_HOME"
-[ "$APPLY" = 1 ] && say "  5. Apply     ${C_Y}desktop 会解 asar 且需要宿主退出${C_0}"
+[ "$APPLY" = 1 ] && say "  5. Apply     ${C_Y}desktop 自动解包、换包并重启宿主${C_0}"
 if [ "$DRY" = 1 ]; then say ""; say "${C_Y}--dry-run：到此为止，未改动任何文件${C_0}"; exit 0; fi
 
 PY=""
@@ -222,10 +222,9 @@ TEAMS_SOURCE="$ROOT/vendor/dsh-agent-teams"
 if [ "$UPDATE" = 0 ] && [ "$UNINSTALL" = 0 ] && [ -f "$TEAMS_SOURCE/package.json" ] && [ -z "$TOOLKIT_DIR" ]; then
   TOOLKIT_DIR="$("$PY" $PY_ARGS -c 'import json, pathlib, sys; p=pathlib.Path(sys.argv[1]); print(json.loads(p.read_text(encoding="utf-8-sig")).get("toolkitDir", "") if p.exists() else "")' "$(winpath "$DSH_HOME/redteam/config.json")")"
   if [ -z "$TOOLKIT_DIR" ]; then
-    if [ -t 0 ]; then read -r -p "首次安装：请输入工具安装目录（不覆盖已有工具）: " TOOLKIT_DIR
-    elif [ -t 1 ] && [ -r /dev/tty ]; then read -r -p "首次安装：请输入工具安装目录（不覆盖已有工具）: " TOOLKIT_DIR </dev/tty
-    else die "首次安装请用 --toolkit-dir 指定工具安装目录，或在交互式终端运行安装器"; fi
-    [ -n "$TOOLKIT_DIR" ] || die "必须自行设置工具安装目录"
+    if [ -n "${LOCALAPPDATA:-}" ]; then TOOLKIT_DIR="$LOCALAPPDATA/SeaGull/toolkit"
+    else TOOLKIT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/seagull/toolkit"; fi
+    say "未指定工具目录，使用安全默认值: $TOOLKIT_DIR"
   fi
 fi
 if [ "$UNINSTALL" = 0 ] && [ -n "$TOOLKIT_DIR" ]; then
@@ -319,7 +318,9 @@ fi
 DEPENDENCIES_READY=0
 if [ "$NO_PNPM" = 0 ] && [ -n "$NODE_EMB" ] && [ -n "$PNPM_EMB" ]; then
   step "pnpm install"
-  ( cd "$PROFILE_DIR" && "$NODE_EMB" "$PNPM_EMB" install --reporter=append-only ) \
+  ( cd "$PROFILE_DIR" && \
+      if [ -f "$PLUGIN_DIR/scripts/ensure-profile-bundle.mjs" ]; then "$NODE_EMB" "$PLUGIN_DIR/scripts/ensure-profile-bundle.mjs"; fi && \
+      CI=true "$NODE_EMB" "$PNPM_EMB" install --reporter=append-only --no-frozen-lockfile ) \
     || die "pnpm install 失败：检查 registry / file: 路径后重试；备份已保留"
   [ -f "$PROFILE_DIR/node_modules/$PLUGIN_ID/package.json" ] || die "依赖未就位: node_modules/$PLUGIN_ID"
   DEPENDENCIES_READY=1
@@ -376,11 +377,21 @@ if [ "$APPLY" = 1 ]; then
   [ -n "$NODE_EMB" ] || die "没有 node，无法 Apply"
   step "Apply"
   if [ "$PROFILE" = desktop ] && [ "$SEALED" = 1 ]; then
-    ( cd "$PLUGIN_DIR" && run_dsh_cli lib/reapply-cli.js ) || die "reapply 失败"
-    say ""
-    warn "密封桌面宿主：请完全退出 DeepSeek Harness，再执行："
-    say "    mv \"$APP_ROOT/resources/app.asar\" \"$APP_ROOT/resources/app.asar.sealed.bak\""
-    say "    然后重新打开 DeepSeek Harness。"
+    if command -v powershell.exe >/dev/null 2>&1; then
+      powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(winpath "$ROOT/src/tools/complete_desktop_apply.ps1")" -AppRoot "$(winpath "$APP_ROOT")" -PrepareOnly \
+        || die "无法安全退出桌面端并准备官方基线"
+      if ! ( cd "$PLUGIN_DIR" && run_dsh_cli lib/reapply-cli.js --no-swap --fresh-extract ); then
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(winpath "$ROOT/src/tools/complete_desktop_apply.ps1")" -AppRoot "$(winpath "$APP_ROOT")" -StartOfficialOnly \
+          || true
+        die "reapply 失败"
+      fi
+      powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(winpath "$ROOT/src/tools/complete_desktop_apply.ps1")" -AppRoot "$(winpath "$APP_ROOT")" \
+        || die "桌面换包或重启验证失败"
+      ok "桌面换包与重启已完成"
+    else
+      ( cd "$PLUGIN_DIR" && run_dsh_cli lib/reapply-cli.js ) || die "reapply 失败"
+      ok "桌面换包与重启已由 Apply 自动接管"
+    fi
   else
     run_dsh_cli "$PLUGIN_DIR/bin/dsh-purge.js" --apply || die "apply 失败"
     say ""; say "重启 DeepSeek Harness 生效。"
@@ -397,10 +408,7 @@ say ""
 say "${C_B}下一步${C_0}"
 if [ "$APPLY" = 0 ]; then
   if [ "$SEALED" = 1 ]; then
-    say "  密封桌面宿主（官方 EXE），三步："
-    say "    1) 完全退出 DeepSeek Harness"
-    say "    2) 重开 → 会话标题旁点 dsh-purge → Clean 页 → Apply"
-    say "    （或 bash install.sh --apply，再按提示挪 asar）"
+    say "  自动应用: 重新运行本安装器并加 --apply（会自动换包并重启）"
   else
     say "  重启 DeepSeek Harness → 会话标题旁点 dsh-purge → Apply"
   fi

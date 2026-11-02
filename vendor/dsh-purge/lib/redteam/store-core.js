@@ -8,12 +8,12 @@
 import { DatabaseSync } from 'node:sqlite'
 import { connect as tcpConnect } from 'node:net'
 import { createHash } from 'node:crypto'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import {
   mkdirSync, readFileSync, writeFileSync, readdirSync, existsSync, rmSync, statSync,
   copyFileSync,
 } from 'node:fs'
-import { join, basename, isAbsolute } from 'node:path'
+import { join, basename, isAbsolute, resolve } from 'node:path'
 
 /* ── 拆分出去的模块（对外 API 不变：下面把它们原样再导出一次）──────────────
    动机是"一个文件 5600 行、改表结构要翻过 500 行计分逻辑"：
@@ -74,12 +74,12 @@ export {
  * `plan` 是主会话（指挥）自己，不派出去，只用于提示词面板里查看/微调人设。
  */
 const ROLE_TITLES = {
-  plan: "Main session (command)",
-  recon: "Reconnaissance",
-  assess: "Asset assessment",
-  'vuln-scan': "Vulnerability discovery",
-  exploit: "Exploitation",
-  internal: "Internal penetration",
+  plan: '主会话（指挥）',
+  recon: '信息收集',
+  assess: '资产梳理',
+  'vuln-scan': '漏洞发现',
+  exploit: '漏洞利用',
+  internal: '内网渗透',
 }
 
 /** 漏洞严重级（按展示优先级排列）。 */
@@ -128,7 +128,7 @@ export function targetKey(target, fallbackIp) {
     if (head !== null) return head[1]
     return t
   }
-  return fallbackIp || "(no target specified)"
+  return fallbackIp || "（未指定靶标）"
 }
 
 /** 安全解析 JSON 列（坏数据回退默认值）。 */
@@ -157,6 +157,16 @@ const SCOPE_SQL = `CASE
     OR (ip LIKE '100.%' AND CAST(substr(ip, 5, instr(substr(ip, 5), '.') - 1) AS INTEGER) BETWEEN 64 AND 127)
   THEN 'internal' ELSE 'external' END`
 
+
+/**
+ * 证据导入的**源**路径：相对路径按 root 解析，绝对路径必须落在 root 或系统临时目录内。
+ * 只校验写目标是不够的 —— 接口传一个绝对路径就能把本机任意文件复制进证据目录再读回。
+ */
+function assertSourcePath(root, raw) {
+  const text = String(raw || '').trim()
+  const abs = isAbsolute(text) ? resolve(text) : resolve(root, text)
+  return assertPathWithin(abs, [root, tmpdir()])
+}
 
 /* ------------------------------------------------------------------ 元数据 */
 
@@ -226,57 +236,57 @@ function writeMeta(path, meta) {
  */
 export const DEFAULT_STAGES = [
   {
-    code: 'recon', name: "Reconnaissance", subtitle: "RECON · internet side", color: '#06b6d4', scored: 0,
-    goal: "Collect information on the internet side and identify the asset surface worth attacking",
+    code: 'recon', name: '信息收集', subtitle: 'RECON · 互联网侧', color: '#06b6d4', scored: 0,
+    goal: '在互联网侧展开信息收集，确定值得打的资产面',
     sections: [
-      { label: "Asset mapping", items: ["Subdomains / C segments / port fingerprints", "FOFA, passive DNS, certificate transparency, active scanning"] },
-      { label: "Attack-surface confirmation", items: ["Web titles and fingerprints, exposed services and management ports", "Ownership, WAF / CDN identification"] },
-      { label: "Attack-surface ranking", items: ["Rank by ease of exploitation and expected score", "Decide which hosts to hit first"] },
+      { label: '资产测绘', items: ['子域名 / C 段 / 端口指纹', 'FOFA、被动 DNS、证书透明、主动扫描'] },
+      { label: '攻击面确认', items: ['Web 标题与指纹、暴露的服务与管理端口', '归属、WAF / CDN 识别'] },
+      { label: '攻击面排序', items: ['按易打性与预期得分排序', '确定先打哪几台'] },
     ],
-    tools: "ARL, fscan, gogo, OneForAll, ENScan, Goby, Nmap, Burp, Nuclei",
-    transition: "Internet attack surface confirmed; move to exploitation",
+    tools: 'ARL / 灯塔、fscan、gogo、OneForAll、ENScan、Goby、Nmap、Burp、Nuclei',
+    transition: '确认互联网攻击面，转入利用',
   },
   {
-    code: 'internet', name: "Internet-side asset privilege", subtitle: 'INTERNET-SIDE PRIVILEGE', color: '#ef4444', scored: 1,
-    goal: "Earn account/privilege scores on internet-side assets",
+    code: 'internet', name: '互联网资产权限', subtitle: 'INTERNET-SIDE PRIVILEGE', color: '#ef4444', scored: 1,
+    goal: '在互联网侧资产上拿到账号、权限等得分',
     sections: [
-      { label: "Get accounts", items: ["Weak passwords / broken access control / unauthenticated access / logic flaws", "Admin console accounts, ordinary accounts"] },
-      { label: "Get privileges", items: ["Nday / 1-day RCE, file upload, deserialization", "WebShell, command execution, server privileges"] },
-      { label: "Get data", items: ["Databases, config leaks, bulk sensitive data"] },
+      { label: '拿账号', items: ['弱口令 / 越权 / 未授权 / 逻辑漏洞', '后台管理员、普通账号'] },
+      { label: '拿权限', items: ['Nday / 1day RCE、文件上传、反序列化', 'WebShell、命令执行、服务器权限'] },
+      { label: '拿数据', items: ['数据库、配置泄露、批量敏感信息'] },
     ],
-    tools: "sqlmap, Nuclei, Behinder / Godzilla / AntSword, fscan, Burp, custom POCs",
-    transition: "Use a compromised host to open an outbound channel",
+    tools: 'sqlmap、Nuclei、冰蝎 / 哥斯拉 / 蚁剑、fscan、Burp、自定义 POC',
+    transition: '用已控主机打通出网通道',
   },
   {
-    code: 'boundary', name: "Boundary breach", subtitle: 'BOUNDARY BREACH · TUNNEL', color: '#f59e0b', scored: 1,
-    goal: "Build a tunnel and extend control into the internal network",
+    code: 'boundary', name: '边界突破', subtitle: 'BOUNDARY BREACH · TUNNEL', color: '#f59e0b', scored: 1,
+    goal: '成功搭建隧道，把控制能力延伸进内网',
     sections: [
-      { label: "Tunnel", items: ['suo5 / frp / Stowaway / Neo-reGeorg / Venom', "socks5 landing, multi-hop chaining"] },
-      { label: "Outbound channel", items: ["Domain fronting, CDN hiding, cloud-function forwarding", "DNS / ICMP / 443 covert channels"] },
+      { label: '隧道', items: ['suo5 / frp / Stowaway / Neo-reGeorg / Venom', 'socks5 落地、多级级联'] },
+      { label: '出网通道', items: ['域名前置、CDN 隐藏、云函数转发', 'DNS / ICMP / 443 隐蔽信道'] },
     ],
     tools: 'suo5、frp、Stowaway、Neo-reGeorg、GOST、proxychains、chisel',
-    transition: "Tunnel ready; move into the internal network",
+    transition: '隧道就绪，转入内网',
   },
   {
-    code: 'internal', name: "Internal-side asset privilege", subtitle: 'INTERNAL-SIDE PRIVILEGE', color: '#8b5cf6', scored: 1,
-    goal: "Earn scores on internal assets through the tunnel",
+    code: 'internal', name: '内网资产权限', subtitle: 'INTERNAL-SIDE PRIVILEGE', color: '#8b5cf6', scored: 1,
+    goal: '通过隧道在内网资产上拿分',
     sections: [
-      { label: "Internal mapping", items: ["Live hosts / ports / services / shares", "Databases, middleware, backup systems"] },
-      { label: "Lateral movement and privilege escalation", items: ["Credential reuse, Pass-the-Hash, tickets", 'PsExec / WMIExec / SSH / RDP'] },
-      { label: "Data", items: ["Bulk-export sensitive data into runs/ and record references"] },
+      { label: '内网测绘', items: ['存活 / 端口 / 服务 / 共享目录', '数据库、中间件、备份系统'] },
+      { label: '横向与提权', items: ['凭据复用、Pass-the-Hash、票据', 'PsExec / WMIExec / SSH / RDP'] },
+      { label: '数据', items: ['批量导出敏感信息，落 runs/ 并记引用'] },
     ],
-    tools: "gogo / fscan (through the tunnel), Impacket, Mimikatz / LaZagne, BloodHound, suo5",
-    transition: "Locate the core target inside the internal network",
+    tools: 'gogo / fscan（走隧道）、Impacket、Mimikatz / LaZagne、BloodHound、suo5',
+    transition: '定位内网核心靶标',
   },
   {
-    code: 'target', name: "Target privilege", subtitle: 'TARGET SYSTEM', color: '#10b981', scored: 1,
-    goal: "Obtain privileges on the important internal asset (the target)",
+    code: 'target', name: '靶标权限', subtitle: 'TARGET SYSTEM', color: '#10b981', scored: 1,
+    goal: '获取内网重要资产（靶标）的权限',
     sections: [
-      { label: "Target scoping", items: ["Confirm the target system / server scope per the exercise rules", "Clarify the scoring criteria"] },
-      { label: "Take the target", items: ["root / SYSTEM / administrator / cloud AK", "Read/write business data and change configuration"] },
-      { label: "Preserve results", items: ["Archive the evidence chain (config / data / host info / screenshots)", "Review the attack timeline"] },
+      { label: '靶标定位', items: ['按演练规则确认靶标系统 / 服务器范围', '明确得分判定口径'] },
+      { label: '拿靶标', items: ['root / SYSTEM / 管理员 / 云 AK', '业务数据读写与配置变更能力'] },
+      { label: '成果固化', items: ['证据链归档（配置 / 数据 / 主机信息 / 截图）', '攻击时间线回顾'] },
     ],
-    tools: "Credential reuse, internal lateral tools, evidence-chain archiving and reporting",
+    tools: '凭据复用、内网横向工具、证据链归档与报告',
     transition: '',
   },
 ]
@@ -304,32 +314,32 @@ export const POINT_STAGE_OVERRIDE = {
  * 合并后的得分点全名太长，放不进表头；全名仍写在每条明细的「得分点」一行。
  */
 export const POINT_SHORT_NAME = {
-  'domain-control': "Domain control",
-  'terminal-access': "Endpoint privilege",
-  'server-host': "Server host",
-  'db-credential': "Database credential",
-  'web-app': "Web application",
-  'central-system': "Centralized system",
-  'bigdata-system': "Big-data system",
-  'netdev': "Network device",
-  'netdev-redirect': "Network redirection",
-  'netdev-implant': "Network device implant",
-  'iiot': "Industrial internet",
-  'cloud-platform': "Cloud management platform",
-  'iot-platform': "IoT platform",
-  'secdev': "Security device",
-  'file-storage': "File storage",
-  'ai-agent': "Model agent",
-  'model-compute': "Compute / knowledge-base system",
-  'model-data': "Model data system",
-  'computepower-admin': "Compute infrastructure",
-  'computepower-cards': "Compute card resources",
-  'boundary-logical': "Enter a logically isolated intranet",
-  'boundary-strong': "Enter a strongly isolated intranet",
-  'boundary-physical': "Enter a physically isolated intranet",
-  'boundary-supply': "Supply-chain / cloud-service channel",
-  'iot-corenet': "IoT entry into the core network",
-  'core-system': "Core system (legacy)",
+  'domain-control': '域名控制',
+  'terminal-access': '终端权限',
+  'server-host': '服务器主机',
+  'db-credential': '数据库凭据',
+  'web-app': 'Web 应用',
+  'central-system': '集权系统',
+  'bigdata-system': '大数据系统',
+  'netdev': '网络设备',
+  'netdev-redirect': '网络重定向',
+  'netdev-implant': '网络设备植入',
+  'iiot': '工业互联网',
+  'cloud-platform': '云管理平台',
+  'iot-platform': '物联网平台',
+  'secdev': '安全设备',
+  'file-storage': '文件存储',
+  'ai-agent': '模型智能体',
+  'model-compute': '算力 / 知识库系统',
+  'model-data': '模型数据系统',
+  'computepower-admin': '算力基础设施',
+  'computepower-cards': '算力卡资源',
+  'boundary-logical': '进入逻辑隔离内网',
+  'boundary-strong': '进入强隔离内网',
+  'boundary-physical': '进入物理隔离内网',
+  'boundary-supply': '供应链 / 云服务通道',
+  'iot-corenet': '物联网打入核心网',
+  'core-system': '核心系统（旧口径）',
 }
 
 /**
@@ -739,7 +749,7 @@ export const PLANNER_ROLE = 'plan'
 export function dispatch(store, req = {}) {
   const op = typeof req.op === 'string' ? req.op.trim() : ''
   try {
-    if (!op) return { ok: false, error: 'missing op' }
+    if (!op) return { ok: false, error: '缺少 op' }
     if (op === 'bootstrap') {
       const engagements = store.listEngagements()
       /* 优先沿用「当前靶标」指针，其次才是最近创建的靶标 */
@@ -788,7 +798,7 @@ export function dispatch(store, req = {}) {
         }
       }
       const writing = /^(add|save|update|delete|import|assess|open)/.test(op)
-      if (writing) return { ok: false, error: "Select or create a target at the top first" }
+      if (writing) return { ok: false, error: '请先在顶部选择或创建一个靶标' }
       return { ok: true, items: [], total: 0, stats: null, segments: [], stages: [], roles: [] }
     }
 
@@ -848,7 +858,7 @@ export function dispatch(store, req = {}) {
     if (op === 'prompts') return { ok: true, roles: store.listPrompts(id) }
     if (op === 'savePrompt') return Object.assign({ ok: true }, store.savePrompt(id, req.role, req.content))
     if (op === 'resetPrompts') return Object.assign({ ok: true }, store.resetPrompts(id, req.role))
-    throw new Error(`unknown op: ${op}`)
+    throw new Error(`未知操作: ${op}`)
   } catch (error) {
     return { ok: false, error: error && error.message ? error.message : String(error) }
   }
@@ -863,7 +873,7 @@ export async function dispatchAsync(store, req = {}) {
     try {
       const id = (typeof req.engagement === 'string' && req.engagement.trim())
         || (typeof store.activeEngagementId === 'function' ? store.activeEngagementId() : '')
-      if (!id) return { ok: true, items: [], note: "No target yet" }
+      if (!id) return { ok: true, items: [], note: '还没有靶标' }
       const result = await store.probeSessions(id, req)
       return Object.assign({ ok: true }, result)
     } catch (error) {
@@ -940,7 +950,8 @@ export class RedteamStore {
   }
 
   /* ---------- 路径 ---------- */
-  dirOf(id) { return join(this.engagementsDir, id) }
+  /* id 来自请求体（dispatch 的 req.engagement），拼路径前必须挡住 `..` 出去。 */
+  dirOf(id) { return assertPathWithin(join(this.engagementsDir, id), [this.engagementsDir]) }
   metaPathOf(id) { return join(this.dirOf(id), 'engagement.yaml') }
   dbPathOf(id) { return join(this.dirOf(id), 'assets.db') }
   promptsDirOf(id) { return join(this.dirOf(id), 'agents') }
@@ -955,7 +966,7 @@ export class RedteamStore {
     let handle = this.handles.get(id)
     if (handle) return handle
     if (!existsSync(this.dbPathOf(id))) {
-      if (options.create !== true) throw new Error(`engagement not found: ${id}`)
+      if (options.create !== true) throw new Error(`靶标不存在: ${id}`)
       mkdirSync(this.dirOf(id), { recursive: true })
     }
     handle = new DatabaseSync(this.dbPathOf(id))
@@ -980,16 +991,21 @@ export class RedteamStore {
   }
 
   /* ---------- 靶标生命周期 ---------- */
-  listEngagements() {
+  listEngagements(options = {}) {
     mkdirSync(this.engagementsDir, { recursive: true })
+    const withStats = options.stats === true
     const out = []
     for (const entry of readdirSync(this.engagementsDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue
       const meta = readMeta(this.metaPathOf(entry.name)) || {}
       let stats = null
-      try {
-        if (existsSync(this.dbPathOf(entry.name))) stats = this.stats(entry.name)
-      } catch { /* 库损坏时仍列出靶标 */ }
+      /* 只有面板 bootstrap 要统计。工具调用解析靶标名每次都开库 + 13 条 COUNT，
+         靶标一多就把每个工具步拖慢；默认不带。 */
+      if (withStats) {
+        try {
+          if (existsSync(this.dbPathOf(entry.name))) stats = this.stats(entry.name)
+        } catch { /* 库损坏时仍列出靶标 */ }
+      }
       out.push({
         id: entry.name, name: meta.target_name || entry.name,
         scope: meta.scope_cidrs || [], status: meta.status || 'active',
@@ -1055,7 +1071,7 @@ export class RedteamStore {
     const span = db.prepare(`SELECT MIN(COALESCE(discovered_at, first_seen)) AS first,
         MAX(COALESCE(discovered_at, first_seen)) AS last, COUNT(*) AS total FROM asset`).get() || {}
     return {
-      days: days.map((d) => Object.assign({}, d, { day: d.day || "(unknown time)" })),
+      days: days.map((d) => Object.assign({}, d, { day: d.day || "(未知时间)" })),
       recent,
       span: { first: span.first || null, last: span.last || null, total: span.total || 0 },
     }
@@ -1445,7 +1461,7 @@ export class RedteamStore {
   /** 编辑阶段内容（名称/目标/手段分组/工具/ATT&CK/过渡语）。 */
   saveStage(id, patch = {}) {
     const db = this.db(id)
-    if (!patch.code) throw new Error('stage.code required')
+    if (!patch.code) throw new Error('stage.code 必填')
     const cur = db.prepare('SELECT * FROM stage WHERE code = ?').get(String(patch.code))
     db.prepare(`INSERT INTO stage(code, name, subtitle, color, goal, sections, tools, transition, sort_order, updated_at)
       VALUES(?,?,?,?,?,?,?,?,?,?)
@@ -1509,6 +1525,7 @@ export class RedteamStore {
         const ids = doomed.map((r) => r.id)
         const ph = ids.map(() => '?').join(',')
         const hits = db.prepare(`SELECT * FROM score_hit WHERE point_id IN (${ph})`).all(...ids)
+        let archived = hits.length === 0
         if (hits.length > 0) {
           /* 存档：放靶标目录的 runs/ 下，与其它证据同处一地 */
           try {
@@ -1521,8 +1538,11 @@ export class RedteamStore {
                 reason: '按《突破入侵类得分规则（合并版）》重构：旧得分项整套作废',
                 points: doomed, hits,
               }, null, 2), 'utf8')
-          } catch { /* 存档失败不阻断清理，但要照实记账 */ }
+            archived = true
+          } catch { /* 存档失败：下面不删，下次启动再试（删了就永久丢证据） */ }
         }
+        /* 没存下来就不删：宁可旧得分项多留一轮，也不能静默丢证据。 */
+        if (!archived) throw new Error('legacy score archive failed; purge skipped')
         db.prepare(`DELETE FROM score_hit WHERE point_id IN (${ph})`).run(...ids)
         db.prepare(`DELETE FROM score_point WHERE id IN (${ph})`).run(...ids)
         purgedPoints = doomed.length
@@ -1662,7 +1682,7 @@ export class RedteamStore {
         const cappedList = valid.filter((h) => h.capped === true)
         const meta = pointsMeta.get(r.code) || { rule: null, cap: 0, dedup_scope: 'service' }
         const capUsed = meta.rule === null ? null : cappedAll.caps.get('rule:' + meta.rule)
-        const scopeLabel = { service: "Highest hit per service counts once", system: "Highest privilege per system counts once", target: "Counts once for the whole target", none: "Accumulates per host / card / node" }[meta.dedup_scope] || ''
+        const scopeLabel = { service: '同一服务只算最高一条', system: '同一系统只算最高权限一次', target: '整个目标只算一次', none: '按台 / 卡 / 节点数累加' }[meta.dedup_scope] || ''
         return {
           id: r.id, code: r.code, name: r.name, category: r.category, points: r.points,
           rule: meta.rule, tier: r.tier || null, cap: meta.cap || 0, dedup_scope: meta.dedup_scope,
@@ -1682,7 +1702,7 @@ export class RedteamStore {
           cap_capped: capUsed ? capUsed.capped : 0,
           scope_label: scopeLabel,
           service_summary: (meta.dedup_scope !== 'none' && cappedList.length > 0)
-            ? "Scoring basis \"" + scopeLabel + "\": " + counted + " counted; " + cappedList.length + " duplicate hit(s) not scored"
+            ? '计分口径「' + scopeLabel + '」：已达 ' + counted + ' 个，另有 ' + cappedList.length + ' 条重复命中不计分'
             : null,
           description: r.description || '', enabled: r.enabled === 1, sort_order: r.sort_order,
           hits: list,
@@ -1833,7 +1853,7 @@ export class RedteamStore {
     if (point.id !== undefined && point.id !== null && Number(point.id) > 0) {
       const pid = Number(point.id)
       const row = db.prepare('SELECT id, code, name, points, cap, rule, tier, dedup_scope, builtin, legacy FROM score_point WHERE id = ?').get(pid)
-      if (row === undefined) throw new Error('score point not found: id=' + pid)
+      if (row === undefined) throw new Error('得分点不存在: id=' + pid)
       if (Number(row.builtin) === 1 || Number(row.legacy) === 1) {
         /* 内置点：只落 enabled / sort_order，其余字段留给 seedScorePoints 按规则同步 */
         db.prepare('UPDATE score_point SET enabled = ?, sort_order = COALESCE(?, sort_order), updated_at = ? WHERE id = ?')
@@ -1844,20 +1864,20 @@ export class RedteamStore {
           points: after.points, cap: after.cap, rule: after.rule,
           overridden: Number(point.points) === Number(after.points),
           locked_fields: ['name', 'category', 'points', 'cap', 'rule', 'tier', 'dedup_scope', 'description'],
-          note: "This is a built-in score point shipped with the red-team scoring rules: points, cap, scoring basis, name, and clause text"
-            + " are all locked by the rules (one rule's cap accumulates across all score points in its group; changing a single point's value would let one hit eat the whole group's cap)."
-            + "Your enable/disable change was saved. To use a custom value, **add a new score point**.",
+          note: '这是随《突破入侵类得分规则》分发的内置得分点：分值、上限、计分口径、名称与条款正文'
+            + '都由规则锁定（同一条规则的上限按组内所有得分点累计，单独改分值会让一条命中吃掉整组上限）。'
+            + '已保存你修改的「启用/停用」。要自定义分值时请**新增一个得分点**。',
         }
       }
-      if (name === '') throw new Error('score point name required')
+      if (name === '') throw new Error('得分点名称必填')
       const points = Number.isFinite(Number(point.points)) ? Number(point.points) : 0
       db.prepare(`UPDATE score_point SET name = ?, category = ?, points = ?, description = ?, enabled = ?,
           sort_order = COALESCE(?, sort_order), updated_at = ? WHERE id = ?`)
         .run(name, point.category ?? null, points, point.description ?? null, enabled,
           point.sort_order ?? null, nowIso(), pid)
-      return { id: pid, updated: true, builtin: false, overridden: true, points, note: "Saved (custom score point)" }
+      return { id: pid, updated: true, builtin: false, overridden: true, points, note: '已保存（自建得分点）' }
     }
-    if (name === '') throw new Error('score point name required')
+    if (name === '') throw new Error('得分点名称必填')
     const points = Number.isFinite(Number(point.points)) ? Number(point.points) : 0
     const next = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM score_point').get().n
     /* 自建点可能带上与内置点相同的 code（面板默认按名称生成）：code 有 UNIQUE 约束，
@@ -1875,7 +1895,7 @@ export class RedteamStore {
     )
     return {
       id: Number(r.lastInsertRowid), code, updated: false, builtin: false, overridden: true,
-      points, note: "Added a custom score point (not locked to the rule value, and not removed by legacy cleanup)",
+      points, note: '已新增自建得分点（不受规则分值锁定，也不会被旧体系清理删除）',
     }
   }
 
@@ -1884,14 +1904,21 @@ export class RedteamStore {
     const db = this.db(id)
     const pid = Number(pointId)
     const row = db.prepare('SELECT id, code, name, builtin FROM score_point WHERE id = ?').get(pid)
-    if (row === undefined) throw new Error('score point not found: id=' + pid)
+    if (row === undefined) throw new Error('得分点不存在: id=' + pid)
     if (Number(row.builtin) === 1) {
-      throw new Error("Built-in score points cannot be deleted: \"" + (row.name || row.code) + "\" comes from the merged red-team scoring rules; "
-        + "deleting it would leave the panel missing a rule and the report missing a class of results (it will be re-added automatically on the next start)."
-        + "To exclude it from scoring, use Disable instead.")
+      throw new Error('内置得分点不能删除：「' + (row.name || row.code) + '」来自《突破入侵类得分规则（合并版）》，'
+        + '删掉会让面板缺一条规则、报告少一类成果（下次启动还会自动补回来）。'
+        + '要让它不参与计分，请改用「停用」。')
     }
-    db.prepare('DELETE FROM score_hit WHERE point_id = ?').run(pid)
-    db.prepare('DELETE FROM score_point WHERE id = ?').run(pid)
+    db.exec('BEGIN')
+    try {
+      db.prepare('DELETE FROM score_hit WHERE point_id = ?').run(pid)
+      db.prepare('DELETE FROM score_point WHERE id = ?').run(pid)
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
     return { deleted: pid }
   }
 
@@ -1935,12 +1962,12 @@ export class RedteamStore {
       if (row !== undefined) pointId = row.id
     }
     if (pointId === null) {
-      throw new Error("score point not found: scoring rules were rebuilt into 25 items under the merged red-team scoring rules; "
-        + "the old codes (web-account-*, webshell, rce, server-shell, db-access, sensitive-data, boundary, internal-pivot, core-system, etc.) are obsolete. "
-        + "Read the actual codes with redteam_score_list first, or specify point_id / point_name.")
+      throw new Error("score point not found：得分规则已按《突破入侵类得分规则（合并版）》重构为 25 项，"
+        + "旧 code（web-account-*、webshell、rce、server-shell、db-access、sensitive-data、boundary、internal-pivot、core-system 等）已作废。"
+        + "先用 redteam_score_list 读实际 code，或传 point_id / point_name。")
     }
     const evidence = String(hit.evidence || '').trim()
-    if (evidence === '') throw new Error("score hit evidence required: a hit must state its evidence (account / command output / data volume / path)")
+    if (evidence === '') throw new Error("score hit evidence required：一条命中必须写明依据（账号 / 命令输出 / 数据量 / 路径）")
     /* 自己注册/自建的账号：允许记录（留过程），但不计分 */
     const selfCreated = hit.self_created === true || hit.self_created === 1 || hit.self_created === '1' ? 1 : 0
     const port = this.#servicePortOf(db, hit)
@@ -1959,16 +1986,16 @@ export class RedteamStore {
     if (hit.points !== undefined && hit.points !== null && hit.points !== '') {
       const n = Number(hit.points)
       if (!Number.isFinite(n)) {
-        throw new Error("score hit points invalid: points must be a finite number (got " + JSON.stringify(hit.points) + ')')
+        throw new Error("score hit points invalid：points 必须是有限数字（收到 " + JSON.stringify(hit.points) + '）')
       }
       if (n <= 0) {
-        throw new Error("score hit points invalid: points must be greater than 0 (got " + n
-          + "). Fill in the value from the tier table of the red-team scoring rules; do not use it to tune scores.")
+        throw new Error("score hit points invalid：points 必须大于 0（收到 " + n
+          + "）。请按得分规则的档位表填写分值，不要用它来调节分数。")
       }
       if (n > pointsMax) {
-        throw new Error('score hit points invalid: points=' + n + " exceeds the reasonable cap for this score point " + pointsMax
-          + " (= max(rule cap " + (Number(pointMeta.cap) || 0) + ", default value " + (Number(pointMeta.points) || 0)
-          + " × 100)). Fill in a tier value from the rules, or fix the score point's value setting.")
+        throw new Error('score hit points invalid：points=' + n + " 超过该得分点的合理上限 " + pointsMax
+          + "（= max(规则上限 " + (Number(pointMeta.cap) || 0) + "，默认分值 " + (Number(pointMeta.points) || 0)
+          + " × 100)）。请按规则档位填写，或修正得分点的分值设置。")
       }
       hitPoints = n
     }
@@ -2000,7 +2027,7 @@ export class RedteamStore {
       : []
     const warnings = []
     if (selfCreated === 1) {
-      warnings.push("Recorded, but **accounts you registered/created yourself do not score** (exercise scoring is for taking over accounts/privileges someone else already had). This hit is kept as a process record only: it does not consume a cap and does not enter the report.")
+      warnings.push('已记录，但**自己注册/自己创建的账号不计分**（演练得分针对"拿到别人已有的账号/权限"）。这条只作过程留痕，不占上限、不进报告。')
     }
     /* G5「含大量数据系统得分翻倍」要有量级依据：门槛是 **1 亿条 / 10TB**。
        判不出来只**警告不阻断** —— 数据量常在报告正文里而不是 evidence 里，
@@ -2008,12 +2035,12 @@ export class RedteamStore {
     if (mult.multiplier > 1 && mult.reasons.some((x) => x.indexOf('G5') === 0)) {
       const rows = parseRowCount(evidence)
       if (rows === null) {
-        warnings.push("Note: this hit claims the G5 data-scale multiplier, but the evidence does not **show the data volume**."
-          + "State the actual scale in evidence (e.g. \"exported 130 million user records\" or \"12TB of training data\"), otherwise the multiplier does not hold up.")
+        warnings.push('注意：这条按 G5 记了「数据规模翻倍」，但 evidence 里**看不出数据量**。'
+          + '请在 evidence 里写明实际规模（例如「导出 1.3 亿条用户数据」或「12TB 训练数据」），否则这条翻倍站不住。')
       } else if (rows < SENSITIVE_DATA_MIN_ROWS) {
-        warnings.push("Note: this hit claims the G5 multiplier, but the volume in evidence is **" + formatRows(rows) + " rows/records**,"
-          + "far below the large-data-system threshold (over 100 million records or 10TB per the document). Verify the data scale; if it really is over 100 million records,"
-          + " write it in evidence in a more explicit form (e.g. \"132 million records\").")
+        warnings.push('注意：这条按 G5 记了翻倍，但 evidence 里的量是 **' + formatRows(rows) + ' 条/行**，'
+          + '远低于「大量数据系统」的门槛（文档为超 1 亿条或 10TB）。请核对数据规模；确实是 1 亿条以上时'
+          + '用更明确的写法（如「1.32 亿条」）写进 evidence。')
       }
     }
     if (cappedByService) {
@@ -2021,9 +2048,9 @@ export class RedteamStore {
         ? undefined
         : (db.prepare('SELECT ip FROM asset WHERE id = ?').get(Number(row.asset_id)) || {}).ip
       warnings.push(serviceCapReason(Object.assign({}, row, { code: point ? point.code : '', asset_ip: assetIp }), capByPoints))
-      if (capBy) warnings.push("Scored instead: another hit on the same service: " + String(capBy).slice(0, 120))
+      if (capBy) warnings.push('计分的是同服务的另一条：' + String(capBy).slice(0, 120))
     } else if (demoted.length > 0) {
-      warnings.push("Note: this hit superseded " + demoted.length + " lower-scored older hit(s) on the same service — **only one hit counts per asset+port**, so the total score will not increase (the old hit is no longer counted).")
+      warnings.push('注意：这条把同服务上分值更低的 ' + demoted.length + ' 条旧命中顶掉了——**同一资产同一端口只算一次**，所以本次记分不会让总分增加（旧命中转为不计分）。')
     }
     return {
       id: hitId, point_id: pointId,
@@ -2058,7 +2085,7 @@ export class RedteamStore {
     let row
     if (a.asset_id !== undefined && a.asset_id !== null) row = db.prepare('SELECT * FROM asset WHERE id = ?').get(Number(a.asset_id))
     else if (a.ip) row = db.prepare('SELECT * FROM asset WHERE ip = ?').get(String(a.ip))
-    if (row === undefined) throw new Error("asset not found (pass asset_id or ip)")
+    if (row === undefined) throw new Error('asset not found（请传 asset_id 或 ip）')
     const priority = ['high', 'medium', 'low'].includes(a.priority) ? a.priority : (row.priority || 'medium')
     const stamp = nowIso()
     db.prepare('UPDATE asset SET priority = ?, potential = ?, assess_reason = ?, assessed_at = ?, assessed_by = ? WHERE id = ?')
@@ -2085,7 +2112,7 @@ export class RedteamStore {
     } else if (t.ip) {
       row = db.prepare('SELECT * FROM asset WHERE ip = ?').get(String(t.ip))
     }
-    if (row === undefined) throw new Error("asset not found (pass asset_id or ip)")
+    if (row === undefined) throw new Error('asset not found（请传 asset_id 或 ip）')
     const status = ['untested', 'testing', 'tested', 'blocked', 'abandoned', 'no_surface'].includes(t.status)
       ? t.status
       : (row.test_status || 'untested')
@@ -2116,7 +2143,7 @@ export class RedteamStore {
       asset_id: row.id, ip: row.ip, status, blocked_count: blockedCount,
       test_notes: notes, tests: notes, surface, updated_at: stamp,
       hint: blockedCount >= 3
-        ? "This asset has been blocked " + blockedCount + " time(s) (over the 3-times rule): set status to abandoned in this call, note the remaining attack surface, then switch targets."
+        ? "该资产已被拦截 " + blockedCount + " 次（超过 3 次规则）：本次调用里把 status 设为 abandoned，写清剩余攻击面，然后转向下一个目标。"
         : undefined,
     }
   }
@@ -2190,15 +2217,28 @@ export class RedteamStore {
       FROM vuln v LEFT JOIN asset a ON a.id = v.asset_id ${clause}
       ORDER BY CASE v.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END,
                v.id DESC LIMIT ?`).all(...args, limit)
-    /* 详情里要直接展示原始请求/响应，这里一并带上（请求体可能很大，做长度保护） */
-    const eviStmt = db.prepare(`SELECT id, label, method, url, status, request, response, note, captured_by, captured_at
-      FROM http_evidence WHERE vuln_id = ? ORDER BY id`)
-    const clipped = (t) => (t === null || t === undefined ? null : (String(t).length > 60000 ? String(t).slice(0, 60000) + "\n… (truncated)" : String(t)))
-    for (const item of items) {
-      item.http_evidence = eviStmt.all(item.id).map((e) => Object.assign({}, e, {
-        request: clipped(e.request), response: clipped(e.response),
-      }))
+    /* 详情里要直接展示原始请求/响应，这里一并带上（请求体可能很大，做长度保护）。
+       一次 IN 取完再分组，避免每条漏洞各查一次（limit=200 时就是 200 次查询）。 */
+    /* 列表要展示证据是否存在与摘要，但不必把完整报文都端上来：全文走 httpEvidence /
+       报告链路按需取。200 条 × 数条证据 × 60k 字符会把面板主线程卡死。
+       报告生成(store-core report/reportTargets)显式传 evidenceLimit:60000 拿全文。 */
+    const evidenceLimit = Math.min(Number(f.evidenceLimit) || 8000, 60000)
+    const clipped = (t) => (t === null || t === undefined ? null : (String(t).length > evidenceLimit ? String(t).slice(0, evidenceLimit) + "\n… (truncated)" : String(t)))
+    const eviByVuln = new Map()
+    const ids = items.map((it) => Number(it.id)).filter((n) => Number.isInteger(n))
+    if (ids.length > 0) {
+      const ph = ids.map(() => '?').join(',')
+      const rows = db.prepare(`SELECT id, vuln_id, label, method, url, status, request, response, note, captured_by, captured_at
+        FROM http_evidence WHERE vuln_id IN (${ph}) ORDER BY id`).all(...ids)
+      for (const e of rows) {
+        const key = Number(e.vuln_id)
+        if (!eviByVuln.has(key)) eviByVuln.set(key, [])
+        eviByVuln.get(key).push(Object.assign({}, e, {
+          request: clipped(e.request), response: clipped(e.response),
+        }))
+      }
     }
+    for (const item of items) item.http_evidence = eviByVuln.get(Number(item.id)) || []
     return { total, items }
   }
 
@@ -2237,7 +2277,7 @@ export class RedteamStore {
   /** 凭据：明文写 secret_value（面板直接显示），同时保留 secret_ref 指向证据文件。 */
   addCredential(id, c = {}) {
     const db = this.db(id)
-    if (!c.host) throw new Error('credential.host required')
+    if (!c.host) throw new Error('credential.host 必填')
     /* 明文凭据：secret_value 为准，兼容 secret / password / value 等别名 */
     const value = c.secret_value ?? c.secret ?? c.password ?? c.value ?? null
     db.prepare(`INSERT INTO credential(asset_id, host, username, secret_type, secret_value, secret_ref, privilege, source, tool, note, found_by_agent, found_at, agent)
@@ -2274,7 +2314,7 @@ export class RedteamStore {
   /** 访问会话：一次可控访问（横向移动的起点）。 */
   addAccess(id, a = {}) {
     const db = this.db(id)
-    if (!a.host) throw new Error('access.host required')
+    if (!a.host) throw new Error('access.host 必填')
     const result = db.prepare(`INSERT INTO access_session(asset_id, host, username, method, privilege, session_ref, note, found_by_agent, obtained_at)
       VALUES(?,?,?,?,?,?,?,?,?)`).run(
       a.asset_id ?? null, a.host, a.username ?? null, a.method ?? null, a.privilege ?? null,
@@ -2304,7 +2344,7 @@ export class RedteamStore {
    */
   addWebshell(id, w = {}) {
     const db = this.db(id)
-    if (!w.url) throw new Error('webshell.url required')
+    if (!w.url) throw new Error('webshell.url 必填')
     const ts = nowIso()
     const existing = db.prepare('SELECT id FROM webshell WHERE url = ? AND COALESCE(pass_key, \'\') = COALESCE(?, \'\')')
       .get(w.url, w.pass_key ?? null)
@@ -2352,10 +2392,10 @@ export class RedteamStore {
       if (key === 'status') value = normalizeShellStatus(value)
       sets.push(`${key} = ?`); args.push(value)
     }
-    if (sets.length === 0) throw new Error('nothing to update')
+    if (sets.length === 0) throw new Error('没有可更新的字段')
     sets.push('updated_at = ?'); args.push(nowIso())
     const result = db.prepare(`UPDATE webshell SET ${sets.join(', ')} WHERE id = ?`).run(...args, wsId)
-    if (result.changes === 0) throw new Error('webshell not found')
+    if (result.changes === 0) throw new Error('webshell 不存在')
     return { updated: true }
   }
 
@@ -2377,9 +2417,9 @@ export class RedteamStore {
        而模型只是多打了一个空格（`target-http `）就踩到，事后完全查不出原因。 */
     const rawEntryKind = t.entry_kind === undefined || t.entry_kind === null ? '' : String(t.entry_kind).trim()
     if (rawEntryKind !== '' && TUNNEL_ENTRY_KINDS[rawEntryKind] === undefined) {
-      throw new Error("entry_kind invalid: " + JSON.stringify(t.entry_kind) + ". Valid values are "
+      throw new Error("entry_kind 非法：" + JSON.stringify(t.entry_kind) + "。合法值只有 "
         + Object.keys(TUNNEL_ENTRY_KINDS).join(' / ') + ' (' + Object.values(TUNNEL_ENTRY_KINDS).join(' / ') + ').'
-        + "Leaving it empty is treated as \"pending confirmation\" and does not count toward a boundary breach.")
+        + "留空按「待确认」处理，不计入边界突破凭证。")
     }
     const result = db.prepare(`INSERT INTO tunnel(asset_id, webshell_id, kind, listen, entry, reach, entry_kind,
       status, pid, command, note, found_by_agent, created_at, updated_at, agent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
@@ -2396,9 +2436,9 @@ export class RedteamStore {
       entry_kind: entryKind,
       legit,
       warning: legit === false
-        ? "Recorded, but entry_kind=self-only (a channel opened only on your own VPS/self-hosted server) — **this is not a tunnel and does not count as a boundary/internal breach**. It must be a channel initiated from the target side: a target reverse shell to my server, an frp client running on the target, or a suo5/HTTP tunnel built through a target WebShell."
+        ? "已登记，但 entry_kind=self-only（只在自己 VPS/自建服务器上开的通道）—— **这不算隧道、不算边界突破/内网突破**。必须是目标侧发起的通道：目标反弹 shell 到我的服务器、目标上跑 frp 客户端、或经目标 WebShell 建的 suo5/HTTP 隧道。"
         : (legit === null
-            ? "Add an entry_kind explaining what the target-side end is (target-outbound / target-http / target-agent); while undeclared the UI shows \"pending confirmation\" and it does not count as breach evidence."
+            ? "建议补 entry_kind 说明「目标侧的那一端是什么」（target-outbound / target-http / target-agent）；不声明时界面按「待确认」显示，也不计入突破凭证。"
             : undefined),
     }
   }
@@ -2431,7 +2471,7 @@ export class RedteamStore {
       if (key === 'entry_kind') {
         const raw = value === null ? '' : String(value).trim()
         if (raw !== '' && TUNNEL_ENTRY_KINDS[raw] === undefined) {
-          throw new Error("entry_kind invalid: " + JSON.stringify(value) + ". Valid values are "
+          throw new Error("entry_kind 非法：" + JSON.stringify(value) + "。合法值只有 "
             + Object.keys(TUNNEL_ENTRY_KINDS).join(' / ') + '.')
         }
         value = raw === '' ? null : raw
@@ -2439,16 +2479,16 @@ export class RedteamStore {
       if (key === 'status') {
         const raw = String(value).trim()
         if (!TUNNEL_STATUSES.includes(raw)) {
-          throw new Error("tunnel status invalid: " + JSON.stringify(value) + ". Valid values are " + TUNNEL_STATUSES.join(' / ') + '.')
+          throw new Error("隧道状态非法：" + JSON.stringify(value) + "。合法值只有 " + TUNNEL_STATUSES.join(' / ') + '。')
         }
         value = raw
       }
       sets.push(`${key} = ?`); args.push(value)
     }
-    if (sets.length === 0) throw new Error('nothing to update')
+    if (sets.length === 0) throw new Error('没有可更新的字段')
     sets.push('updated_at = ?'); args.push(nowIso())
     const result = db.prepare(`UPDATE tunnel SET ${sets.join(', ')} WHERE id = ?`).run(...args, tId)
-    if (result.changes === 0) throw new Error('tunnel not found')
+    if (result.changes === 0) throw new Error('隧道不存在')
     return { updated: true }
   }
 
@@ -2620,14 +2660,14 @@ export class RedteamStore {
     /* 复现完整性判定：一条得分至少要"有步骤 + （有命令 或 有漏洞 或 有原始请求）" */
     const hasCommand = steps.some((s) => String(s.tool || '').trim() !== '')
     const gaps = []
-    if (steps.length === 0) gaps.push("No attack-step record (`redteam_chain_add`): cannot explain how this action was performed")
-    else if (!hasCommand) gaps.push("The attack step has no `tool` (the actual command): a replay cannot tell what was run")
-    if (hit.vuln_id === null || hit.vuln_id === undefined) gaps.push("No linked `vuln_id`: the report cannot attach the matching raw request")
+    if (steps.length === 0) gaps.push("没有攻击步骤记录（`redteam_chain_add`）：说不清这条是怎么做到的")
+    else if (!hasCommand) gaps.push("攻击步骤没写 `tool`（实际执行的命令）：回放时不知道当时跑了什么")
+    if (hit.vuln_id === null || hit.vuln_id === undefined) gaps.push("没有关联 `vuln_id`：报告挂不上对应的原始请求")
     if (credentials.length === 0 && ['web-account-user', 'web-account-admin', 'db-access'].includes(hit.code)) {
-      gaps.push("Account-type score without a registered credential (`redteam_credential_add`): cannot explain where the account/password came from")
+      gaps.push("账号类得分没有登记凭据（`redteam_credential_add`）：说不清账号/口令从哪来")
     }
     if (['boundary', 'internal-pivot'].includes(hit.code) && tunnels.length === 0) {
-      gaps.push("Breach-type score without a registered tunnel (`redteam_tunnel_add`): cannot explain how the channel was built")
+      gaps.push("突破类得分没有登记隧道（`redteam_tunnel_add`）：说不清通道怎么建的")
     }
 
     /* how：一句话交代"靠什么拿到的"，优先用最有信息量的那条 */
@@ -2970,7 +3010,7 @@ export class RedteamStore {
         code: h.code || '',
         stage_code: scoreStageOf({ stage_code: h.stage_code, code: h.code, target: h.target },
           h.asset_id === null || h.asset_id === undefined ? undefined : scopeOf.get(h.asset_id)),
-        point_name: h.point_name || "(deleted score point)",
+        point_name: h.point_name || "（已删除的得分点）",
         category: h.category || '',
         points: hitPoints,
         counted: counted,
@@ -3348,21 +3388,21 @@ export class RedteamStore {
     const cliCount = ordered.filter((x) => x.repro_kind === 'cli').length
     const methodCount = ordered.filter((x) => x.repro_kind === 'method').length
 
-    md.push('# ' + targetName + " · Red team results replay report", '')
-    md.push("> This report only includes **scored results**: each entry gives a replay entry point (a raw request Burp / Yakit can replay directly, "
-      + "or a command line run through the tunnel), the success criteria, and an evidence index; entries are ordered by attack-chain **dependency** with prerequisites marked.", '')
+    md.push('# ' + targetName + " · 红队成果复现报告", '')
+    md.push("> 本报告只收**已计分的成果**：每条给出一个复现入口（Burp / Yakit 可直接重放的原始请求，或经隧道执行的命令行）、成功判据与证据索引；条目按攻击链**依赖关系**排序，前置条件已标注。"
+      + '')
 
     /* ── ⓪ 摘要与对账 ──────────────────────────────────────────────────── */
-    md.push("## 0. Summary and reconciliation", '')
+    md.push("## 0. 摘要与对账", '')
     const shotItems = ordered.filter((x) => (x.shots || []).length > 0)
     const shotTotal = ordered.reduce((n, x) => n + (x.shots || []).length, 0)
     const shotReal = ordered.reduce((n, x) => n + (x.shots || []).filter((v) => v.kind !== 'card').length, 0)
-    md.push("| Total score | Scored items | Burp/Yakit replay | Command-line replay | Other methods | Evidence screenshots |", '| --- | --- | --- | --- | --- | --- |')
-    md.push('| **' + summary.points + " pts** | " + ordered.length + " item(s) | " + httpCount
-      + " item(s) | " + cliCount + " item(s) | " + methodCount + " item(s) | " + shotTotal + " screenshots / " + shotItems.length
-      + " entries" + (shotReal < shotTotal ? " (live screenshots: " + shotReal + "; the rest are evidence excerpts generated from records)" : '') + ' |', '')
-    md.push("### 0.1 Score point usage", '')
-    md.push("| Score point | Hits | Points this run | Per-hit cap |", '| --- | --- | --- | --- |')
+    md.push("| 总分 | 计分条目 | Burp/Yakit 回放 | 命令行回放 | 其他方式 | 证据截图 |", '| --- | --- | --- | --- | --- | --- |')
+    md.push('| **' + summary.points + " 分** | " + ordered.length + " 条 | " + httpCount
+      + " 条 | " + cliCount + " 条 | " + methodCount + " 条 | " + shotTotal + " 张截图 / " + shotItems.length
+      + " 条" + (shotReal < shotTotal ? "（现场截图 " + shotReal + " 张；其余为由记录生成的证据摘录）" : '') + ' |', '')
+    md.push("### 0.1 得分点使用情况", '')
+    md.push("| 得分点 | 命中次数 | 本次得分 | 单条上限 |", '| --- | --- | --- | --- |')
     const byPoint = new Map()
     for (const x of ordered) {
       const k = x.code
@@ -3372,40 +3412,40 @@ export class RedteamStore {
       rec.points += x.points
     }
     for (const rec of Array.from(byPoint.values()).sort((a, b) => b.points - a.points)) {
-      md.push('| ' + rec.name + ' (`' + rec.code + '`) | ' + rec.hits + ' | +' + rec.points + " pts | "
-        + (Number(rec.cap) > 0 ? Number(rec.cap) + " pts" + (rec.points >= Number(rec.cap) ? " (full)" : '') : '—') + ' |')
+      md.push('| ' + rec.name + ' (`' + rec.code + '`) | ' + rec.hits + ' | +' + rec.points + " 分 | "
+        + (Number(rec.cap) > 0 ? Number(rec.cap) + " 分" + (rec.points >= Number(rec.cap) ? "（已满）" : '') : '—') + ' |')
     }
     md.push('')
-    md.push("### 0.2 Records vs scoring reconciliation", '')
-    md.push("- Score records in the database: **" + rows.length + "** → scored hits: **" + summary.count + "**"
-      + " → after merging same-action entries, body: **" + ordered.length + "** (one entry per bulk action + a per-target ledger)"
+    md.push("### 0.2 记录与计分对账", '')
+    md.push("- 数据库中计分记录：**" + rows.length + "** 条 → 计入得分：**" + summary.count + "** 条"
+      + " → 同一动作合并后正文：**" + ordered.length + "** 条（一次批量动作一条 + 分目标台账）"
       + "; another **" + (summary.selfCreatedExcluded + summary.serviceCappedExcluded + summary.disabledExcluded)
-      + "** were not scored (see below).")
+      + "** 条未计分（见下）。")
     if (summary.serviceCappedExcluded > 0) {
-      md.push("- Excluded: duplicate account/database privileges on the same asset+port " + summary.serviceCappedExcluded
-        + " (once the highest privilege on a service is reached it is capped; duplicates do not add up — see appendix 5.2).")
+      md.push("- 排除：同一资产同一端口的重复账号/数据库权限 " + summary.serviceCappedExcluded
+        + " 条（同一服务拿到最高权限后封顶，重复不再累加 —— 见附录 5.2）。")
     }
-    if (summary.selfCreatedExcluded > 0) md.push("- Excluded: self-registered/self-created accounts " + summary.selfCreatedExcluded + " (scoring is for taking over privileges someone else already had).")
-    if (summary.disabledExcluded > 0) md.push("- Excluded: the score point is disabled " + summary.disabledExcluded + ".")
+    if (summary.selfCreatedExcluded > 0) md.push("- 排除：自己注册/自建账号 " + summary.selfCreatedExcluded + " 条（得分针对拿到别人已有的权限）。")
+    if (summary.disabledExcluded > 0) md.push("- 排除：所在得分点已停用 " + summary.disabledExcluded + " 条。")
     const corrected = reportRows.filter((h) => /校正/.test(String(h.note || '')))
     if (corrected.length > 0) {
       md.push('')
-      md.push("> **Tier correction**: the following " + corrected.length + " entries were downgraded during final review;"
-        + "the values below are the **corrected** numbers (panel recorded 16180 raw; corrected 16090):", '')
+      md.push("> **档位校正**：以下 " + corrected.length + " 条在最终复核时下调了档位；"
+        + "下列数值为**校正后**的口径（面板原始记录 16180，校正后 16090）：", '')
       for (const h of corrected) {
-        md.push('- `' + (h.target || '') + '` ' + (h.point_name || h.code) + ' → **' + (h.points || 0) + " pts** "
+        md.push('- `' + (h.target || '') + '` ' + (h.point_name || h.code) + ' → **' + (h.points || 0) + " 分** "
           + oneLine(h.note, 200))
       }
     }
     md.push('')
-    md.push("### 0.3 Replay index", '')
-    md.push("| # | Score point | Points | Target | Prerequisite | Replay entry |", '| --- | --- | --- | --- | --- | --- |')
+    md.push("### 0.3 复现索引", '')
+    md.push("| # | 得分点 | 得分 | 目标 | 前置 | 复现入口 |", '| --- | --- | --- | --- | --- | --- |')
     for (const x of ordered) {
       const dep = (x.deps || []).map((d) => '#' + d.no).join(', ')
-      const entry = x.repro_kind === 'http' ? "Burp / Yakit request (§3." + x.chain_no + ')'
-        : (x.repro_kind === 'cli' ? "command line (§3." + x.chain_no + ')' : "replay method (§3." + x.chain_no + ')')
+      const entry = x.repro_kind === 'http' ? "Burp / Yakit 请求（§3." + x.chain_no + '）'
+        : (x.repro_kind === 'cli' ? "命令行（§3." + x.chain_no + '）' : "复现方式（§3." + x.chain_no + '）')
       md.push('| ' + x.chain_no + ' | ' + shortName(x) + ' | +' + x.points + ' | `' + oneLine(targetBrief(x), 60) + '` | '
-        + (dep === '' ? (x.needs_channel ? "channel (§1.1)" : '—') : dep) + ' | ' + entry + ' |')
+        + (dep === '' ? (x.needs_channel ? "通道（§1.1）" : '—') : dep) + ' | ' + entry + ' |')
     }
     md.push('')
 
@@ -3439,83 +3479,83 @@ export class RedteamStore {
         || credRank(a) - credRank(b))
       .slice(0, 12)
     md.push('---', '')
-    md.push("## 1. Replay prerequisites", '')
-    md.push("> Set this section up first; only then will the replay entries below actually work.", '')
-    md.push("### 1.1 Channels", '')
+    md.push("## 1. 复现前置条件", '')
+    md.push("> 先按本节把环境配好，后面的复现条目才真正跑得起来。", '')
+    md.push("### 1.1 通道", '')
     if (tunnelsAll.length === 0) {
-      md.push("No tunnel registered for this target; internal entries need your own channel to the target.", '')
+      md.push("本靶标还没有登记隧道；内网条目需要你先打通到靶标的通道。", '')
     } else {
       for (const t of tunnelsAll) {
-        md.push('- **' + (t.kind || "tunnel") + "**: listening on `" + (t.listen || '') + "` entry `" + (t.entry || '') + '`'
-          + (t.entry_kind ? ' (entry_kind=' + t.entry_kind + ')' : '')
-          + (t.reach ? " reachable " + t.reach : '')
-          + (String(t.status || '') !== '' ? " status " + t.status : ''))
-        if (t.command) md.push("  - start command: ")
+        md.push('- **' + (t.kind || "隧道") + "**：监听 `" + (t.listen || '') + "` 入口 `" + (t.entry || '') + '`'
+          + (t.entry_kind ? '（entry_kind=' + t.entry_kind + '）' : '')
+          + (t.reach ? " 可达 " + t.reach : '')
+          + (String(t.status || '') !== '' ? " 状态 " + t.status : ''))
+        if (t.command) md.push("  - 启动命令：")
         if (t.command) block('bash', t.command)
-        if (t.note) md.push("  - notes: " + clipText(t.note, 320))
+        if (t.note) md.push("  - 备注：" + clipText(t.note, 320))
       }
     }
     if (shellsAll.length > 0) {
       md.push('')
-      md.push("**WebShell / session entries**", '')
+      md.push("**WebShell / 会话入口**", '')
       for (const w of shellsAll) {
-        md.push('- `' + (w.url || '') + '` ' + (w.shell_type || '') + (w.pass_key ? " connect password `" + w.pass_key + '`' : '')
-          + (String(w.status || '') !== '' ? "` status " + w.status : '') + (w.note ? ' · ' + clipText(w.note, 200) : ''))
+        md.push('- `' + (w.url || '') + '` ' + (w.shell_type || '') + (w.pass_key ? " 连接密码 `" + w.pass_key + '`' : '')
+          + (String(w.status || '') !== '' ? "` 状态 " + w.status : '') + (w.note ? ' · ' + clipText(w.note, 200) : ''))
       }
       md.push('')
     }
-    md.push("### 1.2 Credentials", '')
+    md.push("### 1.2 凭据", '')
     if (usefulCreds.length === 0) {
-      md.push("No credentials registered for this target.", '')
+      md.push("本靶标还没有登记凭据。", '')
     } else {
-      md.push("| Target | Account | Privilege | Source | How obtained |", '| --- | --- | --- | --- | --- |')
+      md.push("| 目标 | 账号 | 权限 | 来源 | 获取方式 |", '| --- | --- | --- | --- | --- |')
       for (const c of usefulCreds) {
         md.push('| `' + oneLine(c.host, 40) + '` | `' + oneLine(c.username, 40) + '` | ' + oneLine(c.privilege || '—', 30)
           + ' | ' + oneLine(c.source || '—', 40) + ' | `' + oneLine(c.tool || '—', 120) + '` |')
       }
       md.push('')
     }
-    md.push("### 1.3 Tool access", '')
-    md.push("- **Burp Suite**: set Settings → Network → Connections → SOCKS proxy to `127.0.0.1:<tunnel port>`, "
-      + "and enable \"Use SOCKS proxy for DNS lookups\"; in Repeater, paste the request from this report as-is.", '')
-    md.push("- **Yakit**: configure the same SOCKS5 (with auth) under downstream proxy / chained proxy, "
-      + "then use Repeater → paste raw request to send.", '')
-    md.push("- **Command line**: prefix `proxychains4 -q -f <proxychains config>` to impacket / nxc / smbclient / mysql / redis-cli commands; "
-      + "for HTTP you can also use `curl --socks5-hostname <account>:<password>@127.0.0.1:<port>`.", '')
-    md.push("### 1.4 Tool capability limits", '')
-    md.push("| Target type | Protocol | Recommended tools |", '| --- | --- | --- |')
-    md.push("| Web apps, admin consoles, REST APIs (including internal) | HTTP / HTTPS | Burp Suite, Yakit (via SOCKS upstream) |")
-    md.push("| WebShell / tunnel | HTTP / WebSocket | Behinder, Godzilla, suo5 (see §1.1) |")
-    md.push("| Windows hosts, domain controllers, shares | SMB / RPC / WinRM | `impacket-atexec`, `nxc`, `smbclient`, `evil-winrm`, pywinrm (via proxychains) |")
-    md.push("| Databases | MySQL / Redis / PostgreSQL | `mysql`, `redis-cli`, `psql` (via proxychains) |")
-    md.push("| File shares | NFS | `showmount`, `mount -t nfs4` (via proxychains or a compromised host) |")
+    md.push("### 1.3 工具接入", '')
+    md.push("- **Burp Suite**：在 Settings → Network → Connections → SOCKS proxy 填 `127.0.0.1:<隧道端口>`，"
+      + "并勾选「Use SOCKS proxy for DNS lookups」；Repeater 里直接粘贴本报告的请求即可。", '')
+    md.push("- **Yakit**：在下游代理 / 链式代理里配置同一个 SOCKS5（带认证），"
+      + "然后用 Repeater → 粘贴原始请求发送。", '')
+    md.push("- **命令行**：在 impacket / nxc / smbclient / mysql / redis-cli 命令前加 `proxychains4 -q -f <proxychains 配置>`；"
+      + "HTTP 也可以用 `curl --socks5-hostname <账号>:<口令>@127.0.0.1:<端口>`。", '')
+    md.push("### 1.4 工具能力边界", '')
+    md.push("| 目标类型 | 协议 | 推荐工具 |", '| --- | --- | --- |')
+    md.push("| Web 应用、管理后台、REST API（含内网） | HTTP / HTTPS | Burp Suite、Yakit（走 SOCKS 上游） |")
+    md.push("| WebShell / 隧道 | HTTP / WebSocket | 冰蝎、哥斯拉、suo5（见 §1.1） |")
+    md.push("| Windows 主机、域控、共享 | SMB / RPC / WinRM | `impacket-atexec`、`nxc`、`smbclient`、`evil-winrm`、pywinrm（走 proxychains） |")
+    md.push("| 数据库 | MySQL / Redis / PostgreSQL | `mysql`、`redis-cli`、`psql`（走 proxychains） |")
+    md.push("| 文件共享 | NFS | `showmount`、`mount -t nfs4`（走 proxychains 或已控主机） |")
     md.push('')
-    md.push("> Burp / Yakit can only replay HTTP(S) and WebSocket. For SMB, WinRM, database, and NFS protocols, "
-      + "use the command line as shown above — the corresponding report entries give commands you can run directly.", '')
+    md.push("> Burp / Yakit 只能回放 HTTP(S) 与 WebSocket。SMB、WinRM、数据库与 NFS 协议请"
+      + "按上表走命令行 —— 对应条目里给了可直接执行的命令。", '')
 
     /* ── ② 攻击链（按依赖顺序）──────────────────────────────────────────── */
     md.push('---', '')
-    md.push("## 2. Attack chain (dependency order)", '')
-    md.push("> The number is the document order (attack-chain stages ① → ⑤, and within a stage by acquisition time). The `Prerequisite` column lists results that must be achieved first; "
-      + "stage buckets sort by score-point type, so a prerequisite number **may be larger than the entry itself** (e.g. a cross-boundary breach depends on domain-controller #16); "
-      + "jump to that number to read it.", '')
-    md.push("| # | Score point | Points | Target | Prerequisite |", '| --- | --- | --- | --- | --- |')
+    md.push("## 2. 攻击链（按依赖顺序）", '')
+    md.push("> 编号是正文顺序（攻击链阶段 ① → ⑤，阶段内按取得时间排）。`前置` 列是必须先拿到的结果；"
+      + "阶段内按得分点类型归桶，所以前置编号**可能大于本条编号**（例如跨界突破依赖域控 #16）；"
+      + "按编号跳读即可。", '')
+    md.push("| # | 得分点 | 得分 | 目标 | 前置 |", '| --- | --- | --- | --- | --- |')
     for (const x of ordered) {
       const dep = (x.deps || []).map((d) => '#' + d.no + ' ' + (POINT_SHORT_NAME[d.name] || d.name)).join(', ')
       md.push('| ' + x.chain_no + ' | ' + shortName(x) + ' | +' + x.points + ' | `' + oneLine(targetBrief(x), 60) + '` | '
-        + (dep === '' ? (x.needs_channel ? "channel (§1.1)" : '—') : dep) + ' |')
+        + (dep === '' ? (x.needs_channel ? "通道（§1.1）" : '—') : dep) + ' |')
     }
     md.push('')
     for (const st of stages) {
-      md.push('- ' + st.name + ': ' + st.items.length + " item(s) · +" + st.points + " pts (cumulative +" + st.cumulative + " pts)")
+      md.push('- ' + st.name + '：' + st.items.length + " 条 · +" + st.points + " 分（累计 +" + st.cumulative + " 分）")
     }
     md.push('')
 
     /* ── ③ 逐条明细 ────────────────────────────────────────────────────── */
     md.push('---', '')
-    md.push("## 3. Entry details", '')
-    md.push("> Ordered by attack-chain stage ① → ⑤ (the stage number is the real position in the chain); within a stage, ordered by action time, "
-      + "and the `3.N` numbers correspond one-to-one with the replay index above.", '')
+    md.push("## 3. 条目明细", '')
+    md.push("> 按攻击链阶段 ① → ⑤ 排序（阶段序号就是链条中的真实位置）；阶段内按动作时间排，"
+      + "`3.N` 编号与上面的复现索引一一对应。", '')
     let lastStage = null
     for (const x of ordered) {
       const st = stageOfItem(x)
@@ -3524,103 +3564,103 @@ export class RedteamStore {
         const sr = stages.find((v) => v.code === st)
         if (sr !== undefined) {
           const circled = (CIRCLED[sr.ordinal - 1] || '')
-          md.push('## ' + circled + ' ' + sr.name + ' (' + sr.items.length + " item(s) · +" + sr.points + " pts)", '')
+          md.push('## ' + circled + ' ' + sr.name + '（' + sr.items.length + " 条 · +" + sr.points + " 分）", '')
         }
       }
       const depTxt = (x.deps || []).map((d) => '#' + d.no + ' ' + (POINT_SHORT_NAME[d.name] || d.name)
         + ' (`' + oneLine(d.target, 40) + '`)').join(', ')
-      md.push('### 3.' + x.chain_no + ' ' + shortName(x) + ' · `' + oneLine(targetBrief(x), 80) + '` **+' + x.points + " pts**", '')
-      md.push("- **Score point**: " + (x.point_name || '') + ' `' + x.code + '`'
-        + (x.point_rule ? " · rule " + x.point_rule : '')
-        + (x.point_tier ? " · tier " + oneLine(x.point_tier, 40) : '')
-        + (Number(x.point_cap) > 0 ? " · per-hit cap " + x.point_cap + " pts" : ''))
-      if (x.is_group) md.push("- **This entry covers " + x.group_size + " targets** (one action hitting them in a batch; per-target list in the ledger below)")
-      if (x.gained) md.push("- **Gained**: " + oneLine(x.gained, 120))
+      md.push('### 3.' + x.chain_no + ' ' + shortName(x) + ' · `' + oneLine(targetBrief(x), 80) + '` **+' + x.points + " 分**", '')
+      md.push("- **得分点**：" + (x.point_name || '') + ' `' + x.code + '`'
+        + (x.point_rule ? " · 规则 " + x.point_rule : '')
+        + (x.point_tier ? " · 档位 " + oneLine(x.point_tier, 40) : '')
+        + (Number(x.point_cap) > 0 ? " · 单条上限 " + x.point_cap + " 分" : ''))
+      if (x.is_group) md.push("- **本条覆盖 " + x.group_size + " 个目标**（一次批量动作打下来的；分目标清单见下面的台账）")
+      if (x.gained) md.push("- **拿到**：" + oneLine(x.gained, 120))
       if (x.is_group) {
         const list = (x.group_targets || []).map((g) => '`' + g.target + '`')
-        md.push("- **Result**: the same action achieved the same result on " + x.group_size + " targets ("
-          + list[0] + ' … ' + list[list.length - 1] + "); per-target output in the table below and the evidence index")
+        md.push("- **结果**：同一动作在 " + x.group_size + " 个目标上取得相同结果（"
+          + list[0] + ' … ' + list[list.length - 1] + "）；分目标输出见下表与证据索引")
       } else if (x.evidence) {
-        md.push("- **Result**: " + oneLine(x.evidence, 400))
+        md.push("- **结果**：" + oneLine(x.evidence, 400))
       }
-      if (x.confirm && x.confirm.need) md.push("- **Success criteria**: " + oneLine(x.confirm.need, 160))
-      md.push("- **Prerequisite**: " + (depTxt !== '' ? depTxt : (x.needs_channel ? "channel (see §1.1)" : "none (start of the chain)")))
+      if (x.confirm && x.confirm.need) md.push("- **成功判据**：" + oneLine(x.confirm.need, 160))
+      md.push("- **前置**：" + (depTxt !== '' ? depTxt : (x.needs_channel ? "通道（见 §1.1）" : "无（链条起点）")))
       md.push('')
 
       /* 复现入口：① HTTP 报文（可直放） ② 命令行 ③ 复现方式说明 */
-      md.push("#### Replay", '')
+      md.push("#### 复现", '')
       if (x.repro_kind === 'http') {
         const lead = (x.repro_http_captured && x.replay_http_rebuilt !== true)
-          ? "**Raw request** (captured live that day; copy the whole block → Burp Repeater / Yakit \"paste raw request\" → send)"
+          ? "**原始请求**（当日现场抓取；整段复制 → Burp Repeater / Yakit「paste raw request」→ 发送）"
           : (x.repro_http_captured
-              ? "**Rebuilt request** (the original request was not kept byte-for-byte; this one is rebuilt from that day's command and output, with fields filled from the target and credentials)"
-              : "**Equivalent request** (rebuilt from that day's actual command; no raw capture was kept, fields filled from the target and credentials)")
+              ? "**重建请求**（原始请求未逐字节留存；本条由当日命令与输出重建，字段按目标与凭据补齐）"
+              : "**等价请求**（由当日实际命令重建；未留原始抓包，字段按目标与凭据补齐）")
         md.push(lead + ': ', '')
         block('http', x.replay_http)
         if (x.requests.length > 0 && x.requests[0].response) {
           const full = String(x.requests[0].response)
-          md.push("**Server response** (" + (x.requests[0].status === null || x.requests[0].status === undefined
-            ? "status not recorded" : 'HTTP ' + x.requests[0].status) + '): ', '')
+          md.push("**服务器响应**（" + (x.requests[0].status === null || x.requests[0].status === undefined
+            ? "状态未记录" : 'HTTP ' + x.requests[0].status) + '）：', '')
           md.push('```http', full.replace(/\r/g, '').trim().slice(0, 1000)
-            + (full.length > 1000 ? "\n… (response is " + full.length + " characters; see the evidence store for the full content)" : ''), '```', '')
+            + (full.length > 1000 ? "\n…（响应共 " + full.length + " 字符；完整内容见证据库）" : ''), '```', '')
         }
-        if (x.requests.length > 1) md.push("> There are also " + (x.requests.length - 1) + " more request evidences; see the evidence store.", '')
+        if (x.requests.length > 1) md.push("> 另有 " + (x.requests.length - 1) + " 条请求证据，见证据库。", '')
         /* 同一动作的 curl 等价形式也给出：有人习惯直接跑命令，有人习惯 Repeater */
         if (x.replay_cmd !== null && x.replay_cmd !== undefined && String(x.replay_cmd).trim() !== '') {
-          md.push("**Equivalent command line** (matches the request above):", '')
+          md.push("**等价命令行**（与上面的请求对应）：", '')
           block('bash', x.replay_cmd)
         }
       }
       if (x.repro_kind === 'cli') {
         const lead = (x.replay_cmd_kind === 'real' || x.replay_cmd_kind === 'linked')
-          ? "**Command line** (the command actually run that day; can be re-run directly)"
-          : (x.replay_cmd_kind === 'synthesized' ? "**Equivalent command line** (derived from the request above; address and method match it)"
-            : "**Command line** (taken from that day's attack step)")
+          ? "**命令行**（当日实际执行的命令；可直接重跑）"
+          : (x.replay_cmd_kind === 'synthesized' ? "**等价命令行**（由上面的请求推导；地址与方法一致）"
+            : "**命令行**（取自当日的攻击步骤）")
         md.push(lead + ': ', '')
         block('bash', x.replay_cmd)
         if (x.repro_nonhttp) {
-          md.push("> This action used SMB / RPC / database / file-share protocols, which Burp and Yakit cannot replay directly; "
-            + "run it through proxychains over the tunnel as described in §1.3.", '')
+          md.push("> 这个动作用的是 SMB / RPC / 数据库 / 文件共享协议，Burp 与 Yakit 不能直接回放；"
+            + "请按 §1.3 走隧道 proxychains 执行。", '')
         }
       }
       if (x.repro_kind === 'method') {
-        md.push("**Replay method**: " + ((x.confirm && x.confirm.replay)
+        md.push("**复现方式**：" + ((x.confirm && x.confirm.replay)
           ? oneLine(x.confirm.replay, 200)
-          : "Reproduce the same action on the target per this score point's success criteria and keep the output."), '')
+          : "按该得分点的成功判据在目标上重做同样的动作并留存输出。"), '')
         if ((x.steps || []).length > 0) {
-          md.push("> See \"How it was done\" below for that day's action points; no separate command was kept, so replay the action on the target.", '')
+          md.push("> 当日动作要点见下面的「怎么做的」；没有单独留存命令，按动作在目标上复现。", '')
         }
       }
 
       /* 证据截图：贴在图里比写十行字有用；kind=card 的必须写明"生成的"，不能冒充现场截图 */
       if ((x.shots || []).length > 0) {
         const shotNote = []
-        if (x.shot_total > x.shots.length) shotNote.push("This score point has " + x.shot_total + " screenshots in total; showing " + x.shots.length + " representative ones")
-        if (x.is_group) shotNote.push("This group: " + x.group_size + " targets")
-        md.push("**Evidence screenshots**" + (shotNote.length > 0 ? ' (' + shotNote.join('; ') + ')' : '') + ': ', '')
+        if (x.shot_total > x.shots.length) shotNote.push("该得分点共 " + x.shot_total + " 张截图，这里展示 " + x.shots.length + " 张代表图")
+        if (x.is_group) shotNote.push("本组合：" + x.group_size + " 个目标")
+        md.push("**证据截图**" + (shotNote.length > 0 ? '（' + shotNote.join('；') + '）' : '') + '：', '')
         for (const sh of x.shots) {
-          const alt = String(sh.label || ("evidence " + sh.id)).replace(/[\[\]]/g, '')
+          const alt = String(sh.label || ("证据 " + sh.id)).replace(/[\[\]]/g, '')
           md.push('![' + alt + '](' + shotRefOf(sh) + ')', '')
           const cap = []
           if (sh.label) cap.push(sh.label)
           else if (sh.target) cap.push('`' + sh.target + '`')
-          if (sh.kind === 'card') cap.push("**Evidence excerpt generated from that day's records (not a live screenshot)**")
+          if (sh.kind === 'card') cap.push("**由当日记录生成的证据摘录（非现场截图）**")
           if (sh.captured_at) cap.push(String(sh.captured_at).replace('T', ' ').slice(0, 16))
-          if (sh.source_ref) cap.push("source file `" + oneLine(sh.source_ref, 120) + '`')
+          if (sh.source_ref) cap.push("源文件 `" + oneLine(sh.source_ref, 120) + '`')
           if (sh.note) cap.push(oneLine(sh.note, 160))
           if (cap.length > 0) md.push('> ' + cap.join(' · '), '')
         }
         md.push('')
       } else if (Number(x.shot_total) > 0) {
         /* 本条没分到代表图（同一得分点的图已在前面的条目展示）—— 指明去哪看，别让人以为漏了 */
-        md.push("> Evidence screenshots for this entry are shown under this score point's representative images (the score point has " + x.shot_total + " screenshots in total; the report shows at most 3 per score point).", '')
+        md.push("> 本条的证据截图已在该得分点的代表图中展示（该得分点共 " + x.shot_total + " 张截图，报告每个得分点最多展示 3 张）。", '')
         md.push('')
       }
 
       /* 目标台账（合并条目）：一台一行，含逐台证据 */
       if (x.is_group) {
-        md.push("**Target ledger (" + x.group_size + " devices; per-target output in the evidence index)**", '')
-        md.push("| # | Target | Result | Scored |", '| --- | --- | --- | --- |')
+        md.push("**目标台账（" + x.group_size + " 台；逐台输出见证据索引）**", '')
+        md.push("| # | 目标 | 结果 | 计分 |", '| --- | --- | --- | --- |')
         const brief = (ev) => {
           const m = /（([^）]{1,60})）/.exec(String(ev || ''))
           if (m !== null) return oneLine(m[1], 60)
@@ -3632,8 +3672,8 @@ export class RedteamStore {
         const extra = summary.serviceCapped.filter((c) => c.code === x.code)
         if (extra.length > 0) {
           md.push('')
-          md.push("> There are also " + extra.length + " hosts that reached the same privilege but were not scored due to the **per-item cap** (kept as a record): "
-            + extra.map((c) => '`' + c.target + '`').join(', ') + ", see appendix 5.2.", '')
+          md.push("> 另有 " + extra.length + " 台拿到同样权限但因**单条上限**未计分（留档）："
+            + extra.map((c) => '`' + c.target + '`').join('、') + "，见附录 5.2。", '')
         }
         md.push('')
       }
@@ -3641,19 +3681,19 @@ export class RedteamStore {
       /* 怎么做的：动作步骤（含真实命令与回显） */
       const evFiles = Array.from(new Set((x.steps || []).map((s) => String(s.evidence_ref || '').trim()).filter((v) => v !== '')))
       if ((x.steps || []).length > 0 || x.how || x.vuln || evFiles.length > 0) {
-        md.push("#### Action record", '')
+        md.push("#### 动作记录", '')
         if (x.how) md.push('> ' + oneLine(x.how, 240), '')
         ;(x.steps || []).forEach((s, si) => {
-          md.push('**' + (si + 1) + '. ' + oneLine(s.title || "(unnamed action)", 80) + '**'
+          md.push('**' + (si + 1) + '. ' + oneLine(s.title || "（未命名动作）", 80) + '**'
             + (s.agent ? ' — ' + AGENT_LABEL(s.agent) : '')
-            + (s.inferred ? " · (inferred from the same asset)" : ''))
+            + (s.inferred ? " ·（由同资产推断）" : ''))
           if (s.detail) md.push('- ' + oneLine(s.detail, 400))
-          if (s.result) md.push("- output: " + oneLine(s.result, 300))
+          if (s.result) md.push("- 输出：" + oneLine(s.result, 300))
           if (s.tool && String(s.tool).trim() !== String(x.replay_cmd || '').trim()) {
-            md.push("- command: ")
+            md.push("- 命令：")
             md.push('  ```bash', '  ' + String(s.tool).replace(/\r/g, '').trim().slice(0, 1500), '  ```')
           }
-          if (s.evidence_ref) md.push("- evidence: `" + oneLine(s.evidence_ref, 200) + '`')
+          if (s.evidence_ref) md.push("- 证据：`" + oneLine(s.evidence_ref, 200) + '`')
         })
         md.push('')
       }
@@ -3662,24 +3702,24 @@ export class RedteamStore {
       const itemCreds = credsAll.filter((c) => ownsCred(x, c)
         || (ipOfTarget(c.host) !== null && ipOfTarget(c.host) === ipOfTarget(x.target)))
       if (itemCreds.length > 0) {
-        md.push("**Credentials**: " + itemCreds.map((c) => '`' + (c.host || '') + '` ' + (c.username || '—')
-          + (c.privilege ? ' (' + c.privilege + ')' : '') + " · source: " + (c.source || "unlabeled")).join('<br>'), '')
+        md.push("**凭据**：" + itemCreds.map((c) => '`' + (c.host || '') + '` ' + (c.username || '—')
+          + (c.privilege ? '（' + c.privilege + '）' : '') + " · 来源：" + (c.source || "未标注")).join('<br>'), '')
       }
       if ((x.webshells || []).length > 0) {
-        md.push('**WebShell**: ' + x.webshells.map((w) => '`' + (w.url || '') + '` ' + (w.shell_type || '')
-          + (w.pass_key ? " · key `" + w.pass_key + '`' : '')).join('<br>'), '')
+        md.push('**WebShell**：' + x.webshells.map((w) => '`' + (w.url || '') + '` ' + (w.shell_type || '')
+          + (w.pass_key ? " · 密钥 `" + w.pass_key + '`' : '')).join('<br>'), '')
       }
       if ((x.tunnels || []).length > 0) {
-        md.push("**Channels**: " + x.tunnels.map((t) => '`' + (t.kind || '') + "` listening on `" + (t.listen || '')
+        md.push("**通道**：" + x.tunnels.map((t) => '`' + (t.kind || '') + "` 监听 `" + (t.listen || '')
           + '`').join('<br>'), '')
       }
       const meta2 = []
-      if (x.vuln) meta2.push("vuln " + (x.vuln.cve ? x.vuln.cve + ' ' : '') + oneLine(x.vuln.title, 80))
-      if (x.recorded_at) meta2.push("obtained " + String(x.recorded_at).replace('T', ' ').slice(0, 16)
+      if (x.vuln) meta2.push("漏洞 " + (x.vuln.cve ? x.vuln.cve + ' ' : '') + oneLine(x.vuln.title, 80))
+      if (x.recorded_at) meta2.push("取得于 " + String(x.recorded_at).replace('T', ' ').slice(0, 16)
         + (x.recorded_by ? ' (' + AGENT_LABEL(x.recorded_by) + ')' : ''))
       if (Number(x.point_cap) > 0) {
         const used = byPoint.get(x.code) ? byPoint.get(x.code).points : x.points
-        meta2.push("This score point has used " + used + '/' + x.point_cap + " pts")
+        meta2.push("该得分点已用 " + used + '/' + x.point_cap + " 分")
       }
       if (meta2.length > 0) md.push('> ' + meta2.join(' · '), '')
       md.push('')
@@ -3687,15 +3727,15 @@ export class RedteamStore {
 
     /* ── ④ 得分点说明（判定标准与材料要求只讲一次）──────────────────────── */
     md.push('---', '')
-    md.push("## 4. Score point reference", '')
-    md.push("> These criteria are not repeated per entry. General rules: highest privilege counts once (G1); data results score separately (G2); "
-      + "caps apply per defending unit (G3); endpoints and devices score per unit (G4); proof material follows G7.", '')
-    md.push("| Score point | Rule / tier | Success criteria | Required material | Standard replay action |", '| --- | --- | --- | --- | --- |')
+    md.push("## 4. 得分点说明", '')
+    md.push("> 本节判据不在每条重复。通用规则：权限取高只算一次（G1）；数据成果另计（G2）；"
+      + "上限按防守单位累计（G3）；终端与设备按台计（G4）；证明材料按 G7。", '')
+    md.push("| 得分点 | 规则 / 档位 | 成功判据 | 必备材料 | 标准复现动作 |", '| --- | --- | --- | --- | --- |')
     for (const rec of Array.from(byPoint.values()).sort((a, b) => b.points - a.points)) {
       const c = scoreConfirmOf(rec.code) || {}
       const sample = ordered.find((x) => x.code === rec.code) || {}
       md.push('| ' + rec.name + ' (`' + rec.code + '`) | '
-        + (sample.point_rule ? "rule " + sample.point_rule + ' ' : '') + oneLine(sample.point_tier || '—', 50) + ' | '
+        + (sample.point_rule ? "规则 " + sample.point_rule + ' ' : '') + oneLine(sample.point_tier || '—', 50) + ' | '
         + oneLine(c.need || '—', 160) + ' | ' + oneLine(c.proof || '—', 160) + ' | '
         + '`' + oneLine(c.replay || '—', 140) + '` |')
     }
@@ -3721,21 +3761,21 @@ export class RedteamStore {
           a.test_status, a.priority, COALESCE(a.scope, (${SCOPE_SQL})) AS scope
         FROM asset a WHERE a.id IN (${ph}) ORDER BY a.discovered_at, a.id`).all(...assetsTouchedList)
       md.push('---', '')
-      md.push("## 5. Appendix", '')
-      md.push("### 5.1 Assets covered by this report (with discovery time)", '')
-      md.push("| Asset | Name | Internal/external | Discovered | Last collected |")
+      md.push("## 5. 附录", '')
+      md.push("### 5.1 本报告涉及的资产（含发现时间）", '')
+      md.push("| 资产 | 名称 | 内网/外网 | 发现时间 | 最近采集 |")
       md.push('| --- | --- | --- | --- | --- |')
       for (const a of rowsA) {
         md.push('| `' + (a.ip || '') + '` | ' + (a.primary_name || '—')
-          + ' | ' + (a.scope === 'internal' ? "internal" : "external")
+          + ' | ' + (a.scope === 'internal' ? "内网" : "外网")
           + ' | ' + (a.discovered_at ? String(a.discovered_at).replace('T', ' ').slice(0, 19) : '—')
           + ' | ' + (a.last_seen ? String(a.last_seen).replace('T', ' ').slice(0, 19) : '—') + ' |')
       }
       md.push('')
     }
     if (summary.serviceCapped.length > 0) {
-      md.push("### 5.2 Unscored duplicate records (service already capped)", '')
-      md.push("| Target | Score point | Recorded points | Recorded at |", '| --- | --- | --- | --- |')
+      md.push("### 5.2 未计分的重复记录（服务已封顶）", '')
+      md.push("| 目标 | 得分点 | 记录分值 | 记录时间 |", '| --- | --- | --- | --- |')
       for (const c of summary.serviceCapped) {
         md.push('| `' + (c.target || c.service || '') + '` | ' + (c.point_name || c.code) + ' | '
           + (c.points || 0) + ' | ' + String(c.recorded_at || '').replace('T', ' ').slice(0, 16) + ' |')
@@ -4166,8 +4206,8 @@ export class RedteamStore {
         stageCode = wanted
       } else {
         stageCode = LEGACY_STAGE_MAP[legacyStage] ?? 'recon'
-        stageWarning = "Invalid stage_code=\"" + wanted + "\" (ignored): only " + VALID_STAGE_CODES.join('/')
-          + "; this step falls back to " + stageCode + '.'
+        stageWarning = "stage_code=\"" + wanted + "\" 非法（已忽略）：只接受 " + VALID_STAGE_CODES.join('/')
+          + "; 本步骤回落到 " + stageCode + '。'
       }
     } else {
       stageCode = LEGACY_STAGE_MAP[legacyStage] ?? 'recon'
@@ -4196,20 +4236,24 @@ export class RedteamStore {
         if (hit && hit.warning) scoreHint = hit.warning
       } catch (error) {
         /* 步骤照常入库，但把原因回给模型——静默吞掉会让"记了分"其实是空的 */
-        scoreHint = "Step saved, but scoring failed: " + (error && error.message ? error.message : String(error))
+        scoreHint = "步骤已保存，但记分失败： " + (error && error.message ? error.message : String(error))
         }
     } else if (pointId !== null) {
-      scoreHint = "point_code was given without evidence, so **nothing was scored** for this call (the step was saved): to score, call redteam_score_hit with evidence describing only the result (target asset + account/privilege/data volume)."
+      scoreHint = "给了 point_code 但没有 evidence，本次**没有记分**（步骤已保存）：要记分请调用 redteam_score_hit，并在 evidence 里只写结果（目标资产 + 账号/权限/数据量）。"
     }
     return { id: stepId, seq: seq, stage_code: stageCode, point_id: pointId, hit: hit, score_hint: scoreHint, stage_hint: stageWarning }
   }
 
-  listChain(id) {
-    return this.db(id).prepare(`SELECT s.*, a.ip AS asset_ip, v.title AS vuln_title, v.severity AS vuln_severity, v.cve AS vuln_cve
+  /* limit 默认 5000 防止超长靶标把整张表一次读进内存；导出/报告传 0 表示不截断。 */
+  listChain(id, limit = 5000) {
+    const cap = Number(limit) > 0 ? Math.floor(Number(limit)) : 0
+    const sql = `SELECT s.*, a.ip AS asset_ip, v.title AS vuln_title, v.severity AS vuln_severity, v.cve AS vuln_cve
       FROM attack_step s
       LEFT JOIN asset a ON a.id = s.asset_id
       LEFT JOIN vuln v ON v.id = s.vuln_id
-      ORDER BY s.seq, s.id`).all()
+      ORDER BY s.seq, s.id` + (cap > 0 ? ' LIMIT ?' : '')
+    const stmt = this.db(id).prepare(sql)
+    return cap > 0 ? stmt.all(cap) : stmt.all()
   }
 
   /* ---------- 攻击文件（只收录实际生效的脚本/POC/EXP） ---------- */
@@ -4254,7 +4298,7 @@ export class RedteamStore {
     if (typeof shot.data_base64 === 'string' && shot.data_base64.trim() !== '') {
       buf = Buffer.from(shot.data_base64.replace(/^data:[^,]+,/, ''), 'base64')
     } else if (typeof shot.path === 'string' && shot.path.trim() !== '') {
-      const src = isAbsolute(shot.path) ? shot.path : join(this.dirOf(id), shot.path)
+      const src = assertSourcePath(this.dirOf(id), shot.path)
       if (!existsSync(src)) throw new Error('shot source not found: ' + shot.path)
       buf = readFileSync(src)
     } else {
@@ -4430,7 +4474,7 @@ export class RedteamStore {
     if (typeof f.content === 'string' && f.content.length > 0) {
       writeFileSync(filePath, f.content, 'utf8')
     } else if (typeof f.path === 'string' && f.path.length > 0) {
-      const src = isAbsolute(f.path) ? f.path : join(this.dirOf(id), f.path)
+      const src = assertSourcePath(this.dirOf(id), f.path)
       if (!existsSync(src)) throw new Error('source path not found: ' + f.path)
       copyFileSync(src, filePath)
     } else {
@@ -4625,7 +4669,7 @@ export class RedteamStore {
     /* 正文：优先用传入 content，其次从 path 读；两者都没有则只登记元数据 */
     let content = typeof p.content === 'string' ? p.content : ''
     if (content === '' && typeof p.path === 'string' && p.path.length > 0) {
-      const src = isAbsolute(p.path) ? p.path : join(this.pocsDirOf(), p.path)
+      const src = assertSourcePath(this.pocsDirOf(), p.path)
       if (!existsSync(src)) throw new Error('poc content or existing path required: ' + p.path)
       content = readFileSync(src, 'utf8')
     }
@@ -4877,13 +4921,13 @@ export class RedteamStore {
   reportTargets(id, options = {}) {
     const meta = readMeta(this.metaPathOf(id)) || {}
     const includeAll = options.all === true
-    const allVulns = this.listVulns(id, { limit: 2000 }).items
+    const allVulns = this.listVulns(id, { limit: 2000, evidenceLimit: 60000 }).items
     const severityOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }
     const isResult = (v) => v.status === 'confirmed' || v.status === 'exploited'
     const isReal = (v) => v.severity === 'critical' || v.severity === 'high' || v.severity === 'medium'
     const vulns = (includeAll ? allVulns : allVulns.filter((v) => isResult(v) && isReal(v)))
       .slice().sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9))
-    const chain = this.listChain(id)
+    const chain = this.listChain(id, 0)
     const creds = this.listCredentials(id, {})
     const access = this.listAccess(id, {})
     const files = this.listAttackFiles(id, {})
@@ -4919,16 +4963,16 @@ export class RedteamStore {
     const renderVuln = (v) => {
       const out = []
       out.push(`#### [${(v.severity || 'info').toUpperCase()}] ${v.cve ? v.cve + ' — ' : ''}${v.title || ''}`, '')
-      out.push(`- Target: ${v.target || '—'}`)
-      out.push(`- Status: ${v.status === 'exploited' ? 'exploited' : 'verified'} · confidence: ${v.confidence === null || v.confidence === undefined ? '—' : v.confidence} · discovered via: ${v.source || '—'}`)
-      out.push(`- Impact and evidence: ${v.evidence || '—'}`)
+      out.push(`- 目标：${v.target || '—'}`)
+      out.push(`- 状态：${v.status === 'exploited' ? '已利用' : '已证实'} · 置信度：${v.confidence === null || v.confidence === undefined ? '—' : v.confidence} · 发现来源：${v.source || '—'}`)
+      out.push(`- 影响与证据：${v.evidence || '—'}`)
       const evidence = this.listHttpEvidence(id, { vuln_id: v.id })
       if (evidence.length) {
-        out.push('', "**Replay request (paste directly into Burp Suite / Yakit)**:", '')
+        out.push('', "**复现请求（可直接粘进 Burp Suite / Yakit）**：", '')
         for (const e of evidence) {
           out.push(`*${e.label || e.method + ' ' + (e.url || '')}*`, '')
           if (e.request) out.push('```http', e.request.replace(/\r/g, '').trim(), '```', '')
-          if (e.response) out.push("Response summary:", '```http', String(e.response).replace(/\r/g, '').trim().slice(0, 2000), '```', '')
+          if (e.response) out.push("响应摘要：", '```http', String(e.response).replace(/\r/g, '').trim().slice(0, 2000), '```', '')
         }
       }
       out.push('')
@@ -5010,10 +5054,10 @@ export class RedteamStore {
   report(id, options = {}) {
     const meta = readMeta(this.metaPathOf(id)) || {}
     const includeAll = options.all === true
-    const chain = this.listChain(id)
+    const chain = this.listChain(id, 0)
     const creds = this.listCredentials(id, {})
     const access = this.listAccess(id, {})
-    const allVulns = this.listVulns(id, { limit: 2000 }).items
+    const allVulns = this.listVulns(id, { limit: 2000, evidenceLimit: 60000 }).items
     const severityOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }
     const isResult = (v) => v.status === 'confirmed' || v.status === 'exploited'
     const isReal = (v) => v.severity === 'critical' || v.severity === 'high' || v.severity === 'medium'
@@ -5028,70 +5072,70 @@ export class RedteamStore {
     for (const v of vulns) bySeverity[v.severity] = (bySeverity[v.severity] || 0) + 1
     const exploited = vulns.filter((v) => v.status === 'exploited').length
 
-    push(`# Red-team exercise results report — ${meta.target_name || id}`, '')
-    push(`- Generated: ${nowIso()}`)
-    push(`- Authorized scope: ${(meta.scope_cidrs || []).join(', ') || '(not recorded)'}`)
-    push(`- Overview: ${vulns.length} result vuln(s) (critical ${bySeverity.critical} · high ${bySeverity.high} · medium ${bySeverity.medium}) · ${exploited} successfully exploited · ${access.length} assets controlled · ${creds.length} credentials obtained`)
+    push(`# 红队演练成果报告 — ${meta.target_name || id}`, '')
+    push(`- 生成时间：${nowIso()}`)
+    push(`- 授权范围：${(meta.scope_cidrs || []).join(', ') || '（未登记）'}`)
+    push(`- 概况：${vulns.length} 条成果漏洞（严重 ${bySeverity.critical} · 高危 ${bySeverity.high} · 中危 ${bySeverity.medium}） · 成功利用 ${exploited} 条 · 控制资产 ${access.length} 台 · 获取凭据 ${creds.length} 组`)
     push('')
 
-    push("## 1. Result vulnerabilities", '')
+    push("## 1. 成果漏洞", '')
     if (!vulns.length) {
-      push("No deliverable result vulnerabilities in this exercise (only verified/exploited vulns of medium severity or higher are included).", '')
+      push("本次演练没有可交付的成果漏洞（只收已证实/已利用且为中危及以上的漏洞）。", '')
     } else {
       for (const v of vulns) {
         push(`### [${(v.severity || 'info').toUpperCase()}] ${v.cve ? v.cve + ' — ' : ''}${v.title || ''}`, '')
-        push(`- Target: ${v.target || '—'}`)
-        push(`- Asset: ${v.asset_ip || '—'} (${v.segment_cidr || '—'})`)
-        push(`- Status: ${v.status === 'exploited' ? 'exploited' : 'verified'} · confidence: ${v.confidence === null || v.confidence === undefined ? '—' : v.confidence} · discovered via: ${v.source || '—'}`)
-        push(`- Impact and evidence: ${v.evidence || '—'}`)
+        push(`- 目标：${v.target || '—'}`)
+        push(`- 资产：${v.asset_ip || '—'}（${v.segment_cidr || '—'}）`)
+        push(`- 状态：${v.status === 'exploited' ? '已利用' : '已证实'} · 置信度：${v.confidence === null || v.confidence === undefined ? '—' : v.confidence} · 发现来源：${v.source || '—'}`)
+        push(`- 影响与证据：${v.evidence || '—'}`)
         const evidence = this.listHttpEvidence(id, { vuln_id: v.id })
         if (evidence.length) {
-          push('', "**Replay request (paste directly into Burp Suite / Yakit)**:", '')
+          push('', "**复现请求（可直接粘进 Burp Suite / Yakit）**：", '')
           for (const e of evidence) {
             push(`*${e.label || e.method + ' ' + (e.url || '')}*`, '')
             if (e.request) push('```http', e.request.replace(/\r/g, '').trim(), '```', '')
-            if (e.response) push("Response summary:", '```http', String(e.response).replace(/\r/g, '').trim().slice(0, 2000), '```', '')
+            if (e.response) push("响应摘要：", '```http', String(e.response).replace(/\r/g, '').trim().slice(0, 2000), '```', '')
           }
         }
         push('')
       }
     }
 
-    push("## 2. Attack chain", '')
+    push("## 2. 攻击链", '')
     if (chain.length) {
       for (const s of chain) {
         push(`${s.seq}. **[${s.stage}] ${s.title}**`)
-        if (s.asset_ip) push(`   - Asset: ${s.asset_ip}`)
-        if (s.vuln_title || s.vuln_cve) push(`   - Vulnerability: ${s.vuln_cve ? s.vuln_cve + ' ' : ''}${s.vuln_title || ''}`)
-        if (s.detail) push(`   - Notes: ${s.detail}`)
-        if (s.evidence_ref) push(`   - Evidence: ${s.evidence_ref}`)
+        if (s.asset_ip) push(`   - 资产：${s.asset_ip}`)
+        if (s.vuln_title || s.vuln_cve) push(`   - 漏洞：${s.vuln_cve ? s.vuln_cve + ' ' : ''}${s.vuln_title || ''}`)
+        if (s.detail) push(`   - 说明：${s.detail}`)
+        if (s.evidence_ref) push(`   - 证据：${s.evidence_ref}`)
       }
-    } else push("(no attack-chain steps recorded)")
+    } else push("（没有记录攻击步骤）")
     push('')
 
-    push("## 3. Obtained privileges and credentials", '')
+    push("## 3. 已获取的权限与凭据", '')
     if (access.length) {
-      push("| Host | Account | Method | Privilege | Evidence |", '| --- | --- | --- | --- | --- |')
+      push("| 主机 | 账号 | 方式 | 权限 | 证据 |", '| --- | --- | --- | --- | --- |')
       for (const a of access) push(`| ${a.host} | ${a.username || '—'} | ${a.method || '—'} | ${a.privilege || '—'} | ${a.session_ref || '—'} |`)
-    } else push("(no usable access obtained)")
+    } else push("（没有拿到可用的访问权限）")
     push('')
     if (creds.length) {
-      push("| Host | Account | Type | Privilege | Reference |", '| --- | --- | --- | --- | --- |')
+      push("| 主机 | 账号 | 类型 | 权限 | 引用 |", '| --- | --- | --- | --- | --- |')
       for (const c of creds) push(`| ${c.host} | ${c.username || '—'} | ${c.secret_type || '—'} | ${c.privilege || '—'} | ${c.secret_ref || '—'} |`)
-    } else push("(no credentials obtained)")
+    } else push("（没有获取凭据）")
     push('')
 
-    push("## 4. Remediation advice", '')
+    push("## 4. 修复建议", '')
     const advice = []
-    if (vulns.some((v) => v.cve)) advice.push("1. Patch the affected components by the CVE IDs above first; establish a component version baseline and bring it under patch management.")
-    if (access.some((a) => a.method === 'webshell' || a.method === 'rce' || a.method === 'upload')) advice.push("2. Tighten file upload and command execution: no execution in upload directories, allowlist validation, run web processes with least privilege.")
-    if (access.some((a) => a.method === 'vnc' || a.method === 'rdp' || a.method === 'ssh')) advice.push("3. Reduce remote-management exposure (do not expose VNC/RDP/SSH to the internet); enforce strong passwords and MFA.")
-    if (creds.some((c) => c.secret_type === 'connection-string')) advice.push("4. Do not leak database connection strings through APIs/config; centralize secrets in key management and authenticate APIs.")
-    advice.push(`${advice.length + 1}. Add unified authentication and access-control checks to the APIs covered here; maintain an API asset inventory and automated regression tests.`)
+    if (vulns.some((v) => v.cve)) advice.push("1. 先按上面的 CVE 编号修补受影响组件；建立组件版本基线，纳入补丁管理。")
+    if (access.some((a) => a.method === 'webshell' || a.method === 'rce' || a.method === 'upload')) advice.push("2. 收紧文件上传与命令执行：上传目录禁止执行、白名单校验、Web 进程最小权限运行。")
+    if (access.some((a) => a.method === 'vnc' || a.method === 'rdp' || a.method === 'ssh')) advice.push("3. 收敛远程管理面（VNC/RDP/SSH 不要直接暴露公网），强制强口令与多因素认证。")
+    if (creds.some((c) => c.secret_type === 'connection-string')) advice.push("4. 数据库连接串不要经 API/配置泄露；密钥集中到密钥管理，接口调用要鉴权。")
+    advice.push(`${advice.length + 1}. 对本次涉及的业务接口补齐统一鉴权与越权校验；维护 API 资产清单并做自动化回归测试。`)
     push(...advice, '')
 
     if (filteredOut > 0 && !includeAll) {
-      push(`> This report only includes verified/exploited result vulnerabilities of medium severity or higher; ${filteredOut} pending, false-positive, low, or info-level records are not included (see the Vuln results page).`)
+      push(`> 本报告只收已证实/已利用且中危及以上的成果漏洞；另有 ${filteredOut} 条待确认、误报、低危或信息级记录未纳入（见漏洞结果页）。`)
       push('')
     }
 
@@ -5192,16 +5236,17 @@ export class RedteamStore {
     const db = this.db(id)
     const counts = { segments: 0, assets: 0, ports: 0, services: 0, fingerprints: 0, names: 0, edges: 0 }
     let runId = null
-    if (bundle.scan) {
-      const r = db.prepare(`INSERT INTO scan_run(agent_session_id, tool, argv, started_at, status)
-        VALUES(?,?,?,?,'completed')`).run(
-        bundle.scan.agent_session_id ?? null, bundle.scan.tool ?? null,
-        bundle.scan.argv ? JSON.stringify(bundle.scan.argv) : null, nowIso(),
-      )
-      runId = Number(r.lastInsertRowid)
-    }
+    /* BEGIN 必须在写 scan_run 之前：它在事务外的话，导入中途失败回滚会留下孤儿扫描记录。 */
     db.exec('BEGIN')
     try {
+      if (bundle.scan) {
+        const r = db.prepare(`INSERT INTO scan_run(agent_session_id, tool, argv, started_at, status)
+          VALUES(?,?,?,?,'completed')`).run(
+          bundle.scan.agent_session_id ?? null, bundle.scan.tool ?? null,
+          bundle.scan.argv ? JSON.stringify(bundle.scan.argv) : null, nowIso(),
+        )
+        runId = Number(r.lastInsertRowid)
+      }
       for (const seg of bundle.segments || []) { this.#upsertSegment(db, seg); counts.segments++ }
       for (const a of bundle.assets || []) {
         const provenance = a.provenance || 'active'

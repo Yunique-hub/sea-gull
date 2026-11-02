@@ -664,11 +664,34 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       try { return String(window.location.hash || '') === '#redteam-full' } catch { return false }
     }
 
-    const api = (req) => fetch('/redteam/api', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(req),
-    }).then((res) => res.json())
+    /* 与宿主半侧其它接口同一套约定：有超时、判 res.ok、非 JSON 响应给出可读错误。
+       直接 res.json() 时后端回 HTML/空体只会抛 "Unexpected token '<'"，状态码也丢了。 */
+    const API_TIMEOUT_MS = 120000
+    const api = (req) => {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS)
+      return fetch('/redteam/api', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(req),
+        signal: ctrl.signal,
+      })
+        .then((res) => res.text().then((text) => {
+          let data = null
+          try { data = text ? JSON.parse(text) : null } catch { throw new Error(res.status + ' non-json: ' + text.slice(0, 120)) }
+          if (!res.ok) throw new Error((data && data.error) || (res.status + ' ' + res.statusText))
+          return data
+        }))
+        .finally(() => clearTimeout(timer))
+    }
+    /* 每次加载取号，异步回来先比号：切靶标后旧响应直接丢弃，别盖掉新靶标的数据。 */
+    const useLoadSeq = () => {
+      const ref = React.useRef(0)
+      return {
+        take: () => ++ref.current,
+        live: (my) => my === ref.current,
+      }
+    }
 
     let ui = { open: true, tab: 'assets' }
     const subs = new Set()
@@ -708,15 +731,30 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       'vuln-scan': '漏洞发现', exploit: '漏洞利用', internal: '内网渗透',
     }
 
-    const fmt = (s) => (s ? String(s).replace('T', ' ').slice(0, 16) : '—')
+    /* 服务端时间一律是 toISOString()（UTC），直接截串会让东八区早 8 小时。 */
+    const pad2 = (n) => String(n).padStart(2, '0')
+    const asLocal = (s) => {
+      const d = new Date(s)
+      return Number.isNaN(d.getTime()) ? null : d
+    }
+    const fmt = (s) => {
+      if (!s) return '—'
+      const d = asLocal(s)
+      if (d === null) return String(s).replace('T', ' ').slice(0, 16)
+      return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate())
+        + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())
+    }
     const shotCache = new Map()
     const shotLoading = new Map()
+    /* base64 常驻内存：只留最近 200 张，避免跨靶标无限累积。 */
+    const SHOT_CACHE_LIMIT = 200
     const shotSrc = (eng, id) => shotCache.get(eng + ':' + id) || null
     const loadShot = (eng, id) => {
       const key = eng + ':' + id
       if (shotCache.has(key) || shotLoading.has(key)) return
       const p = api({ op: 'shotData', engagement: eng, id: id }).then((r) => {
         shotCache.set(key, r && r.base64 ? 'data:' + (r.mime || 'image/png') + ';base64,' + r.base64 : '')
+        while (shotCache.size > SHOT_CACHE_LIMIT) shotCache.delete(shotCache.keys().next().value)
         shotLoading.delete(key)
         const snap = Object.assign({}, ui)
         for (const f of Array.from(subs)) {
@@ -729,7 +767,8 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
     const ShotImage = ({ eng, shot, height }) => {
       const [zoom, setZoom] = React.useState(false)
       const src = shotSrc(eng, shot.id)
-      if (src === null) { loadShot(eng, shot.id); }
+      /* 拉图放在 effect 里：render 期间发请求 + 写外部 store 会让同一帧重复触发。 */
+      React.useEffect(() => { if (src === null) loadShot(eng, shot.id) }, [eng, shot.id, src])
       const card = shot.kind === 'card'
       return h('div', { className: 'rt-shot' },
         src === null
@@ -766,8 +805,14 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
     }
     /** 发现时间在列表里只留「月-日 时:分」：整行宽度紧张，完整时间进悬浮提示 */
     const fmtShort = (s) => {
-      const t = String(s || '').replace('T', ' ')
-      return t.length >= 16 ? t.slice(5, 16) : (t || '—')
+      if (!s) return '—'
+      const d = asLocal(s)
+      if (d === null) {
+        const t = String(s).replace('T', ' ')
+        return t.length >= 16 ? t.slice(5, 16) : t
+      }
+      return pad2(d.getMonth() + 1) + '-' + pad2(d.getDate())
+        + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())
     }
     const provLabel = (p) => (p === 'passive' ? '被动' : p === 'active' ? '主动' : '未知')
 
@@ -1258,12 +1303,17 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [data, setData] = React.useState(null)
       const [err, setErr] = React.useState(null)
       const [day, setDay] = React.useState('')
+      const seq = useLoadSeq()
       React.useEffect(() => {
         if (!eng) return
+        const my = seq.take()
         setData(null)
         api({ op: 'discoveryTimeline', engagement: eng, limit: 200 })
-          .then((r) => { if (!r || r.ok === false) setErr((r && r.error) || '加载失败'); else { setErr(null); setData(r) } },
-            (e) => setErr(String((e && e.message) || e)))
+          .then((r) => {
+            if (!seq.live(my)) return
+            if (!r || r.ok === false) setErr((r && r.error) || '加载失败')
+            else { setErr(null); setData(r) }
+          }, (e) => { if (seq.live(my)) setErr(String((e && e.message) || e)) })
       }, [eng, refreshKey])
       if (err) return h('div', { className: 'rt-pane' }, h('div', { className: 'rt-err' }, err))
       if (!data) return h('div', { className: 'rt-empty' }, '加载中…')
@@ -1314,14 +1364,17 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [msg, setMsg] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
 
+      const seq = useLoadSeq()
       React.useEffect(() => {
         /* 无靶标也允许：服务端回内置默认，不再报 engagement required */
+        const my = seq.take()
         api(eng ? { op: 'prompts', engagement: eng } : { op: 'prompts' }).then((r) => {
+          if (!seq.live(my)) return
           if (!r || r.ok === false) { setMsg({ err: (r && r.error) || '读取失败' }); return }
           setRoles(r.roles || [])
           if (r.roles && r.roles.length) setActive((cur) => cur || r.roles[0].role)
           if (r.builtin) setMsg({ ok: '当前为内置默认提示词（创建靶标后可按靶标保存修改）' })
-        }, (e) => setMsg({ err: String((e && e.message) || e) }))
+        }, (e) => { if (seq.live(my)) setMsg({ err: String((e && e.message) || e) }) })
       }, [eng, refreshKey])
 
       React.useEffect(() => {
@@ -1897,7 +1950,8 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
 
       return h('div', { className: 'rt-main' }, toolbar, conclusion,
         h('div', { className: 'rt-subtabs' },
-          subTabBtn('vulns', '漏洞', state.total || 0),
+          /* 用实际渲染条数：total 是服务端 COUNT(*)，列表被 limit 截断时两者对不上。 */
+          subTabBtn('vulns', '漏洞', (state.items || []).length),
           subTabBtn('files', '攻击文件', allFiles.length),
           subTabBtn('creds', '凭据', creds.length),
           subTabBtn('access', '访问会话', accesses.length),
@@ -1951,14 +2005,17 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [view, setView] = React.useState('A')
       const [openId, setOpenId] = React.useState(null)
 
+      const seq = useLoadSeq()
       const load = () => {
         if (!eng) return
+        const my = seq.take()
         setLoading(true)
         api({ op: 'scoreChain', engagement: eng }).then((r) => {
+          if (!seq.live(my)) return
           setLoading(false)
           if (!r || r.ok === false) { setErr((r && r.error) || '读取失败'); return }
           setErr(null); setData(r)
-        }, (e) => { setLoading(false); setErr(String((e && e.message) || e)) })
+        }, (e) => { if (!seq.live(my)) return; setLoading(false); setErr(String((e && e.message) || e)) })
       }
       React.useEffect(load, [eng, refreshKey])
 
@@ -2157,21 +2214,28 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       /* 报告按阶段折叠：默认全开，折叠状态按靶标记住（阶段多时便于逐段交付） */
       const collapse = useCollapse('report:' + eng)
 
+      const seq = useLoadSeq()
       const load = () => {
         if (!eng) return
+        const my = seq.take()
         setBusy(true); setMsg(null)
         api({ op: 'scoreReport', engagement: eng }).then((r) => {
+          if (!seq.live(my)) return
           if (!r || r.ok === false) { setBusy(false); setErr((r && r.error) || '生成失败'); return }
           /* 老 host 只给平铺条目、不给阶段分组（或阶段行缺失）：自己按攻击链分组，
              否则报告页会误报"还没有可交付的成果"。分组数据取自 scoreChain。 */
           if ((!r.stages || r.stages.length === 0) && (r.items || []).length > 0) {
             api({ op: 'scoreChain', engagement: eng }).then((c) => {
+              if (!seq.live(my)) return
               setBusy(false); setErr(null); setData(Object.assign({}, r, { stages: groupByStage(r.items, c) }))
-            }, () => { setBusy(false); setErr(null); setData(r) })
+            }, () => {
+              if (!seq.live(my)) return
+              setBusy(false); setErr(null); setData(r)
+            })
             return
           }
           setBusy(false); setErr(null); setData(r)
-        }, (e) => { setBusy(false); setErr(String((e && e.message) || e)) })
+        }, (e) => { if (!seq.live(my)) return; setBusy(false); setErr(String((e && e.message) || e)) })
       }
       React.useEffect(load, [eng, refreshKey])
 
@@ -2379,15 +2443,18 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const collapse = useCollapse('files:' + eng)
       const [detail, setDetail] = React.useState(null)
 
+      const seq = useLoadSeq()
       const load = () => {
         if (!eng) return
+        const my = seq.take()
         setBusy(true)
         api({ op: 'attackFiles', engagement: eng }).then((r) => {
+          if (!seq.live(my)) return
           setBusy(false)
           if (!r || r.ok === false) { setErr((r && r.error) || '读取失败'); return }
           setErr(null)
           setFolders(r.items || [])
-        }, (e) => { setBusy(false); setErr(String((e && e.message) || e)) })
+        }, (e) => { if (!seq.live(my)) return; setBusy(false); setErr(String((e && e.message) || e)) })
       }
       React.useEffect(load, [eng, refreshKey])
 
@@ -2936,15 +3003,18 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [form, setForm] = React.useState(null)
       const [msg, setMsg] = React.useState(null)
 
+      const seq = useLoadSeq()
       const load = () => {
         if (!eng) return
+        const my = seq.take()
         setBusy(true)
         api({ op: 'scores', engagement: eng }).then((r) => {
+          if (!seq.live(my)) return
           setBusy(false)
           if (!r || r.ok === false) { setErr((r && r.error) || '读取失败'); return }
           setErr(null)
           setData(r)
-        }, (e) => { setBusy(false); setErr(String((e && e.message) || e)) })
+        }, (e) => { if (!seq.live(my)) return; setBusy(false); setErr(String((e && e.message) || e)) })
       }
       React.useEffect(load, [eng, refreshKey])
 
@@ -2993,7 +3063,7 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
         }, (e) => { setBusy(false); setMsg({ err: String((e && e.message) || e) }) })
       }
 
-      const summary = (data && data.summary) || { achievedPoints: 0, pointCount: 0, hitPointCount: 0, hitCount: 0, selfCreatedHits: 0, serviceCappedHits: 0 }
+      const summary = (data && data.summary) || { achievedPoints: 0, pointCount: 0, hitPointCount: 0, hitCount: 0, countedHits: 0, selfCreatedHits: 0, serviceCappedHits: 0 }
       const items = (data && data.items) || []
 
       /* 按合并版的 8 个类别分组渲染（后端 ruleGroups 已排好序、组内按分值升序）。
@@ -3308,7 +3378,9 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
         }, (e) => { if (my === seq.current) setErr(String((e && e.message) || e)) })
           .finally(() => { if (my === seq.current) inflight.current = false })
       }
-      React.useEffect(() => { seq.current += 1; load() }, [eng, refreshKey])
+      /* 切靶标/刷新时把在途标记复位：旧请求的 finally 因序号不符不会清，
+         不复位的话这里会永久早退，5 秒轮询也全空转。 */
+      React.useEffect(() => { seq.current += 1; inflight.current = false; load() }, [eng, refreshKey])
       React.useEffect(() => {
         if (!eng || !auto) return undefined
         const timer = setInterval(load, 5000)
@@ -3430,13 +3502,16 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [msg, setMsg] = React.useState(null)
       const [copied, setCopied] = React.useState(null)
 
+      const seq = useLoadSeq()
       const load = () => {
         if (!eng) return
+        const my = seq.take()
         api({ op: 'sessions', engagement: eng }).then((r) => {
+          if (!seq.live(my)) return
           if (!r || r.ok === false) { setErr((r && r.error) || '读取失败'); return }
           setErr(null)
           setData(r)
-        }, (e) => setErr(String((e && e.message) || e)))
+        }, (e) => { if (seq.live(my)) setErr(String((e && e.message) || e)) })
       }
       React.useEffect(load, [eng, refreshKey])
 
@@ -3671,16 +3746,20 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [concurrency, setConcurrency] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
 
+      const seq = useLoadSeq()
       const load = () => {
+        const my = seq.take()
         setBusy(true)
         api({ op: eng ? 'prompts' : 'bootstrap', engagement: eng || undefined }).then((r) => {
+          if (!seq.live(my)) return
           setBusy(false)
           if (!r || r.ok === false) { setErr((r && r.error) || '读取失败'); return }
           setErr(null)
           if (r.roles) setRoles(r.roles)
-        }, (e) => { setBusy(false); setErr(String((e && e.message) || e)) })
+        }, (e) => { if (!seq.live(my)) return; setBusy(false); setErr(String((e && e.message) || e)) })
         /* 并发名额按"当前跑着的子智能体"算；host 侧读 subagents 注册表 */
         api({ op: 'agentsStatus' }).then((r) => {
+          if (!seq.live(my)) return
           if (r && r.ok !== false) setConcurrency(r)
         }, () => {})
       }
@@ -3955,6 +4034,27 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       const [refreshKey, setRefreshKey] = React.useState(0)
       const [digest, setDigest] = React.useState(null)
       const [seen, setSeen] = React.useState(null)
+      const [showCreate, setShowCreate] = React.useState(false)
+      const snapshotSeq = React.useRef(0)
+      const projectOperation = React.useRef(false)
+      const [projectBusy, setProjectBusy] = React.useState(false)
+
+      /* 项目操作共用同步锁，防止迟到的切换/刷新响应覆盖当前选择。 */
+      const runProjectOperation = async (action, isCreate = false) => {
+        if (projectOperation.current) return
+        projectOperation.current = true
+        ++snapshotSeq.current
+        setProjectBusy(true)
+        setCreating(isCreate)
+        setErr(null)
+        try { return await action() }
+        catch (e) { setErr(String((e && e.message) || e)) }
+        finally {
+          projectOperation.current = false
+          setProjectBusy(false)
+          setCreating(false)
+        }
+      }
 
       React.useEffect(() => {
         if (embedded) return undefined
@@ -3968,50 +4068,50 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       }, [embedded])
 
       const loadSnapshot = (id) => {
+        const seq = ++snapshotSeq.current
+        setSnapshot(null)
         if (!id) { setSnapshot(null); return }
         api({ op: 'snapshot', engagement: id }).then((r) => {
+          if (seq !== snapshotSeq.current) return
           if (!r || r.ok === false) { setErr((r && r.error) || '加载失败'); return }
-          setErr(null)
           setSnapshot(r)
-        }, (e) => setErr(String((e && e.message) || e)))
+        }, (e) => { if (seq === snapshotSeq.current) setErr(String((e && e.message) || e)) })
       }
 
       const refreshList = (selectId) => {
-        api({ op: 'bootstrap' }).then((b) => {
-          setEngagements((b && b.engagements) || [])
-          if (selectId) { setEng(selectId); loadSnapshot(selectId) }
-        }, () => {})
+        return api({ op: 'bootstrap' }).then((b) => {
+          if (!b || b.ok === false) throw new Error((b && b.error) || '无法加载项目列表')
+          const items = b.engagements || []
+          setEngagements(items)
+          const id = items.some(x => x.id === selectId) ? selectId : b.current || null
+          setEng(id)
+          setErr(null)
+          loadSnapshot(id)
+        })
       }
 
       React.useEffect(() => {
-        api({ op: 'bootstrap' }).then((r) => {
-          if (!r || r.ok === false) { setErr((r && r.error) || '无法连接资产库'); return }
-          setEngagements(r.engagements || [])
-          const id = r.current || (r.engagements && r.engagements[0] && r.engagements[0].id) || null
-          if (id) { setEng(id); loadSnapshot(id) }
-        }, (e) => setErr(String((e && e.message) || e)))
+        runProjectOperation(() => refreshList())
       }, [])
 
       const openEngagement = (nameArg) => {
         const name = String(nameArg || newName).trim()
-        if (!name) return
-        setCreating(true)
-        api({ op: 'openEngagement', name: name }).then((r) => {
-          setCreating(false)
-          if (!r || r.ok === false) { setErr((r && r.error) || '创建失败'); return }
+        if (!name) { setErr('项目名称不能为空'); return }
+        if (creating) return
+        return runProjectOperation(async () => {
+          const r = await api({ op: 'openEngagement', name: name, createOnly: true })
+          if (!r || r.ok === false) throw new Error((r && r.error) || '创建失败')
+          await refreshList(r.engagement && r.engagement.id)
           setNewName('')
-          refreshList(r.engagement && r.engagement.id)
-        }, (e) => { setCreating(false); setErr(String((e && e.message) || e)) })
+          setShowCreate(false)
+        }, true)
       }
 
       /** 刷新：重新拉取名册/快照，并让当前页签重新取数。 */
-      const refreshAll = () => {
+      const refreshAll = () => runProjectOperation(async () => {
+        await refreshList(eng)
         setRefreshKey((k) => k + 1)
-        api({ op: 'bootstrap' }).then((b) => {
-          setEngagements((b && b.engagements) || [])
-          if (eng) loadSnapshot(eng)
-        }, () => { if (eng) loadSnapshot(eng) })
-      }
+      })
 
       const trackPointer = (e, move) => {
         if (e.button !== 0) return
@@ -4132,24 +4232,11 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       }, [full])
 
       let body
-      if (err) body = h('div', { className: 'rt-err' }, err)
       /* 全局页：没有靶标也能看（环境适配 / 智能体概览）。开源版下架知识库和技能库。 */
-      else if (st.tab === 'env' || st.tab === 'knowledge' || st.tab === 'skills') body = h(EnvTab, { refreshKey: refreshKey })
+      if (st.tab === 'env' || st.tab === 'knowledge' || st.tab === 'skills') body = h(EnvTab, { refreshKey: refreshKey })
       else if (st.tab === 'agents' || st.tab === 'prompts') body = h(AgentsTab, { engagement: eng, refreshKey: refreshKey })
       else if (!eng) {
-        body = h('div', { className: 'rt-pane' },
-          h('div', { className: 'rt-card' },
-            h('h4', null, '还没有靶标'),
-            h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', marginBottom: 8 } },
-              '输入攻防演练靶标单位名称，创建演练并开始资产测绘。'),
-            h('div', { style: { display: 'flex', gap: 8 } },
-              h('input', {
-                className: 'rt-input', style: { flex: 1 }, placeholder: '例如：示例科技有限公司',
-                value: newName, onChange: (e) => setNewName(e.target.value),
-                onKeyDown: (e) => { if (e.key === 'Enter') openEngagement() },
-              }),
-              h('button', { className: 'rt-btn rt-btn-primary', disabled: creating, onClick: () => openEngagement() },
-                creating ? '创建中…' : '创建靶标'))))
+        body = h('div', { className: 'rt-empty' }, '还没有项目，请在上方创建一个本地演练项目。')
       } else if (st.tab === 'assets') body = h(AssetsTab, { engagement: eng, snapshot: snapshot, refreshKey: refreshKey, onRefresh: refreshAll, onData: () => loadSnapshot(eng) })
       else if (st.tab === 'testing') body = h(AssetsTab, { engagement: eng, snapshot: snapshot, refreshKey: refreshKey, onRefresh: refreshAll, onData: () => loadSnapshot(eng) })
       else if (st.tab === 'sessions') body = h(SessionTab, { engagement: eng, refreshKey: refreshKey })
@@ -4160,6 +4247,8 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
       else if (st.tab === 'scores') body = h(ScoreTab, { engagement: eng, refreshKey: refreshKey })
       else body = h('div', { className: 'rt-empty' }, '未知页签')
 
+      /* 切项目时卸载旧项目页面，防止旧记录/异步响应带入新项目。全局页保留状态。 */
+      const bodyKey = st.tab + (['knowledge', 'env', 'skills'].includes(st.tab) ? '' : ':' + (eng || ''))
       const shellProps = full
         ? { className: 'rt-full', style: { display: 'flex' } }
         : embedded
@@ -4190,23 +4279,35 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
           h('select', {
             className: 'rt-input rt-eng-select',
             style: { maxWidth: embedded ? '100%' : '170px', minWidth: embedded ? '160px' : undefined, flex: embedded ? '1 1 200px' : undefined },
-            value: eng || '',
+            value: eng || '', disabled: projectBusy,
             onChange: (e) => {
-              setEng(e.target.value)
-              loadSnapshot(e.target.value)
+              const id = e.target.value
               /* 同步「当前靶标」：原生 skill 目录按它解析技能根 */
-              api({ op: 'activateEngagement', engagement: e.target.value }).catch(() => {})
+              return runProjectOperation(async () => {
+                const r = await api({ op: 'activateEngagement', engagement: id })
+                if (!r || r.ok === false) throw new Error((r && r.error) || '项目切换失败')
+                setEng(id)
+                setErr(null)
+                loadSnapshot(id)
+              })
             },
           },
             h('option', { value: '', disabled: true }, engagements.length ? '选择靶标' : '暂无靶标'),
             engagements.map((x) => h('option', { key: x.id, value: x.id }, x.name || x.id || '未命名')),
           ),
+          h('button', { className: 'rt-btn rt-btn-primary', disabled: projectBusy, onClick: () => { setShowCreate(true); setErr(null) } }, '新建项目'),
           h('div', { className: 'rt-spacer' }),
           embedded ? null : h(VersionBar, null),
           full ? h('button', { className: 'rt-btn', title: '回到带侧栏的普通界面（或按 Esc）', onClick: exitFull }, '退出全面浏览') : null,
-          embedded ? null : h('button', { className: 'rt-btn', title: '刷新名册、快照与当前页面数据', onClick: refreshAll }, '刷新'),
+          h('button', { className: 'rt-btn', title: '刷新名册、快照与当前页面数据', disabled: projectBusy, onClick: refreshAll }, '刷新'),
           (full || embedded) ? null : h('button', { className: 'rt-btn', title: '在新浏览器窗口打开完整控制台', onClick: openFull }, '全面浏览'),
           (full || embedded) ? null : h('button', { className: 'rt-btn', title: '收起面板', onClick: () => setUI({ open: false }) }, '收起')),
+        (showCreate || !eng) ? h('form', { className: 'rt-pane', noValidate: true, onSubmit: e => { e.preventDefault(); return openEngagement() }, style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
+          h('input', { className: 'rt-input', 'aria-label': '项目名称', placeholder: '项目名称', maxLength: 100, required: true, disabled: projectBusy,
+            style: { flex: '1 1 160px', minWidth: 0 }, value: newName, onChange: e => setNewName(e.target.value) }),
+          h('button', { className: 'rt-btn rt-btn-primary', type: 'submit', disabled: projectBusy }, creating ? '创建中…' : '创建项目'),
+          eng ? h('button', { className: 'rt-btn', type: 'button', disabled: projectBusy, onClick: () => { setShowCreate(false); setNewName(''); setErr(null) } }, '取消') : null) : null,
+        err ? h('div', { className: 'rt-err', role: 'alert' }, err) : null,
         /* 页签栏用标准 tablist/tab 角色：读屏软件据此播报「第几个页签、是否选中」。
            键盘用户 Tab 进来后可用 Enter/Space 切换（由 clickable 提供）。 */
         h('div', { className: 'rt-tabs', role: 'tablist' }, tabs.map((t) => {
@@ -4226,7 +4327,7 @@ body[data-ds-dark-theme] .rt-scope-testing,.dshp-dock[data-theme="dusk"] .rt-sco
             ? h('span', { className: 'rt-tab-dot', 'aria-label': '有新内容' })
             : null)
         })),
-        h('div', { className: 'rt-body', key: 'body-' + st.tab }, h(RtBoundary, { key: st.tab }, body)),
+        h('div', { className: 'rt-body', key: 'body-' + bodyKey }, h(RtBoundary, { key: bodyKey }, body)),
         h('div', { className: 'rt-foot' },
           h('span', null, 'C 段 ' + (stats.segments || 0)),
           h('span', null, '资产 ' + (stats.assets || 0) + '（存活 ' + (stats.liveAssets || 0) + '）'),

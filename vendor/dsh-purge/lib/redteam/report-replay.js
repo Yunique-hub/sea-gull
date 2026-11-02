@@ -121,11 +121,13 @@ function buildHttpRequest(options = {}) {
     : (target.path || '/')
   const method = String(options.method || (options.data === undefined || options.data === null ? 'GET' : 'POST')).toUpperCase()
   const lines = [method + ' ' + path + ' HTTP/1.1', 'Host: ' + hostHeader]
-  const headers = Array.isArray(options.headers) ? options.headers.slice() : []
+  const headers = (Array.isArray(options.headers) ? options.headers.slice() : [])
+    /* 头值里的换行会把一条报文拆成两条：Cookie 尤其常见（多行 cookie 导出）。 */
+    .map((h) => String(h).replace(/[\r\n]+/g, ' '))
   const hasHeader = (name) => headers.some((h) => String(h).toLowerCase().startsWith(name.toLowerCase() + ':'))
   if (!hasHeader('User-Agent')) headers.push('User-Agent: Mozilla/5.0')
   if (!hasHeader('Accept')) headers.push('Accept: */*')
-  if (options.cookie && !hasHeader('Cookie')) headers.push('Cookie: ' + options.cookie)
+  if (options.cookie && !hasHeader('Cookie')) headers.push('Cookie: ' + String(options.cookie).replace(/[\r\n]+/g, ' '))
   const body = options.data === undefined || options.data === null ? '' : String(options.data)
   if (body !== '' && !hasHeader('Content-Type')) {
     headers.push(/^\{.*\}$/.test(body.trim()) ? 'Content-Type: application/json' : 'Content-Type: application/x-www-form-urlencoded')
@@ -153,8 +155,8 @@ function buildCurlCommand(options = {}) {
   const url = scheme + '://' + hostPart + (options.path || target.path || '/')
   const parts = ['curl -i -s' + (options.insecure ? ' -k' : '') + (options.followRedirect ? ' -L' : '')]
   if (options.method && String(options.method).toUpperCase() !== 'GET') parts.push('-X ' + String(options.method).toUpperCase())
-  if (options.cookie) parts.push("-b '" + options.cookie + "'")
-  if (options.data !== undefined && options.data !== null && options.data !== '') parts.push("-d '" + String(options.data).replace(/'/g, "'\\''") + "'")
+  if (options.cookie) parts.push("-b '" + String(options.cookie).replace(/[\r\n]/g, ' ').replace(/'/g, "'\\''") + "'")
+  if (options.data !== undefined && options.data !== null && options.data !== '') parts.push("-d '" + String(options.data).replace(/[\r\n]+/g, ' ').replace(/'/g, "'\\''") + "'")
   parts.push("'" + url + "'")
   return parts.join(' ')
 }
@@ -194,13 +196,15 @@ function fillTemplate(template, values = {}) {
     [/<u>/g, values.user],
     [/<p>/g, values.pass],
   ]
-  for (const [re, value] of table) {
-    if (value === undefined || value === null || String(value) === '') continue
+  for (const [re, rawValue] of table) {
+    if (rawValue === undefined || rawValue === null || String(rawValue) === '') continue
+    /* 凭据/域名来自数据库，换行会把一条命令拆成两条。 */
+    const value = String(rawValue).replace(/[\r\n]+/g, ' ')
     const needle = new RegExp(re.source, re.flags.replace('g', ''))
     if (!needle.test(cmd)) continue
-    cmd = cmd.replace(new RegExp(re.source, re.flags), String(value))
+    cmd = cmd.replace(new RegExp(re.source, re.flags), value)
     /* 记录填了什么，报告里要如实说明（模板被改过，读者需要知道哪些是补进去的） */
-    filled.push(re.source.replace(/[\\<>?()/]|gi$/g, '') + ' → ' + String(value))
+    filled.push(re.source.replace(/[\\<>?()/]|gi$/g, '') + ' → ' + value)
   }
   const remaining = Array.from(new Set(Array.from(cmd.matchAll(/<[^>\s]{1,24}>/g)).map((m) => m[0])))
   return { cmd, filled, remaining }

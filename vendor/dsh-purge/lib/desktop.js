@@ -4,14 +4,13 @@ import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { isWshAscii, wshLiteral } from "./official-update.js";
-import { asarArchiveIsFile, hostFs } from "./extract-asar.js";
-import { hostPromptKeepsInject } from "./host-clean.js";
+import { asarArchiveIsFile, diskFs, hostFs } from "./extract-asar.js";
+import { hostPromptKeepsInject, HOST_CLEAN_MARKERS } from "./host-clean.js";
 import { atomicCopyFileSync, atomicWriteSync } from "./core.js";
 
 function restartUniqSuffix() {
   return `${process.pid}-${randomBytes(4).toString("hex")}`;
 }
-
 // 无归档时用 node:fs。app.asar 还在时不能把映射出来的 resources/app 当成已经解开。
 const fs = hostFs;
 
@@ -256,6 +255,72 @@ export function appAsarPath(exe) {
 export function appDirForExecutable(exe) {
   const dir = resourcesDirForExecutable(exe);
   return dir ? path.join(dir, "app") : "";
+}
+
+/* ---------------------------------------------------------------- office-skills 自愈
+ * resources/runtime/office-skills/office/SKILL.md 缺失时，dsh-skill-office 初始化
+ * 同步读七个文件，桌面端直接 DesktopHostFatalError 退出。这里在“应用能起来”的
+ * 前提下把缺的文件从 app.asar / npm 安装树补回磁盘，避免下次再崩。
+ * 注意：救不了崩溃当次（崩溃发生在 Fiber._reload，比插件早）。
+ */
+const OFFICE_SKILL_MARKER = ["office", "SKILL.md"];
+const OFFICE_COPY_MAX_DEPTH = 12;
+
+function copySkillTree(src, dest, reader, writer, depth = 0) {
+  if (depth > OFFICE_COPY_MAX_DEPTH) return;
+  try { writer.mkdirSync(dest, { recursive: true }); } catch { return; }
+  let entries;
+  try { entries = reader.readdirSync(src, { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    if (!entry || !entry.name) continue;
+    // 只跟真目录；符号链接可能指回上层，递归会绕圈。
+    if (entry.isSymbolicLink && entry.isSymbolicLink()) continue;
+    const from = path.join(src, entry.name);
+    const to = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copySkillTree(from, to, reader, writer, depth + 1);
+    } else if (entry.isFile()) {
+      try {
+        if (writer.existsSync(to)) continue;
+        writer.mkdirSync(path.dirname(to), { recursive: true });
+        writer.writeFileSync(to, reader.readFileSync(from));
+      } catch { /* 单个文件失败不挡整棵树 */ }
+    }
+  }
+}
+
+export function healOfficeSkillsAt(resourcesDir, appDir = "", extraSources = []) {
+  if (!resourcesDir) return { ok: false, reason: "no-resources" };
+  const dest = path.join(resourcesDir, "runtime", "office-skills");
+  const marker = path.join(dest, ...OFFICE_SKILL_MARKER);
+  const out = diskFs();
+  try { if (out.existsSync(marker)) return { ok: true, healed: false, dest }; } catch { /* 下面按缺失处理 */ }
+  const sources = [
+    appDir ? path.join(appDir, "runtime", "office-skills") : "",
+    appDir ? path.join(appDir, "dsh", "node_modules", "@deepseek-ai", "dsh-skill-office", "assets") : "",
+    path.join(resourcesDir, "app", "runtime", "office-skills"),
+    path.join(resourcesDir, "app", "dsh", "node_modules", "@deepseek-ai", "dsh-skill-office", "assets"),
+    // 打包安装的资源在 asar 里，hostFs 认 asar 路径。
+    path.join(resourcesDir, "app.asar", "dsh", "node_modules", "@deepseek-ai", "dsh-skill-office", "assets"),
+    path.join(resourcesDir, "app.asar.unpacked", "dsh", "node_modules", "@deepseek-ai", "dsh-skill-office", "assets"),
+    ...(Array.isArray(extraSources) ? extraSources : []),
+  ].filter(Boolean);
+  const src = sources.find((dir) => {
+    try { return hostFs.existsSync(path.join(dir, ...OFFICE_SKILL_MARKER)); } catch { return false; }
+  });
+  if (!src) return { ok: false, reason: "no-source", dest };
+  try {
+    copySkillTree(src, dest, hostFs, out);
+    return { ok: out.existsSync(marker), healed: true, src, dest };
+  } catch (error) {
+    return { ok: false, reason: String(error?.message || error), src, dest };
+  }
+}
+
+export function healOfficeSkillsRuntimeOnDisk(extraSources = []) {
+  const exe = findDesktopAppExecutable();
+  if (!exe || !isOfficialHarnessExecutable(exe)) return { ok: false, reason: "no-exe" };
+  return healOfficeSkillsAt(resourcesDirForExecutable(exe), appDirForExecutable(exe), extraSources);
 }
 
 function exeCandidatesBeside(dir) {
@@ -944,14 +1009,13 @@ function desktopRuntimeOf(ctx) {
   return runtime && typeof runtime.requestRestart === "function" ? runtime : null;
 }
 
-const ASAR_SWAP_PS1 = [
+export const ASAR_SWAP_PS1 = [
   "param(",
   "  [Parameter(Mandatory = $true)][int]$WaitPid,",
   "  [Parameter(Mandatory = $true)][string]$AsarPath,",
   "  [Parameter(Mandatory = $true)][string]$ExePath",
   ")",
   "$ErrorActionPreference = 'Continue'",
-  "$names = @('DeepSeek Harness', 'DSH Desktop', 'DSH NEXT')",
   "$installRoot = (Split-Path -Parent $ExePath).TrimEnd('\\')",
   "$exeNorm = $ExePath.ToLower()",
   "function Stop-HarnessInstall {",
@@ -971,6 +1035,16 @@ const ASAR_SWAP_PS1 = [
   "# 来得及处理 host 退出事件就被 kill,UI 根本不存在,无法弹 crash dialog。",
   "# PowerShell 本身是 detached 独立进程(spawn 时 detached:true, stdio:ignore),",
   "# 杀 Electron 不会连带杀 PowerShell。",
+  "# #197b: 先杀 Electron main。main 是唯一会弹「host stopped」对话框的进程：",
+  "# 若先杀 host，main 还活着就会弹框，然后脚本若在挪 asar 前失败，用户就卡在",
+  "# 「host 死了、main 半死、asar 没动」的状态（2026-10-31 实测）。先杀 main 就没框。",
+  "$mains = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {",
+  "  $ep = $_.ExecutablePath",
+  "  if (-not $ep) { return $false }",
+  "  ($ep.ToLower() -eq $exeNorm) -and ($_.CommandLine -notmatch '--type=')",
+  "})",
+  "foreach ($p in $mains) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }",
+  "Start-Sleep -Milliseconds 400",
   "Stop-HarnessInstall",
   "Start-Sleep -Milliseconds 500",
   "Stop-HarnessInstall",
@@ -979,8 +1053,11 @@ const ASAR_SWAP_PS1 = [
   "$deadline = (Get-Date).AddSeconds(10)",
   "while ((Get-Date) -lt $deadline) {",
   "  $self = Get-Process -Id $WaitPid -ErrorAction SilentlyContinue",
-  "  $holding = @(Get-Process -Name $names -ErrorAction SilentlyContinue | Where-Object {",
-  "    try { $_.Path -and ($_.Path.ToLower() -eq $exeNorm -or $_.Path.ToLower().StartsWith($installRoot.ToLower() + '\\')) } catch { $false }",
+  "  $holding = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {",
+  "    $ep = $_.ExecutablePath",
+  "    if (-not $ep) { return $false }",
+  "    $low = $ep.ToLower()",
+  "    ($low -eq $exeNorm) -or $low.StartsWith($installRoot.ToLower() + '\\')",
   "  })",
   "  if (-not $self -and $holding.Count -eq 0) { break }",
   "  Stop-HarnessInstall",
@@ -1014,7 +1091,15 @@ const ASAR_SWAP_PS1 = [
   "  Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue",
   "  Start-Process -FilePath $ExePath",
   "} else {",
+  "  # #197b: 挪不动（asar 仍被占用）时不要把用户扔在空桌面上——把原版拉起来，",
+  "  # 留下 rename-pending 让下一次空闲重试；失败原因写进 dsh-purge 日志。",
   "  Set-Content -LiteralPath $lock -Value ((Get-Date).ToString('o')) -Encoding ascii",
+  "  try {",
+  "    $log = Join-Path $env:TEMP 'dsh-purge-desktop.log'",
+  "    Add-Content -LiteralPath $log -Value ((Get-Date).ToUniversalTime().ToString('o') + ' [asar-swap] move failed; relaunching original app (asar still sealed)')",
+  "  } catch {}",
+  "  Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue",
+  "  Start-Process -FilePath $ExePath",
   "}",
   "",
 ].join("\r\n");
@@ -1340,7 +1425,9 @@ export function scheduleRestart(request, ctx, options = {}) {
     return { restarting: true };
   }
   const helper = fileURLToPath(new URL("./restart-desktop.js", import.meta.url));
-  spawnHelper(helper, { respawn: true, killApp: true }, { exit: false });
+  // 没定位到 exe 时不杀进程：helper 现在按 exe 路径筛选，没有路径就找不到任何目标，
+  // 继续传 killApp:true 只会让 helper 空跑。
+  spawnHelper(helper, { respawn: true, killApp: Boolean(exe) }, { exit: false });
   return { restarting: true };
 }
 
@@ -1350,6 +1437,16 @@ function jsString(value) {
 
 function officialRestartScript(exe, asar, dshHome) {
   const log = path.join(os.tmpdir(), "dsh-purge-official-restart.log");
+  // WSH 脚本里的 hostClean 与 host-clean.js 共用一份标记表，避免两套判定漂移。
+  const q = (s) => "'" + String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+  const anyOf = (list) => list.map((m) => `body.indexOf(${q(m)}) >= 0`).join(" || ");
+  const hostCleanFn =
+    "function hostClean(body) { if (!body) return null; " +
+    `var ident = body.indexOf(${q(HOST_CLEAN_MARKERS.identity)}) >= 0; ` +
+    `var kept = ${anyOf(HOST_CLEAN_MARKERS.inject)}; ` +
+    "if (ident && kept) return true; if (body.indexOf('system-prompt/assemble') < 0) return false; " +
+    "var identityLeft = body.indexOf('You are an AI agent powered by DeepSeek Harness.') >= 0; " +
+    `var drops = ${anyOf(HOST_CLEAN_MARKERS.drops)}; return !identityLeft && !drops; }`;
   return [
     "var exe = " + jsString(exe) + ";",
     "var asar = " + jsString(asar) + ";",
@@ -1363,12 +1460,14 @@ function officialRestartScript(exe, asar, dshHome) {
     "function log(m) { var f = fso.OpenTextFile(logPath, 8, true); f.WriteLine(stamp() + ' ' + m); f.Close(); }",
     "function samePath(a, b) { return String(a || '').replace(/\\//g, '\\\\').toLowerCase() === String(b || '').replace(/\\//g, '\\\\').toLowerCase(); }",
     "function installRoot() { return fso.GetParentFolderName(exe); }",
-    "function pids() { var out = []; var root = String(installRoot() || '').replace(/\\//g, '\\\\').toLowerCase(); var e = new Enumerator(wmi.ExecQuery(\"SELECT ProcessId, ExecutablePath FROM Win32_Process WHERE Name = 'DeepSeek Harness.exe'\")); for (; !e.atEnd(); e.moveNext()) { var p = e.item(); var ep = String(p.ExecutablePath || '').replace(/\\//g, '\\\\').toLowerCase(); if (samePath(p.ExecutablePath, exe) || (root && ep.indexOf(root) === 0)) out.push(p.ProcessId); } return out; }",
+    // 不按镜像名查：DSH NEXT / 改过名的官方桌面端进程名不同，写死就找不到；
+    // 前缀匹配必须带路径分隔符，否则 D:\App 会连 D:\App-old 一起杀。
+    "function pids() { var out = []; var root = String(installRoot() || '').replace(/\\//g, '\\\\').toLowerCase(); if (root && root.charAt(root.length - 1) === '\\\\') root = root.slice(0, -1); var e = new Enumerator(wmi.ExecQuery('SELECT ProcessId, ExecutablePath FROM Win32_Process')); for (; !e.atEnd(); e.moveNext()) { var p = e.item(); var ep = String(p.ExecutablePath || '').replace(/\\//g, '\\\\').toLowerCase(); if (!ep) continue; if (samePath(p.ExecutablePath, exe) || (root && ep.indexOf(root + '\\\\') === 0)) out.push(p.ProcessId); } return out; }",
     "log('begin');",
     "var promptFile = asar.replace(/app\\.asar$/i, 'app') + '\\\\dsh\\\\node_modules\\\\@deepseek-ai\\\\dsh-system-prompt\\\\lib\\\\index.js';",
     "var altFile = asar.replace(/app\\.asar$/i, 'app') + '\\\\node_modules\\\\@deepseek-ai\\\\dsh-system-prompt\\\\lib\\\\index.js';",
     "function readBody(file) { if (!fso.FileExists(file)) return ''; var tf = fso.OpenTextFile(file, 1); var body = tf.ReadAll(); tf.Close(); return body; }",
-    "function hostClean(body) { if (!body) return null; var ident = body.indexOf('[dsh-purge] identity stripped') >= 0; var kept = body.indexOf('[dsh-purge] complete prompt keeps waterfall inject') >= 0 || body.indexOf('[dsh-purge] complete prompt keeps inject') >= 0; if (ident && kept) return true; if (body.indexOf('system-prompt/assemble') < 0) return false; var identityLeft = body.indexOf('You are an AI agent powered by DeepSeek Harness.') >= 0; var drops = body.indexOf('transformed.sections : [completeSection]') >= 0; return !identityLeft && !drops; }",
+    hostCleanFn,
     "var clean = false;",
     "var primary = hostClean(readBody(promptFile));",
     "var alt = hostClean(readBody(altFile));",
@@ -1393,7 +1492,8 @@ function officialRestartScript(exe, asar, dshHome) {
     "var renamed = false;",
     "if (!fso.FileExists(asar)) { renamed = true; log('asar already absent'); }",
     "if (fso.FileExists(asar)) { var bak = asar + '.bak'; if (fso.FileExists(bak)) fso.DeleteFile(bak, true); for (var n = 0; n < 80; n++) { try { fso.MoveFile(asar, bak); renamed = true; log('renamed'); break; } catch (err) { log(err && err.message ? err.message : String(err)); if (n === 20 || n === 50) { var hold = pids(); for (var k = 0; k < hold.length; k++) sh.Run('taskkill.exe /F /PID ' + hold[k], 0, true); WScript.Sleep(800); } WScript.Sleep(300); } } }",
-    "if (!renamed) { log('rename failed; not starting'); try { if (fso.FileExists(" + jsString(path.join(os.tmpdir(), "dsh-purge-official-restarting")) + ")) fso.DeleteFile(" + jsString(path.join(os.tmpdir(), "dsh-purge-official-restarting")) + ", true); } catch (ignoreStop2) {} WScript.Quit(1); }",
+    // 换包失败也要把原来的桌面端拉起来：以前这里直接退出，用户看到的是应用凭空消失。
+    "if (!renamed) { log('rename failed; relaunching original'); try { sh.Run('\"' + exe + '\"', 1, false); } catch (relaunchError) { log('relaunch failed: ' + (relaunchError && relaunchError.message ? relaunchError.message : String(relaunchError))); } try { if (fso.FileExists(" + jsString(path.join(os.tmpdir(), "dsh-purge-official-restarting")) + ")) fso.DeleteFile(" + jsString(path.join(os.tmpdir(), "dsh-purge-official-restarting")) + ", true); } catch (ignoreStop2) {} WScript.Quit(1); }",
     "if (renamed) {",
     "try { sh.Environment('PROCESS').Remove('ELECTRON_RUN_AS_NODE'); } catch (ignore) {}",
     "try { sh.Environment('PROCESS').Remove('DSH_BASE'); } catch (ignoreBase) {}",
@@ -1640,7 +1740,8 @@ export function restartOfficialHarness(options = {}) {
 
 export function scheduleCleanupRestart({ cleanup = [], ctx } = {}) {
   const src = fileURLToPath(new URL("./restart-desktop.js", import.meta.url));
-  const dest = path.join(os.tmpdir(), `dsh-purge-uninst-${process.pid}.mjs`);
+  /* 可预测的临时文件名在多用户 POSIX 下能被抢注成符号链接：带上随机后缀。 */
+  const dest = path.join(os.tmpdir(), `dsh-purge-uninst-${restartUniqSuffix()}.mjs`);
   fs.copyFileSync(src, dest);
   const runtime = desktopRuntimeOf(ctx);
   if (runtime) {

@@ -14,7 +14,7 @@
 // 历史实现与移除理由见 docs/VERIFICATION.md「P. 本地靶场范围闸移除」。
 import fs from "node:fs";
 import path from "node:path";
-import { findDshHome } from "./core.js";
+import { atomicWriteSync, findDshHome } from "./core.js";
 
 const FILE_SUFFIX = new Set([
   "js", "jsx", "ts", "tsx", "mjs", "cjs", "json", "md", "yml", "yaml",
@@ -146,7 +146,7 @@ export async function writeAllowText(dshHome, content) {
   const file = allowFilePath(dshHome);
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    if (normalized.text) fs.writeFileSync(file, normalized.text, "utf8");
+    if (normalized.text) atomicWriteSync(file, normalized.text, "utf8");
     else {
       try { fs.unlinkSync(file); } catch { /* 本来就没有这个文件。 */ }
     }

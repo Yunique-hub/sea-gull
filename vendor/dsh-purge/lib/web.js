@@ -77,6 +77,16 @@ function spawnRestartHelper(helper, payload, exitAfter = 250) {
 export function scheduleRestart(request, _ctx, options = {}) {
   const openBrowser = options.openBrowser ?? (request != null);
   const helper = fileURLToPath(new URL("./restart-web.js", import.meta.url));
+  // #197：前台进程 250ms 后就会退出，终端回到提示符，但 server 在后台跑。
+  // 不把这句话打出来，用户会以为程序已经关掉，然后立刻再开一个 → EADDRINUSE。
+  try {
+    console.log(
+      "[dsh-purge] restarting dsh web in the background; closing this window will NOT stop it. " +
+        "The next `dsh web` reclaims it automatically.",
+    );
+  } catch {
+    /* ignore */
+  }
   spawnRestartHelper(helper, {
     kind: "web",
     execPath: process.execPath,

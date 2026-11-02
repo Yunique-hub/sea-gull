@@ -1,11 +1,15 @@
 /**
- * 用户层 profile/cordis.patch.yml 的本体 insert（#154 / #159）。
+ * 用户层 profile/cordis.patch.yml 的本体 insert（#154 / #159 / #191）。
  *
  * 包内 overlay 只改已入队行的 inject/config，不能再 insert 一次（Hub 已入队会
  * already queued）。postinstall 和演练台子行都走这里：行不存在就写一条。
+ *
+ * #191：文件本身是一个完整文档时（宿主生成的空 flow 序列 `[]`），不能再追加，
+ * 追加会变成第二个文档，宿主启动解析失败。
  */
 import fs from "node:fs";
 import path from "node:path";
+import { atomicWriteSync } from "./core.js";
 
 export const PURGE_NAME = "dsh-purge";
 
@@ -47,9 +51,55 @@ export function profileHasPurgeBodyInsert(text) {
   return false;
 }
 
+/**
+ * 判断 cordis.patch.yml 的数据部分形态（#191）。
+ *
+ * 宿主生成的 profile 层 patch 文件可能整体只有一个空 flow 序列 `[]`，
+ * 那是**一个完整 YAML 文档**。往文件尾追加 `- insert:` 会变成第二个文档，
+ * 宿主启动解析报 "end of the stream or a document separator is expected"。
+ *
+ * 只看最后一个文档的根节点类型（追加内容落在最后一个文档里）：
+ *   - "empty"       没有数据行（空文件 / 只有注释和空行）
+ *   - "empty-flow"  数据部分恰好是空 flow 序列 `[]`（可带 `---` 前缀）
+ *   - "block-seq"   正常块序列（顶层 `- ...`），沿用旧的追加行为
+ *   - "flow-seq"    非空 flow 序列（宿主/用户内容，动不得）
+ *   - "unknown"     其它形态（顶层映射等），认不准就不写
+ */
+export function classifyPatchBody(text) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  const dataLines = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue; // 空行
+    if (trimmed.startsWith("#")) continue; // 注释行
+    dataLines.push({ index: i, trimmed });
+  }
+  // 按 `---` 切成多个文档，只看最后一个（追加内容会落在最后一个文档里）
+  const lastDoc = [];
+  for (const item of dataLines) {
+    if (item.trimmed === "---") {
+      lastDoc.length = 0;
+      continue;
+    }
+    lastDoc.push(item);
+  }
+  if (lastDoc.length === 0) return { kind: "empty", lines };
+  // 空 flow 序列：`[]` / `[ ]`，允许行尾注释
+  if (lastDoc.length === 1 && /^\[\s*\]\s*(#.*)?$/.test(lastDoc[0].trimmed)) {
+    return { kind: "empty-flow", lines, emptyFlowIndex: lastDoc[0].index };
+  }
+  if (lastDoc[0].trimmed.startsWith("[")) return { kind: "flow-seq", lines };
+  if (/^-(\s|$)/.test(lastDoc[0].trimmed)) {
+    // 块序列里混进顶层 flow 序列 → 本身就是坏 YAML，认不准就不动
+    if (lastDoc.slice(1).some((item) => item.trimmed.startsWith("["))) return { kind: "unknown", lines };
+    return { kind: "block-seq", lines };
+  }
+  return { kind: "unknown", lines };
+}
+
 export function ensureProfileBodyInsert(profileDir) {
   const fp = path.join(profileDir, "cordis.patch.yml");
-  // 海鸥的 bundle 已插入本体；不要再向用户 profile 写入第二条。
+  // 海鸥 bundle 已显式插入本体；不要再向用户 profile 写入第二条。
   const plugin = path.join(profileDir, "node_modules", PURGE_NAME);
   if (readJson(path.join(plugin, "package.json"))?.seagull?.updateManaged) {
     try {
@@ -63,8 +113,25 @@ export function ensureProfileBodyInsert(profileDir) {
   if (profileHasPurgeBodyInsert(text)) {
     return { ok: true, wrote: false, path: fp };
   }
+  const shape = classifyPatchBody(text);
+  if (shape.kind === "empty-flow") {
+    // `[]` 本身是一个完整文档：把整行替换成 insert 块，绝不追加成第二个文档（#191）
+    const blockLines = INSERT_BLOCK.replace(/\n$/, "").split("\n");
+    const out = [
+      ...shape.lines.slice(0, shape.emptyFlowIndex),
+      ...blockLines,
+      ...shape.lines.slice(shape.emptyFlowIndex + 1),
+    ].join("\n");
+    atomicWriteSync(fp, `${out.endsWith("\n") ? out : `${out}\n`}`, "utf8");
+    return { ok: true, wrote: true, path: fp };
+  }
+  if (shape.kind === "flow-seq" || shape.kind === "unknown") {
+    // 宿主 / 用户自己的内容，宁可不动也别写坏（#191）
+    return { ok: false, wrote: false, path: fp };
+  }
+  // 空文件 / 只有注释 → 直接写 insert 块；正常块序列 → 沿用旧的追加行为
   const prefix = text && !text.endsWith("\n") ? "\n" : "";
-  fs.writeFileSync(fp, `${text}${prefix}${text ? "\n" : ""}${INSERT_BLOCK}`, "utf8");
+  atomicWriteSync(fp, `${text}${prefix}${text ? "\n" : ""}${INSERT_BLOCK}`, "utf8");
   return { ok: true, wrote: true, path: fp };
 }
 
@@ -110,77 +177,26 @@ export function ensureProfileBundles(profileDir) {
   const bundles = Array.isArray(pkg.dsh.profile.bundles) ? pkg.dsh.profile.bundles : [];
   if (bundles.includes(PURGE_NAME)) return { ok: true, wrote: false, path: fp };
   pkg.dsh.profile.bundles = [...bundles, PURGE_NAME];
-  fs.writeFileSync(fp, `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
+  atomicWriteSync(fp, `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
   return { ok: true, wrote: true, path: fp };
 }
 
-function readPkgTarball() {
-  try {
-    const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-    return String(pkg?.dsh?.install?.tarball || "").trim();
-  } catch {
-    return "https://codeload.github.com/YuJunZhiXue/dsh-purge/tar.gz/refs/heads/master";
-  }
-}
-
 /**
- * 从 profile 的 pnpm-lock.yaml 读 dsh-purge 实际解析到的 tarball URL（#180）。
- * 用户用 `github:user/repo#<commit>` 固定 commit 安装时，lock 里记录的是
- * `.../tar.gz/<commit>`，写死 master URL 会和实际键并存成两个 URL 键。
- * 简单文本/正则解析即可，不引 yaml 依赖；读不到返回空串。
+ * pnpm allowBuilds 期望键（#185）。
+ *
+ * registry / tarball / git 安装写裸包名 `dsh-purge`。pnpm 11.28 对 injected
+ * `file:` 依赖的严格构建检查按 `包名@file:...` 标识匹配，因此该形态同时写精确 file 键。
+ * `dsh-purge@https://...` 这类键在早期 pnpm 11（DSH 内置
+ * 11.2.2）会被 semver 解析器当成版本联合，直接报
+ * `[ERR_PNPM_INVALID_VERSION_UNION] Invalid versions union` 让 install 崩掉。
+ *
  */
-function readPurgeTarballFromLock(profileDir) {
-  if (!profileDir) return "";
-  let text = "";
-  try {
-    text = fs.readFileSync(path.join(profileDir, "pnpm-lock.yaml"), "utf8");
-  } catch {
-    return "";
-  }
-  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
-  let inImporters = false;
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (/^\S/.test(line)) {
-      if (inImporters) break; // 已扫过 importers，遇到下一个顶层键就结束
-      inImporters = /^importers[ \t]*:/.test(line);
-      continue;
-    }
-    if (!inImporters) continue;
-    const entry = line.match(/^([ \t]+)dsh-purge[ \t]*:[ \t]*$/);
-    if (!entry) continue;
-    const indent = entry[1].length;
-    // 收集该条目下的 specifier / version 行，直到缩进回到条目本身
-    let specifier = "";
-    let version = "";
-    for (let j = i + 1; j < lines.length; j += 1) {
-      const sub = lines[j];
-      if (sub.trim() && (sub.match(/^[ \t]*/) || [""])[0].length <= indent) break;
-      const sm = sub.match(/^[ \t]+(specifier|version)[ \t]*:[ \t]*(.*)$/);
-      if (!sm) continue;
-      let value = String(sm[2] || "").trim();
-      // 掉引号：pnpm-lock 里带引号与否取决于内容
-      if (/^(["']).*\1[ \t]*$/.test(value)) value = value.slice(1, -1).trim();
-      if (sm[1] === "specifier") specifier = value;
-      else version = value;
-    }
-    // version 是实际解析结果，优先；specifier 只是没有 URL 化版本时兜底
-    for (const candidate of [version, specifier]) {
-      const url = String(candidate || "").match(/https?:\/\/[^\s'"]+/);
-      if (url) return url[0];
-    }
-    return "";
-  }
-  return "";
-}
-
-/** pnpm 12 会给 tarball 单独写一行 `dsh-purge@https://...: set this to true or false`。只写包名不够。 */
 export function purgePnpmBuildSpecs(profileDir) {
-  const specs = ["dsh-purge"];
-  // 期望键和实际安装形态一致：lock 里解析到的 URL > package.json 的 tarball > 只用裸包名
-  const tarball = readPurgeTarballFromLock(profileDir) || readPkgTarball();
-  if (tarball) specs.push(`${PURGE_NAME}@${tarball}`);
-  return specs;
+  const spec = readJson(path.join(profileDir || "", "package.json"))?.dependencies?.[PURGE_NAME];
+  if (typeof spec === "string" && spec.startsWith("file:")) {
+    return [PURGE_NAME, `${PURGE_NAME}@${spec}`];
+  }
+  return [PURGE_NAME];
 }
 
 function isPurgeAllowBuildKey(key) {
@@ -260,10 +276,11 @@ export function validateAllowBuildRewrite(text) {
 }
 
 /**
- * 把 dsh-purge 以及 `dsh-purge@tarball` 都写成 true，避免装别的插件还报 ERR_PNPM_IGNORED_BUILDS（#168）。
- * profileDir 可选：给了就从该 profile 的 pnpm-lock.yaml 读实际 tarball URL（#180）。
- * 期望键精确命中的才保留；其它一切 `dsh-purge@*` 历史键（畸形 `dsh-purge@https`、过期版本/commit URL）一律丢弃，
- * 让旧的污染文件在下一次 ensure 时自动清干净。
+ * 把 dsh-purge 写成 true，避免装别的插件还报 ERR_PNPM_IGNORED_BUILDS（#168）。
+ *
+ * #185：URL / 版本历史键会触发 ERR_PNPM_INVALID_VERSION_UNION，统一丢弃。
+ * SeaGull 的 injected `file:` 依赖保留精确 file 键，兼容 pnpm 11.28 的严格构建检查；
+ * 非 purge 键原样保留。
  */
 export function rewritePnpmAllowBuilds(raw, profileDir) {
   const wanted = purgePnpmBuildSpecs(profileDir);
@@ -340,7 +357,7 @@ export function ensurePnpmAllowBuild(profileDir) {
   if (next === current) return { ok: true, wrote: false, path: fp };
   // 写前校验不过就不写盘，宁可保持现状（#180）
   if (!validateAllowBuildRewrite(next)) return { ok: false, wrote: false, path: fp, reason: "allowBuilds-invalid" };
-  fs.writeFileSync(fp, next, "utf8");
+  atomicWriteSync(fp, next, "utf8");
   return { ok: true, wrote: true, path: fp };
 }
 

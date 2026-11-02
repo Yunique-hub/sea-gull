@@ -24,10 +24,15 @@ function printStatus(state) {
   out.push(`  注入文件       ${state.override_path}`);
   out.push(`  注入状态       ${state.override_status}`);
   out.push("");
-  out.push(`  补丁 ${state.patches_applied}/${core.ALL_PATCHES.length} 已清洗, ${state.patches_pending} 待清洗`);
+  out.push(`  补丁 ${state.patches_applied}/${core.ALL_PATCHES.length} 已清洗, ${state.patches_pending} 待清洗`
+    + (state.patches_drifted ? `, ${state.patches_drifted} 漂移（官方原文已改，需更新 pattern）` : ""));
+  if (state.host_version) {
+    const compat = state.host_supported === false ? `  ← 未适配：插件声明 ${state.host_target || "?"}` : "";
+    out.push(`  宿主版本 / host  ${state.host_version}${compat}`);
+  }
   for (const p of core.ALL_PATCHES) {
     const s = state.patch_status[p.id];
-    const mark = s === "applied" ? "✓" : s === "pending" ? "✗" : "·";
+    const mark = s === "applied" ? "✓" : s === "pending" ? "✗" : s === "drifted" ? "!" : "·";
     out.push(`    ${mark} [#${String(p.id).padEnd(2)}] ${p.name.padEnd(30)} ${p.layer}/${p.layer_en} — ${s}`);
   }
   out.push("");
@@ -93,7 +98,12 @@ async function main() {
     } else {
       console.log("  ⚠ 未定位 shim 目录，跳过注入");
     }
+    const failed = core.summarizeApplyReport(report).failed || [];
     console.log("");
+    if (failed.length > 0) {
+      console.log(`✗ 完成但有 ${failed.length} 个补丁失败 / finished with ${failed.length} failed patch(es)`);
+      process.exit(1);
+    }
     console.log("全部完成 / All done。重启 dsh 生效 / Restart dsh to take effect.");
   } else if (mode === "--revert") {
     if (state.ai_base || core.enumeratePatchAiBases().length) {
@@ -123,6 +133,13 @@ async function main() {
     if (!result.ok) {
       console.log("  卸载中止：还原失败，插件文件未删除。");
       process.exit(1);
+    }
+    /* 命令行卸载没有「重启后助手」这一步：插件目录不会自己消失，得在这里删。
+       （界面卸载是把这一步交给独立助手，等端口释放后再删。） */
+    const fs = await import("node:fs");
+    for (const dir of result.cleanup || []) {
+      try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 120 }); }
+      catch (e) { console.log(`  ⚠ 未能删除 ${dir}: ${e && e.message ? e.message : e}`); }
     }
     console.log("");
     console.log("卸载完成。请重启 dsh。");

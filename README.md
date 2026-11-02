@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [当前状态](docs/CURRENT.md) · [文档索引](docs/README.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,7 +17,7 @@
 
 ---
 
-当前 **v1.1.0** 适配官方 Windows Harness **0.2.1-rc.3**（rc.5 的 preset 缩进漂移已在 #43 兼容；但 rc.5 上插件不加载，见 [VERIFICATION S](docs/VERIFICATION.md)），引擎为 dsh-purge **1.1.82**（固定上游正式版提交 [6318442](https://github.com/YuJunZhiXue/dsh-purge/tree/6318442a88ea7459d0135d0a07f31776c5d6a7b1)）。采用最新正式版快照，保留海鸥 rc.3 兼容修改。
+当前 **v1.1.1** 适配官方 Windows Harness **0.2.1-rc.5**，引擎为 dsh-purge **1.1.87**（固定上游正式版提交 [335ddee](https://github.com/YuJunZhiXue/dsh-purge/tree/335ddee90f4887981a4b2d2982c056a8f035c929)）。本版合并上游的桌面换包、预检、原子写入、Web 回收和子任务控制修复，同时保留海鸥人格、现有用户数据、rc.5 兼容修改及已移除的本地范围闸。
 
 1.0.15 修正面板显示与项目创建反馈：本地靶场旧文案改为“不参与放行判定”；面板同时显示海鸥版本与 purge 版本；空项目名提交给出可见错误。详见[1.0.15 发布说明](docs/releases/UPGRADE-1.0.15.md)。
 
@@ -27,7 +27,7 @@
 
 1.0.10 修复市场把 scoped 包误识别成短名称的校验失败及新装技能未刷新到 `/` 菜单，新增工具目录选择、缺失工具自动下载校验和中文回复约定，并整合 **AgentTeams 0.1.26**。在工作区新会话输入 `agent-teams 创建两名成员，分别实现和复核……` 或 `/agent-teams ……`，队长会创建成员及任务依赖并执行；明确要求先审阅时才等待确认。团队状态保存在当前工作区 `.agent-teams/`，更新保留存档。来源、改动与限制见[本轮整合分析](docs/reviews/INTEGRATION-1.0.10.md)。
 
-首次安装必须自行设置工具安装目录；已有用户更新沿用保存值。在「dsh-purge → 演练台 → 环境适配」选择文件夹后，点「一键安装并配置」。现有工具优先保留，缺失工具使用固定官方发布文件及 SHA-256；Impacket 安装在独立 Python 环境。Nmap 的驱动安装、没有官方 Windows 二进制的 Masscan 会明确列为待处理。Windows x64 桌面实测识别 **13/15** 项，不能把这个结果解释为 15 项全部自动安装成功。
+首次安装会使用用户目录下的安全默认工具目录；已有用户更新沿用保存值，也可在「dsh-purge → 演练台 → 环境适配」重新选择文件夹。现有工具优先保留，缺失工具使用固定官方发布文件及 SHA-256；Impacket 安装在独立 Python 环境。Nmap 的驱动安装、没有官方 Windows 二进制的 Masscan 会明确列为待处理。Windows x64 桌面实测识别 **13/15** 项，不能把这个结果解释为 15 项全部自动安装成功。
 
 1.0.9 修复「恢复默认」的备份失败和同秒备份覆盖问题：备份失败即停止，每次备份使用唯一文件名。真机校验脚本同步支持当前注入标记、纯 Markdown 人格、五个原生技能，并检查范围闸确已移除。分析与本轮桌面结果见[项目审查](docs/reviews/PROJECT-REVIEW-2026-10-25.md)及[验证记录 M](docs/VERIFICATION.md#m-109-全面审查与桌面回归2026-10-25)。
 
@@ -35,7 +35,7 @@
 
 保留用户保存的**海鸥人格**、5 个海鸥技能、项目创建与切换修复、立即插话、独立排队、安装/更新和回退保护。1.0.13 起移除上游的本地靶场范围闸：插件不再注册 `agent/pre-step` / `tools/pre-execute` 拦截，也不按目标地址、任务类别或边界措辞拦请求；证据账本等工程功能保留。上游已下架随包技能库与知识库入口；本机已有数据保留，旧 23 个技能仅在源码中作历史存档，不再自动分发。
 
-上游主体代码现为 **Apache-2.0**；原始 LICENSE、NOTICE 与来源均保留，海鸥自身及历史资产分别按原有许可标注。当前本地维护 88 条补丁定义，其中 #89–#92 保留原生消息路径，#93–#94 接通技能目录变化与菜单刷新。验证范围见[本次验证记录](docs/VERIFICATION.md#j-harness-021-rc3--dsh-purge-1177-合并2026-10-24)。
+上游主体代码现为 **Apache-2.0**；原始 LICENSE、NOTICE 与来源均保留，海鸥自身及历史资产分别按原有许可标注。当前运行 91 条补丁定义，并保留原生消息路径和技能目录刷新等海鸥兼容修改。验证范围见[验证报告](docs/VERIFICATION.md)。
 
 已安装用户请使用下方“一键更新”命令，更新模式会保留现有提示词。先完成 Harness 官方版本更新，再重新应用插件；仅替换版本号或把旧 `resources/app` 整目录复制到新版会重新加载旧宿主。Windows 更新若静默失败，会改为显示安装界面；取消或失败时恢复旧解包目录并提示退出码。
 
@@ -57,7 +57,7 @@
 
 | 来源 | 提供什么 |
 |---|---|
-| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.82 | 宿主兼容、演练台、证据账本（范围闸已移除）；保留 88 条本地补丁定义 |
+| [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 1.1.87 | 宿主兼容、演练台、证据账本（范围闸已移除）；运行 91 条补丁定义 |
 | [@dsh-market/plugin](vendor/dsh-market/plugin) 0.4.16 | 插件市场（浏览/搜索/一键安装/已装管理），vendored，随安装器离线部署 |
 | [hermes-seagull](https://github.com/Yunique-hub/hermes-seagull) | 海鸥人格（整合版 §0–§23）+ 5 个领域技能 |
 
@@ -72,50 +72,43 @@
 **Windows**
 
 ```powershell
-iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))) -Apply
 ```
 
-> 不要写成裸的 `irm ... | iex`。`install.ps1` 存为 UTF-8 **带 BOM**（PowerShell 5.1 用 `-File` 读文件时靠它正确解码中文），而 `irm` 不剥 BOM：BOM 会作为第一个字符 U+FEFF 进入 `iex`，解析器把它当成表达式起点，`param()` 块随之失配，报 `赋值表达式无效。赋值运算符的输入必须是可接受赋值的对象，例如变量或属性`。`TrimStart([char]0xFEFF)` 就是在执行前剥掉它。`powershell -File install.ps1` 由宿主读文件、BOM 自剥，不受影响。
+> 不要写成裸的 `irm ... | iex`。脚本使用 UTF-8 BOM 兼容 Windows PowerShell 5.1；上面的命令先剥掉 BOM，再把脚本构造成可带 `-Apply` 参数的 scriptblock。
 
 **Linux / macOS / WSL / Git Bash**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash -s -- --apply
 ```
 
 **从本地 checkout**
 
 ```bash
 git clone https://github.com/Yunique-hub/sea-gull.git seagull && cd seagull
-bash install.sh            # 或 powershell -File install.ps1
+bash install.sh --apply    # 或 powershell -File install.ps1 -Apply
 ```
 
-装完会有一步 **Apply**（密封桌面宿主必须），按输出提示做即可：
-
-```
-密封桌面宿主（官方 EXE），三步：
-  1) 完全退出 DeepSeek Harness
-  2) 重开 → 会话标题旁点 dsh-purge → Clean 页 → Apply
-  （或 bash install.sh --apply，再按提示挪 asar）
-```
+推荐命令会一次完成下载、安装、依赖同步、Apply、桌面换包和重启。首次安装的工具目录默认放在 `%LOCALAPPDATA%\SeaGull\toolkit`（Windows）或 `${XDG_DATA_HOME:-$HOME/.local/share}/seagull/toolkit`（其他平台）；需要自定义时下载脚本后传 `-ToolkitDir` / `--toolkit-dir`。
 
 ### 一键更新
 
-先结束当前任务并完全退出 Harness。更新器每次从 GitHub 拉取最新 main 源码，更新插件、内置规则和技能，保留现有提示词、客户端偏好、项目数据库及额外技能；完成后重新启动 Harness，按提示检查 Apply。它不会代替官方 Harness 安装器升级宿主。
+更新器每次从 GitHub 拉取最新 main 源码，更新插件、内置规则和技能，保留现有提示词、客户端偏好、项目数据库及额外技能，并自动 Apply、换包和重启。运行前先保存当前工作；它不会代替官方 Harness 安装器升级宿主。
 
 **Windows PowerShell**
 
 ```powershell
-iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))) -Apply
 ```
 
 **Linux / macOS / WSL / Git Bash**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh | bash -s -- --apply
 ```
 
-已有最新源码 checkout 时可执行 `powershell -File install.ps1 -Update` 或 `bash install.sh --update`；本地模式使用当前 checkout，不会自动 git pull。未安装海鸥会提示先安装；下载、配置或依赖同步失败返回错误，缺少 pnpm 时明确报告仅部署文件。
+已有最新源码 checkout 时可执行 `powershell -File install.ps1 -Update -Apply` 或 `bash install.sh --update --apply`；本地模式使用当前 checkout，不会自动 git pull。未安装海鸥会提示先安装；下载、配置或依赖同步失败返回错误，缺少 pnpm 时明确报告仅部署文件。
 
 ### 安装器选项
 
@@ -124,7 +117,7 @@ curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh
 | `--profile desktop\|web` | 目标宿主 profile（默认自动：有 desktop 用 desktop） |
 | `--dsh-home <路径>` | DSH 主目录（默认 `$DSH_HOME` 或 `~/.dsh`） |
 | `--app-root <路径>` | DSH 安装目录（默认自动探测） |
-| `--apply` | 装完立刻尝试 Apply（desktop 会解 asar，需宿主已退出） |
+| `--apply` / `-Apply` | 装完自动 Apply；密封 desktop 自动换包并重启 |
 | `--no-pnpm` | 跳过 pnpm install（离线 / 已装过） |
 | `--dry-run` | 只打印计划，不落盘 |
 | `--update` / `-Update` | 更新当前源码中的海鸥，保留现有提示词 |

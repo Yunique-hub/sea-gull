@@ -6,12 +6,12 @@
 
 | 项 | 当前值 |
 |---|---|
-| 海鸥 | **1.1.0** |
-| 官方 Harness | 0.2.1-rc.3（Windows 桌面）；rc.5 文件补丁可落地但插件不加载，见 [VERIFICATION S](VERIFICATION.md) |
-| dsh-purge | 1.1.82（固定上游 `6318442a88ea7459d0135d0a07f31776c5d6a7b1`） |
+| 海鸥 | **1.1.1** |
+| 官方 Harness | **0.2.1-rc.5**（Windows 桌面） |
+| dsh-purge | 1.1.87（固定上游 `335ddee90f4887981a4b2d2982c056a8f035c929`） |
 | AgentTeams | 0.1.26 |
 | 插件市场 | 内置 vendored：plugin 0.4.16 / core 0.4.13 / schema 0.1.4 / fuse.js 7.5.0 |
-| 补丁定义 | **88**（`ALL_PATCHES` 实测，id 不连续） |
+| 补丁定义 | **91**（`ALL_PATCHES` 实测，id 不连续） |
 
 ## 运行副本
 
@@ -19,8 +19,8 @@
 
 | 文件 | 期望 |
 |---|---|
-| `package.json` → `seagull.version` | 1.1.0 |
-| `lib/net-scope.js` | SHA-256 前 16 位 `0CCA874540F5D11C`，约 6,027B |
+| `package.json` → `seagull.version` | 1.1.1 |
+| `lib/net-scope.js` | SHA-256 前 16 位 `2E185E1C8D8ABCE7`，6,044B |
 | `lib/default-prompt-inject.md` | `24581A9E8511890E`，34,138B，与 `src/prompt/prompt-inject.md` 逐字节一致 |
 | `lib/asset-table.js` | `4F46EDE9FC533704` |
 | `lib/index.js` | 不出现 `installRegionGate` |
@@ -37,16 +37,18 @@
 
 | 检查 | 状态 |
 |---|---|
-| `node --test tests/*.test.mjs` | **167 pass / 0 fail**（2026-10-31） |
+| `node --test tests/*.test.mjs` | **170/170** 通过，详见 [VERIFICATION T](VERIFICATION.md) |
 | `bash tests/smoke.sh` | 全绿 |
 | `verify.ps1` / `verify.sh` | **25/25、28/28**，均包含 profile 副本检查 |
+| dsh-purge rc.5 运行状态 | **70/72 已应用、0 待处理、0 漂移、2 无需处理** |
 | `--no-pnpm` 更新 | 只要 profile `node_modules/dsh-purge` 存在，仍执行 `--sync-plugin` |
-| 真实桌面点击 / 重启 | 2026-10-31 已完成 1.0.15 双版本、面板显示、空白/重名反馈及市场生效复核，并修复空名提示无法触发和被后台刷新清除的问题；见[本轮记录](releases/DESKTOP-1.0.15-2026-10-31.md)，不代表所有历史未覆盖项通过 |
+| 真实桌面点击 / 重启 | 1.1.1 / rc.5 发布验收结果记入 [VERIFICATION T](VERIFICATION.md)；历史 1.0.15 记录见[本轮记录](releases/DESKTOP-1.0.15-2026-10-31.md) |
 
 ## 已知边界
 
 - 1.0.13 的发布过程中，`--no-pnpm` 更新跳过了 profile 同步；1.0.14 修复安装器，并对本机 profile 做了同步。
 - 1.0.14 修复了“外部改人格后新会话仍读旧 pin”和 `overrideStatus` 恒 `default`；旧版仍可能存在这两个现象。
 - 1.0.15 已完成本轮桌面复核；本机教学样本的独立复现与证据见[公开复核报告](validation/local-web-lab-2026-10-31/README.md)，不代表模型或技能业务能力的完整验证。
-- 上游只声明支持 rc.2；rc.3 适配属于海鸥定制，不能用原版更新覆盖。
+- 海鸥的 rc.5 合并与人格/范围闸差异不能被 purge 原版更新覆盖；继续使用海鸥更新入口。
+- `70/72` 的另外两项为 rc.5 不存在对应旧组件（#71 梁神预设身份行、#80 历史官方工具集清理），面板统一显示“无需处理”，不计为待处理或漂移。
 - 历史 23 个红队技能只在 `src/skills/redteam` 作源码存档，不自动部署。

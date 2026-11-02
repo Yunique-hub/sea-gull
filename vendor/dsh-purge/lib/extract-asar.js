@@ -425,21 +425,28 @@ export function extractAsar(asarPath, destDir) {
   const afs = archiveFs();
   const fd = afs.openSync(asarPath, "r");
   let count = 0;
+  let skippedOutside = 0;
   try {
     const { header, dataOffset } = readHeader(fd, afs);
     const entries = [];
     walk(header, "", entries);
     const outFs = diskFs();
     outFs.mkdirSync(destDir, { recursive: true });
+    const destResolved = path.resolve(destDir);
     for (const entry of entries) {
       const info = entry.info;
-      const outPath = path.join(destDir, ...entry.rel.split("/"));
+      // 归档头里的 key 不受信：带 ".." 的路径会写到 destDir 之外。symlink 分支下面已防，
+      // 普通文件同样要防，否则换包链路就是一条任意写。
+      const outPath = path.resolve(destDir, ...entry.rel.split("/"));
+      if (outPath !== destResolved && !outPath.startsWith(destResolved + path.sep)) {
+        skippedOutside += 1;
+        continue;
+      }
       outFs.mkdirSync(path.dirname(outPath), { recursive: true });
       if (info.unpacked) continue;
       if (typeof info.link === "string") {
         // symlink 目标解析后不能逃离 destDir(防越界,asar 来源不受信时)
         const linkResolved = path.resolve(path.dirname(outPath), info.link);
-        const destResolved = path.resolve(destDir);
         const inside = linkResolved === destResolved
           || linkResolved.startsWith(destResolved + path.sep);
         if (!inside) {
@@ -464,6 +471,9 @@ export function extractAsar(asarPath, destDir) {
     }
   } finally {
     afs.closeSync(fd);
+  }
+  if (skippedOutside > 0) {
+    try { console.warn(`[dsh-purge] extractAsar: skipped ${skippedOutside} entr${skippedOutside === 1 ? "y" : "ies"} outside ${destDir}`); } catch {}
   }
   return count;
 }

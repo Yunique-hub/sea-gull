@@ -22,7 +22,7 @@ test("补丁数量在 README / NOTICE / ARCHITECTURE 与 ALL_PATCHES 一致", ()
   assert.match(read("README.md"), re);
   assert.match(read("NOTICE"), re);
   assert.match(read("docs/ARCHITECTURE.md"), re);
-  assert.match(read("README.en.md"), new RegExp(`${patchCount} local patch`));
+  assert.match(read("README.en.md"), new RegExp(`${patchCount} (?:local |runtime )?patch`));
 });
 
 test("1.0.12 的范围闸归因已从当前文档移除", () => {
@@ -43,4 +43,6 @@ test("面板文案与版本展示不再回退到旧的本地靶场说明", () =>
   assert.match(client, /seagull_version/);
   assert.match(read("vendor/dsh-purge/lib/index.js"), /海鸥版本 \/ seagull/);
   assert.match(read("vendor/dsh-purge/lib/core.js"), /export function seagullVersion/);
+  assert.match(client, /"metric\.skipShort": "无需处理 \{n\}"/);
+  assert.match(client, /"status\.skipped": "无需处理"/);
 });

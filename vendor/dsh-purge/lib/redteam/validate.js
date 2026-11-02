@@ -5,7 +5,28 @@
  * 是安全边界所在（路径穿越、非法枚举），值得单独一处、单独读、单独测。
  */
 
-import { resolve, sep } from 'node:path'
+import { basename, dirname, join, resolve, sep } from 'node:path'
+import { realpathSync } from 'node:fs'
+
+/**
+ * 对最近一个存在的祖先目录做 realpath，再拼回不存在的尾部。
+ * 只比字符串前缀时，靶标目录里一个指向外部的软链接/junction 就能穿过去。
+ */
+function realish(p) {
+  let cur = p
+  const rest = []
+  for (let i = 0; i < 40; i += 1) {
+    try {
+      return join(realpathSync(cur), ...rest)
+    } catch {
+      const parent = dirname(cur)
+      if (parent === cur) break
+      rest.unshift(basename(cur))
+      cur = parent
+    }
+  }
+  return p
+}
 
 export const WEBSHELL_TYPES = ['behinder', 'godzilla', 'antSword', 'antsword', 'custom']
 export const WEBSHELL_STATUSES = ['online', 'offline', 'dead', 'unknown']
@@ -25,9 +46,9 @@ export function normalizeShellType(value) {
   if (/godzilla|哥斯拉/.test(lower)) return 'godzilla'
   if (/antsword|蚁剑/.test(lower)) return 'antSword'
   if (lower === 'custom' || lower === 'custom-shell' || /自定义|自研/.test(raw)) return 'custom'
-  throw new Error("Invalid webshell shell_type: " + JSON.stringify(value)
-    + ". The deliverable must be a **Behinder / Godzilla webshell** (the user must be able to connect to it themselves); "
-    + "for any other type use custom (temporary relay only; the panel will flag it as \"user cannot connect\").")
+  throw new Error("webshell shell_type 非法：" + JSON.stringify(value)
+    + '。交付要求是**冰蝎马（behinder）/ 哥斯拉马（godzilla）**（用户要能自己连上）；'
+    + '其它类型请填 custom（只作临时中转，面板会标"用户连不上"）。')
 }
 
 /** 规范化马状态（界面按 online/offline/unknown 三态显示）。 */
@@ -37,7 +58,7 @@ export function normalizeShellStatus(value) {
   const normalized = aliases[raw] || raw
   if (normalized === '') return 'online'
   if (!WEBSHELL_STATUSES.includes(normalized)) {
-    throw new Error("Invalid webshell status: " + JSON.stringify(value) + ". Valid values are " + WEBSHELL_STATUSES.join(" / ") + ".")
+    throw new Error("webshell status 非法：" + JSON.stringify(value) + "。合法值只有 " + WEBSHELL_STATUSES.join(" / ") + "。")
   }
   return normalized
 }
@@ -56,12 +77,12 @@ export function normalizeShellStatus(value) {
  * @throws 越界时抛错（调用方按"查不到"处理，不要静默返回内容）。
  */
 export function assertPathWithin(target, allowedRoots) {
-  const abs = resolve(String(target || ""))
-  const roots = (allowedRoots || []).filter((r) => typeof r === "string" && r !== "").map((r) => resolve(r))
+  const abs = realish(resolve(String(target || "")))
+  const roots = (allowedRoots || []).filter((r) => typeof r === "string" && r !== "").map((r) => realish(resolve(r)))
   const okFlag = roots.some((root) => abs === root || abs.startsWith(root + sep))
   if (!okFlag) {
     throw new Error("path outside allowed roots: " + abs
-      + " (allowed roots: " + roots.join(", ") + "). This record's file path is outside the target directory; read refused.")
+      + "（允许的根：" + roots.join(", ") + "）。这条记录的文件路径不在本靶标目录内，已拒绝读取。")
   }
   return abs
 }

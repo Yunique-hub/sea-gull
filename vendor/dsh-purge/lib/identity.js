@@ -1,5 +1,6 @@
 import { ownServerNote } from "./net-scope.js";
 import { CAPABILITY_SECTION, capabilityProtocolText } from "./capability-protocol.js";
+import { ANCHOR_SECTION, ANCHOR_ORDER, isSubagentContext } from "./anchor.js";
 export const GLOBAL_PROMPT_ORDER = -100000;
 export const OBJECTIVE_SECTION = "dshpg-objective";
 export const REDTEAM_ROLE_SECTION = "dshpg-redteam-role";
@@ -531,13 +532,6 @@ export function isRedteamSession(context) {
   return isRedteamPresetId(sessionAgentPreset(context));
 }
 
-export function isMinimalSession(context) {
-  const id = sessionAgentPreset(context);
-  if (!id) return false;
-  const n = id.toLowerCase();
-  return n === "minimal" || n === "sdk-minimal" || n.endsWith("/minimal") || n.includes("preset-minimal");
-}
-
 /**
  * skill / MCP 优先在 capability-protocol。
  * 这里只剥旧框里残留的 STRICT 段，以及 Claude 工具名残句。不往稿子正文里再塞工具纪律。
@@ -595,9 +589,9 @@ function sessionOfContext(context) {
 }
 
 function inheritsParentPrompt(session) {
-  const header = session?.header;
-  if (!header?.parentSession) return false;
-  return header.origin === "subagent" || (header.delegationDepth ?? 0) > 0;
+  /* 与 anchor.js / subagent-control.js 同一套判据：三个地方各写一份，
+     迟早会出现"锚点认为是子会话、提示词继承不认为"的分歧。 */
+  return isSubagentContext({ session });
 }
 
 function parentSessionRecord(context, parentId) {
@@ -627,11 +621,6 @@ export function sessionForInject(context) {
   return sessionOfContext(context);
 }
 
-export function isRedteamSubagent(context) {
-  const header = sessionOfContext(context)?.header;
-  return header?.origin === "subagent" && isRedteamSession(context);
-}
-
 /**
  * 红队 persona 只留调度正文，不再把 inject / 目标卡 / 角色折进去。
  * inject 和 cap 由 leadWithInject 置顶；卡和角色用不带 dsh-purge 前缀的段，避免 host 过滤器提到 cap 前面。
@@ -650,7 +639,8 @@ function attachRedteamOpsOnly(sections) {
 function insertNamedSection(sections, name, text, order) {
   const body = typeof text === "string" ? text.trim() : "";
   if (!body) return sections;
-  if (sections.some((section) => String(section?.text || "").includes(body))) return sections;
+  /* 按 name 去重，别用"正文被包含"：另一段正文里恰好提到同一句话时会把该插的段吞掉。 */
+  if (sections.some((section) => section?.name === name && String(section?.text || "").trim() === body)) return sections;
   const section = { name, text: body, order, interpolate: false };
   const capAt = sections.findIndex((item) => item?.name === CAPABILITY_SECTION);
   const purgeAt = sections.findIndex((item) => item?.name === "dsh-purge");
@@ -737,6 +727,7 @@ function normalizeRewriteOptions(fallbackInject, options) {
       roleText: typeof fallbackInject.roleText === "string" ? fallbackInject.roleText : "",
       cardText: typeof fallbackInject.cardText === "string" ? fallbackInject.cardText : "",
       dropWorkspaceBaseline: fallbackInject.dropWorkspaceBaseline === true,
+      anchorText: typeof fallbackInject.anchorText === "string" ? fallbackInject.anchorText : "",
     };
   }
   return {
@@ -748,6 +739,7 @@ function normalizeRewriteOptions(fallbackInject, options) {
     roleText: typeof options?.roleText === "string" ? options.roleText : "",
     cardText: typeof options?.cardText === "string" ? options.cardText : "",
     dropWorkspaceBaseline: options?.dropWorkspaceBaseline === true,
+    anchorText: typeof options?.anchorText === "string" ? options.anchorText : "",
   };
 }
 
@@ -812,6 +804,25 @@ const ASSEMBLE_GUARD = Symbol.for("dsh-purge.assembleGuard");
  * Cordis 每次读服务方法都会新建 Proxy；重复安装会把上一层代理再包进去，最后栈溢出。
  * 宿主之后替换 assemble 时，setter 仍会包住新方法。
  */
+/**
+ * 停用/卸载时清掉改写函数。不能复用 guard 的 dispose：那个 noop 是为了 child scope
+ * 结束时保住 inject 而刻意留的，这里只在停用路径用。
+ */
+export function clearAssembleGuard(prompt) {
+  if (!prompt) return false;
+  let slot = null;
+  try {
+    const desc = Object.getOwnPropertyDescriptor(prompt, "assemble");
+    if (desc && typeof desc.get === "function" && desc.get[ASSEMBLE_GUARD]) slot = desc.get[ASSEMBLE_GUARD];
+  } catch { /* 代理读不到就退到直接属性 */ }
+  if (!slot) {
+    try { slot = prompt[ASSEMBLE_GUARD]; } catch { slot = null; }
+  }
+  if (!slot) return false;
+  slot.rewrite = null;
+  return true;
+}
+
 export function installAssembleGuard(prompt, rewriteFn) {
   if (!prompt || typeof rewriteFn !== "function") return false;
   let desc;
@@ -850,7 +861,7 @@ export function installAssembleGuard(prompt, rewriteFn) {
     // 旧包装没挂 slot：没有可解绑的句柄，返回 noop disposer。
     return function dispose() {};
   }
-  const slot = { rewrite: rewriteFn };
+  const slot = { rewrite: rewriteFn, lastGood: null };
   const wrap = (fn) => {
     if (typeof fn !== "function") return fn;
     if (fn._dshPurgeWrapped) {
@@ -865,9 +876,12 @@ export function installAssembleGuard(prompt, rewriteFn) {
       } catch (err) {
         // 原生 assemble 抛 → 不再把整个 waterfall 弄死;用户看到的"任务到一半就苏醒"
         // "连保存都救不了"就是这里 throw 之后下游 sections.map 崩掉。
+        // 但也别返回空装配：那样这一轮模型既没有系统提示词也没有工具，等于罢工。
+        // 回退到上一次成功的装配（第一次就失败时才是空）。
         try { console.warn("[dsh-purge] assembleGuard: inner assemble threw:", err?.message || err); } catch {}
-        return { sections: [], contexts: [], tools: [] };
+        return slot.lastGood || { sections: [], contexts: [], tools: [] };
       }
+      slot.lastGood = assembled;
       const rewrite = slot.rewrite;
       if (typeof rewrite !== "function") return assembled;
       try {
@@ -1006,6 +1020,18 @@ export function rewritePromptAssembly(assembled, fallbackInject = "", options = 
     }
   }
   outSections = sanitizeCwdTokens(outSections, assembled);
+  // [dsh-purge] 尾部锚点。
+  // waterfall 返回的 sections 数组顺序就是渲染顺序，order 字段不参与排序，
+  // 所以只能物理追加到数组末尾，不能靠 order 值。
+  // 先 filter 再加：registerAnchor 也注册了同名 section，不滤掉就是两份。
+  const anchorText = String(opts.anchorText || "").trim();
+  if (anchorText) {
+    outSections = outSections.filter((section) => String(section?.name || "") !== ANCHOR_SECTION);
+    outSections = [
+      ...outSections,
+      { name: ANCHOR_SECTION, text: anchorText, order: ANCHOR_ORDER, interpolate: false },
+    ];
+  }
   return {
     ...assembled,
     sections: outSections,

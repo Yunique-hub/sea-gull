@@ -95,7 +95,10 @@ if ($App) {
 if ($Node -and (Test-Path "$Plug\bin\dsh-purge.js")) {
   $st = & $Node "$Plug\bin\dsh-purge.js" --status 2>&1 | Out-String
   if ($st -match "补丁 (\d+)/(\d+) 已清洗") {
-    Chk "补丁已清洗 > 70" ([int]$matches[1] -gt 70) ("{0}/{1}" -f $matches[1], $matches[2])
+    # $Matches 是 PowerShell 的动态自动变量；先复制，避免后续函数求值覆盖捕获组。
+    $cleanedPatches = [int]$matches[1]
+    $totalPatches = [int]$matches[2]
+    Chk "补丁已清洗 > 70" ($cleanedPatches -gt 70) ("{0}/{1}" -f $cleanedPatches, $totalPatches)
   } else { Chk "补丁状态可读" $false "status 输出格式未匹配" }
 }
 

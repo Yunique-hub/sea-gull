@@ -15,7 +15,7 @@ export function wasApplied(state) {
   return [state.shim_cmd, state.shim_ps1, state.shim_bin].includes("patched");
 }
 
-export function shouldDeletePluginTree(dir, dshHome = core.findDshHome()) {
+export function shouldDeletePluginTree(dir) {
   if (!dir) return false;
   let real;
   try {
@@ -24,15 +24,9 @@ export function shouldDeletePluginTree(dir, dshHome = core.findDshHome()) {
     real = path.resolve(dir);
   }
   const n = real.replace(/[/\\]+/g, "/").toLowerCase();
-  if (n.includes("/node_modules/dsh-purge")) return true;
-  let home;
-  try {
-    home = fs.realpathSync(dshHome);
-  } catch {
-    home = path.resolve(dshHome);
-  }
-  const homeN = home.replace(/[/\\]+/g, "/").toLowerCase();
-  return n.startsWith(`${homeN}/profiles/`);
+  // npm link / file: 安装的 realpath 会指到用户源码目录；只认安装树路径，
+  // 不按末段名字猜，避免卸载时把源码仓库整棵删掉。
+  return n.includes("/node_modules/dsh-purge");
 }
 
 function isPurgeBundleItem(item) {
@@ -81,7 +75,7 @@ function readJson(fp) {
 }
 
 function writeJson(fp, value) {
-  fs.writeFileSync(fp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  core.atomicWriteSync(fp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
 function pkgMentionsPurge(pkg) {
@@ -175,7 +169,7 @@ function collectCleanupDirs(profiles, dshHome) {
     } catch {
       real = path.resolve(nm);
     }
-    if (shouldDeletePluginTree(real, dshHome)) remember(real);
+    if (shouldDeletePluginTree(real)) remember(real);
     if (path.resolve(nm).toLowerCase() !== real.toLowerCase()) remember(nm);
   }
 
@@ -183,7 +177,7 @@ function collectCleanupDirs(profiles, dshHome) {
   remember(dataDir);
 
   const root = updater.pluginRoot();
-  if (shouldDeletePluginTree(root, dshHome)) remember(root);
+  if (shouldDeletePluginTree(root)) remember(root);
 
   return cleanup;
 }

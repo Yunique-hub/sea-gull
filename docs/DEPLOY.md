@@ -6,21 +6,21 @@
 
 ```powershell
 # Windows PowerShell
-iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))) -Apply
 ```
 
 ```bash
 # Linux / macOS / WSL / Git Bash
-curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash -s -- --apply
 ```
 
-管道模式下脚本检测不到本地仓库，会自己拉 tarball 到临时目录再执行，结束自动清理。
+管道模式下脚本检测不到本地仓库，会自己拉 tarball 到临时目录再执行，结束自动清理。推荐命令会继续完成 Apply、密封包切换及桌面端重启，不需要第二次输入。
 
 ### 1.2 本地 checkout
 
 ```bash
 git clone https://github.com/Yunique-hub/sea-gull.git seagull && cd seagull
-bash install.sh                      # 或 powershell -File install.ps1
+bash install.sh --apply              # 或 powershell -File install.ps1 -Apply
 ```
 
 ### 1.3 离线 / 内网
@@ -54,7 +54,7 @@ v1.0.4 对 Apply / revert 子进程传递选定的 `DSH_HOME`、`DSH_PROFILE` �
 
 `--no-pnpm` / `-NoPnpm` 不重建依赖，但 1.0.14 起会在 profile `node_modules/dsh-purge` 已存在时同步运行副本；仍要完成重启及加载检查后才能确认更新生效。详细工程整合记录见 [fujiang-dsh 分析报告](reviews/FUJIANG-REVIEW.md)。
 
-## 3. Apply —— 最容易卡的一步
+## 3. Apply
 
 官方桌面 EXE 是**密封 asar**，`@deepseek-ai/*` 都在 `resources/app.asar`（约 121 MB / 12968 文件）
 里。必须「解包 → 打补丁 → 挪走 asar」才生效。
@@ -66,26 +66,19 @@ bash install.sh --apply
 ```
 
 密封宿主下它会跑 `lib/reapply-cli.js`（**不是** `bin/dsh-purge.js --apply`，后者在桌面下取不到 aiBase），
-成功返回：
+成功时会返回类似结果：
 
 ```json
-{"ok":true,"error":"","version":"1.1.71","reverted":0,"applied":69,"failed":0,"renamed":false,"needsFullQuit":true,"cmdFlashOk":true}
+{"ok":true,"error":"","version":"1.1.87","reverted":0,"applied":91,"failed":0,"renamed":false,"needsFullQuit":true,"cmdFlashOk":true}
 ```
 
-然后手动收尾（宿主导出器在跑，asar 被占着，挪不动）：
-
-```bash
-# 1. 完全退出 DeepSeek Harness（托盘退出，或 taskkill /F /T /IM "DeepSeek Harness.exe"）
-# 2. 挪走 asar
-mv "$APP_ROOT/resources/app.asar" "$APP_ROOT/resources/app.asar.sealed.bak"
-# 3. 重新打开
-```
+1.1.87 的独立换包助手会按已验证的安装根结束桌面进程、移开密封 `app.asar`，再从同一安装根重新启动 Harness；安装命令无需手工移动文件。运行前仍应保存当前任务，因为 Apply 会重启客户端。
 
 ### 3.2 手动（图形界面）
 
 1. 完全退出 DeepSeek Harness
 2. 重开 → 会话标题旁点 **dsh-purge** → **Clean** 页 → **Apply**
-3. 成功 Apply 会重启一次；之后新建会话即生效
+3. 成功 Apply 会自动重启一次；之后新建会话即生效
 
 ### 3.3 网页宿主（`dsh web`，非密封）
 
@@ -160,23 +153,23 @@ mv "$APP_ROOT/resources/app.asar.sealed.bak" "$APP_ROOT/resources/app.asar"
 
 | 平台 | 密封 asar | 内嵌 node/pnpm | 备注 |
 |---|---|---|---|
-| Windows 桌面版 | ✅ | ✅ | 需要 `taskkill` 或托盘退出才能挪 asar |
+| Windows 桌面版 | ✅ | ✅ | `--apply` / `-Apply` 自动结束本安装根进程、换包并重启 |
 | macOS 桌面版 | ✅ | ✅ | 路径在 `DeepSeek Harness.app/Contents/Resources` |
 | `dsh web`（任意平台） | ❌ | 视安装方式 | 直接 `--apply`，不需要挪 asar |
 
 
 ## 一键更新（1.0.5 起）
 
-Windows：`iex ((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))`。
+Windows：`& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))) -Apply`。
 
-Bash：`curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh | bash`。
+Bash：`curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh | bash -s -- --apply`。
 
-先结束任务并完全退出 Harness；更新成功后重新打开，按输出检查 Apply。每次下载最新 main，保留已保存提示词和用户数据，更新内置规则与技能。自定义 DSH 主目录、profile 或安装目录可下载 update.ps1 后使用 `-DshHome` / `-Profile` / `-AppRoot`，或在 Bash 管道后使用 `bash -s -- --dsh-home 路径 --profile desktop`。`install.ps1 -Update` / `install.sh --update` 则只使用当前本地源码。
+先保存当前任务；推荐命令会下载最新 main，保留已保存提示词和用户数据，更新内置规则与技能，自动 Apply、换包并重启。自定义 DSH 主目录、profile 或安装目录可下载 update.ps1 后使用 `-DshHome` / `-Profile` / `-AppRoot`，或在 Bash 管道后追加参数。`install.ps1 -Update -Apply` / `install.sh --update --apply` 则只使用当前本地源码。
 
 
-## 1.0.6 / purge 1.1.77
+## 1.1.1 / purge 1.1.87
 
-推荐先完成官方 Harness 0.2.1-rc.3 更新，再运行海鸥一键更新。海鸥保留保存的人格、项目数据和偏好，当前包不启用重复 postinstall，bundle 由安装器显式管理。新版保留上游本地靶场限制；旧 23 个技能仅源码存档，不重新复制到运行目录，现有本地数据保留。
+推荐先完成官方 Harness 0.2.1-rc.5 更新，再运行海鸥一键更新。海鸥保留保存的人格、项目数据和偏好，当前包不启用重复 postinstall，bundle 由安装器显式管理。海鸥继续移除上游本地范围闸；旧 23 个技能仅源码存档，不重新复制到运行目录，现有本地数据保留。
 
 ## 1.0.7 / 插件市场修复
 
