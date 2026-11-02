@@ -1,7 +1,9 @@
 ﻿param(
   [Parameter(Mandatory = $true)][string]$AppRoot,
   [switch]$PrepareOnly,
-  [switch]$StartOfficialOnly
+  [switch]$StartOfficialOnly,
+  [switch]$ValidateRestoreOnly,
+  [switch]$RestoreOfficial
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,7 +17,32 @@ $pending = "$asar.rename-pending"
 $sealedBak = "$asar.sealed.bak"
 
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "找不到桌面程序: $exe" }
-if ($PrepareOnly -and $StartOfficialOnly) { throw "PrepareOnly 与 StartOfficialOnly 不能同时使用" }
+$selectedModes = @($PrepareOnly, $StartOfficialOnly, $ValidateRestoreOnly, $RestoreOfficial) | Where-Object { $_ }
+if ($selectedModes.Count -gt 1) { throw "桌面生命周期模式不能同时使用" }
+
+$resourcesPrefix = [IO.Path]::GetFullPath($resources).TrimEnd('\') + '\'
+$appFull = [IO.Path]::GetFullPath($appDir)
+if (-not $appFull.StartsWith($resourcesPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+  throw "拒绝操作安装根之外的展开目录: $appFull"
+}
+
+function Assert-OfficialRestoreReady {
+  if (-not (Test-Path -LiteralPath $asar -PathType Leaf) -and -not (Test-Path -LiteralPath $sealedBak -PathType Leaf)) {
+    throw "找不到官方 app.asar 或密封备份: $resources"
+  }
+  if (Test-Path -LiteralPath $appDir -PathType Container) {
+    $item = Get-Item -LiteralPath $appDir -Force
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw "拒绝递归清理链接形式的 resources\app: $appDir"
+    }
+  }
+}
+
+if ($ValidateRestoreOnly) {
+  Assert-OfficialRestoreReady
+  Write-Output "已确认官方密封包可用于一键卸载还原"
+  exit 0
+}
 
 $rootPrefix = $root + '\'
 function Get-InstallProcesses {
@@ -61,6 +88,33 @@ if ($StartOfficialOnly) {
   } while (-not $started -and (Get-Date) -lt $deadline)
   if (-not $started) { throw "官方桌面程序回退启动失败" }
   Write-Output "补丁应用失败，已回退启动官方密封包"
+  exit 0
+}
+
+if ($RestoreOfficial) {
+  Assert-OfficialRestoreReady
+  if (-not (Test-Path -LiteralPath $asar -PathType Leaf)) {
+    Move-Item -LiteralPath $sealedBak -Destination $asar
+    Write-Output "已恢复官方 resources\app.asar"
+  }
+  Remove-Item -LiteralPath $pending -Force -ErrorAction SilentlyContinue
+  if (Test-Path -LiteralPath $appDir -PathType Container) {
+    Remove-Item -LiteralPath $appDir -Recurse -Force
+    Write-Output "已清理海鸥补丁展开目录 resources\app"
+  }
+  Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+  Start-Process -FilePath $exe
+
+  $officialStarted = $false
+  $deadline = (Get-Date).AddSeconds(30)
+  do {
+    Start-Sleep -Milliseconds 500
+    $officialStarted = @(Get-InstallProcesses | Where-Object {
+      $_.CommandLine -and $_.CommandLine.IndexOf("resources\app.asar", [StringComparison]::OrdinalIgnoreCase) -ge 0
+    }).Count -gt 0
+  } while (-not $officialStarted -and (Get-Date) -lt $deadline)
+  if (-not $officialStarted) { throw "官方桌面程序已启动，但未确认它加载 resources\app.asar" }
+  Write-Output "已确认 DeepSeek Harness 从官方 resources\app.asar 重新启动"
   exit 0
 }
 

@@ -6,7 +6,7 @@
 
 | 项 | 当前值 |
 |---|---|
-| 海鸥 | **1.1.1** |
+| 海鸥 | **1.1.2** |
 | 官方 Harness | **0.2.1-rc.5**（Windows 桌面） |
 | dsh-purge | 1.1.87（固定上游 `335ddee90f4887981a4b2d2982c056a8f035c929`） |
 | AgentTeams | 0.1.26 |
@@ -19,7 +19,7 @@
 
 | 文件 | 期望 |
 |---|---|
-| `package.json` → `seagull.version` | 1.1.1 |
+| `package.json` → `seagull.version` | 1.1.2 |
 | `lib/net-scope.js` | SHA-256 前 16 位 `2E185E1C8D8ABCE7`，6,044B |
 | `lib/default-prompt-inject.md` | `24581A9E8511890E`，34,138B，与 `src/prompt/prompt-inject.md` 逐字节一致 |
 | `lib/asset-table.js` | `4F46EDE9FC533704` |
@@ -37,12 +37,12 @@
 
 | 检查 | 状态 |
 |---|---|
-| `node --test tests/*.test.mjs` | **170/170** 通过，详见 [VERIFICATION T](VERIFICATION.md) |
+| `node --test tests/*.test.mjs` | **175/175** 通过，详见 [VERIFICATION U](VERIFICATION.md) |
 | `bash tests/smoke.sh` | 全绿 |
 | `verify.ps1` / `verify.sh` | **25/25、28/28**，均包含 profile 副本检查 |
 | dsh-purge rc.5 运行状态 | **70/72 已应用、0 待处理、0 漂移、2 无需处理** |
 | `--no-pnpm` 更新 | 只要 profile `node_modules/dsh-purge` 存在，仍执行 `--sync-plugin` |
-| 真实桌面点击 / 重启 | 1.1.1 / rc.5 发布验收结果记入 [VERIFICATION T](VERIFICATION.md)；历史 1.0.15 记录见[本轮记录](releases/DESKTOP-1.0.15-2026-10-31.md) |
+| 真实桌面卸载 / 官方还原 / 重装 | 1.1.2 / rc.5 发布验收结果记入 [VERIFICATION U](VERIFICATION.md)；1.1.1 补丁验收见 T 节 |
 
 ## 已知边界
 

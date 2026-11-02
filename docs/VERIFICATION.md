@@ -988,3 +988,39 @@ run `dsh plugin --profile desktop install` if its dependency is not installed
 - 本轮按用户指定的 1.1.87 固定范围完成。验收期间上游又发布了 1.1.88；它不在本轮合并范围内，海鸥面板可检测到该版本，但不能用上游原版更新覆盖海鸥定制。
 - `applied=72` 是本次写入任务中全部补丁条目的成功结算数；稳定状态的 `70/72 + 无需处理 2` 是宿主当前内容的分类，两者口径不同，不矛盾。
 - 自动验收和桌面截图不包含账号、凭据、对话原文或用户项目内容；私密备份与截图只保存在维护目录，不进入源码仓库。
+
+## U. 海鸥 1.1.2 一键卸载、官方还原与重装验收（2026-11-02）
+
+本节验证新增的一键卸载路径。验收对象仍为本机官方 DeepSeek Harness 0.2.1-rc.5，升级前运行海鸥 1.1.1 / dsh-purge 1.1.87；测试版本为海鸥 1.1.2。验收前在私密维护目录备份 profile、人格、红队配置和项目元数据并记录哈希，备份不进入源码仓库。
+
+### U.1 实现与安全边界
+
+- Windows 远程命令一次完成官方密封包预检、补丁 revert、profile/插件清理、`app.asar` 恢复、活动 `resources/app` 清理、官方客户端重启与实际加载路径确认。
+- Bash 入口同样支持 `--uninstall`；Windows 桌面端调用受控还原脚本，其他平台执行等价的密封包恢复和活动目录清理。
+- 删除目标必须严格等于安装根下的 `resources/app` 且不能是重解析点；官方 `app.asar` 与 `.sealed.bak` 都缺失时，在修改 profile、插件和规则前失败退出。
+- 卸载只摘除海鸥托管的 purge、市场和 AgentTeams 挂载及对应插件文件，保留已有 `prompt-inject.md`、项目、技能、偏好、账号、凭据、工具目录和历史备份。
+- 安装预检新增 `--preinstall` 模式，只准备 profile bundle 与构建权限，不再提前向用户的 `cordis.patch.yml` 写入正文；正式安装仍由既有同步流程管理 bundle。
+
+### U.2 自动化验证
+
+| 验收项 | 结果 |
+|---|---|
+| `node --test tests/*.test.mjs` | 175/175 通过 |
+| `cd vendor/dsh-purge && node --test` | 40/40 通过 |
+| `bash tests/smoke.sh` | 全部通过 |
+| PowerShell AST / `bash -n` | 通过 |
+| `powershell -File verify.ps1` | 25/25 通过 |
+| `bash verify.sh` | 28/28 通过 |
+| 缺少官方密封包的预检 | 非零退出；profile、插件、规则和用户提示词均零修改 |
+| 用户数据防回归 | 卸载后 `prompt-inject.md` 逐字节不变；预安装不写 profile 正文 |
+
+### U.3 真实桌面闭环
+
+在本地源码上连续执行两轮卸载还原，并在修复数据保护问题后重新安装 1.1.2：
+
+1. `install.ps1 -Uninstall` 先完成 83/91 项补丁还原，再摘除托管挂载和插件；`.sealed.bak` 自动恢复为 `resources/app.asar`，活动 `resources/app` 被清理。
+2. 客户端自动重启；主进程、renderer 和 host 的实际命令行均包含 `resources/app.asar`，证明启动的是官方密封应用，而不是仅凭文件存在或窗口可见判定成功。
+3. 第二轮卸载在“保留人格”修复后重复通过；随后使用本地 1.1.2 一键安装恢复海鸥，结果为 `applied=72`、`failed=0`，客户端重新加载 `resources/app`。
+4. 卸载前后及最终重装后，用户 `prompt-inject.md`、`cordis.patch.yml`、红队配置的 SHA-256 均与验收前完全一致；技能仍为 7 个、项目仍为 1 个。
+
+本节先记录推送前的本地源码验证。GitHub `main` 发布后的 raw 一键卸载命令必须再做一次“公开下载 → 官方 asar 启动 → 公开下载重装”闭环，结果在发布后追加，不能用本地执行代替。

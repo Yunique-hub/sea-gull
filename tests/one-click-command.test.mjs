@@ -12,11 +12,31 @@ test('published Windows commands execute the remote scriptblock with Apply', () 
   }
 });
 
+test('published Windows uninstall is one command and restores the official desktop host', () => {
+  for (const file of ['README.md', 'README.en.md', 'docs/DEPLOY.md']) {
+    const text = read(file);
+    assert.match(text, /\& \(\[scriptblock\]::Create\(\(irm https:\/\/raw\.githubusercontent\.com\/Yunique-hub\/sea-gull\/main\/install\.ps1[^\n]+\)\) -Uninstall/);
+  }
+  const ps = read('install.ps1');
+  const helper = read('src/tools/complete_desktop_apply.ps1');
+  assert.match(ps, /-ValidateRestoreOnly/);
+  assert.match(ps, /-RestoreOfficial/);
+  assert.match(helper, /Assert-OfficialRestoreReady/);
+  assert.match(helper, /已确认 DeepSeek Harness 从官方 resources\\app\.asar/);
+});
+
 test('published Bash commands forward Apply through stdin execution', () => {
   for (const file of ['README.md', 'README.en.md', 'docs/DEPLOY.md']) {
     const text = read(file);
     assert.match(text, /install\.sh \| bash -s -- --apply/);
     assert.match(text, /update\.sh \| bash -s -- --apply/);
+  }
+});
+
+test('published Bash uninstall forwards one uninstall flag', () => {
+  for (const file of ['README.md', 'README.en.md', 'docs/DEPLOY.md']) {
+    const text = read(file);
+    assert.match(text, /install\.sh \| bash -s -- --uninstall/);
   }
 });
 
@@ -33,6 +53,8 @@ test('first install has non-interactive toolkit defaults and Apply owns desktop 
   assert.match(sh, /CI=true[\s\S]+--no-frozen-lockfile/);
   assert.match(ps, /ensure-profile-bundle\.mjs/);
   assert.match(sh, /ensure-profile-bundle\.mjs/);
+  assert.match(ps, /ensure-profile-bundle\.mjs[\s\S]+--preinstall/);
+  assert.match(sh, /ensure-profile-bundle\.mjs[\s\S]+--preinstall/);
   assert.match(ps, /complete_desktop_apply\.ps1/);
   assert.match(sh, /complete_desktop_apply\.ps1/);
   const helper = read('src/tools/complete_desktop_apply.ps1');
@@ -44,4 +66,6 @@ test('first install has non-interactive toolkit defaults and Apply owns desktop 
   assert.match(ps, /--fresh-extract/);
   assert.match(sh, /-PrepareOnly/);
   assert.match(sh, /--fresh-extract/);
+  assert.match(helper, /ValidateRestoreOnly/);
+  assert.match(helper, /RestoreOfficial/);
 });

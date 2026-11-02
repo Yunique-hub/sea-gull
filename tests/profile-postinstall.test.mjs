@@ -31,3 +31,18 @@ test('upstream postinstall skips a normal project without writing files',t=>{
  assert.equal(child.status,0,child.stderr);
  assert.equal(fs.readFileSync(file,'utf8'),raw);
 });
+
+test('installer preflight permits pnpm without writing a profile body insert',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'seagull-preinstall-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'package.json');
+ const cordis=path.join(dir,'cordis.patch.yml');
+ const original={name:'dsh-profile-fixture',private:true,dsh:{profile:{bundles:['existing']}}};
+ fs.writeFileSync(file,JSON.stringify(original));
+ fs.writeFileSync(cordis,'# user preferences stay byte-identical\n');
+ const child=spawnSync(process.execPath,[script,'--preinstall'],{cwd:dir,env:{...process.env,INIT_CWD:dir,npm_config_local_prefix:dir},encoding:'utf8'});
+ assert.equal(child.status,0,child.stderr);
+ assert.equal(fs.readFileSync(cordis,'utf8'),'# user preferences stay byte-identical\n');
+ const pkg=JSON.parse(fs.readFileSync(file,'utf8'));
+ assert.deepEqual(pkg.dsh.profile.bundles,['existing','dsh-purge']);
+});

@@ -63,6 +63,7 @@ function ensureProfileInsert(profileDir) {
 function main() {
   const profileDir = findProfileDir();
   if (!profileDir) return;
+  const preinstallOnly = process.argv.includes("--preinstall");
 
   const fp = path.join(profileDir, "package.json");
   const pkg = readJson(fp);
@@ -76,7 +77,7 @@ function main() {
     : `dsh-purge: already in bundles (${profileDir})\n`);
 
   try {
-    ensureProfileInsert(profileDir);
+    if (!preinstallOnly) ensureProfileInsert(profileDir);
     const pnpm = ensurePnpmAllowBuild(profileDir);
     if (pnpm.wrote) process.stdout.write(`dsh-purge: allowed pnpm build for ${NAME}\n`);
   } catch (e) {

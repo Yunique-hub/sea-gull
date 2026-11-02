@@ -3,12 +3,12 @@
 #
 #   本地:   bash install.sh [--profile desktop|web] [--dry-run]
 #   远程:   curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash -s -- --apply
-#   卸载:   bash install.sh --uninstall
+#   卸载:   curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash -s -- --uninstall
 #
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.1.1"
+VERSION="1.1.2"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
@@ -48,7 +48,7 @@ usage() {
   --apply                  装完自动 Apply（desktop 自动换包并重启）
   --no-pnpm                跳过 pnpm install（离线/已装过时用）
   --dry-run                只打印计划，不落盘
-  --uninstall              卸载（还原 profile、删插件与注入文件，保留技能）
+  --uninstall              一键卸载（还原官方宿主/profile，删插件与旧规则，保留提示词和技能）
   --update                 更新已安装海鸥，保留现有提示词及配置
   -q, --quiet              安静模式
   -h, --help               显示帮助
@@ -173,15 +173,22 @@ SRC_PLUGIN="$ROOT/vendor/$PLUGIN_ID"
 
 say ""
 say "计划:"
-say "  1. 插件      $SRC_PLUGIN → $PLUGIN_DIR"
-say "  2. profile   $PROFILE_DIR/package.json  (+依赖 +bundle)"
-if [ "$NO_PNPM" = 0 ] && [ -n "$NODE_EMB" ] && [ -n "$PNPM_EMB" ]; then
-  say "  3. pnpm      install @ $PROFILE_DIR"
+if [ "$UNINSTALL" = 1 ]; then
+  say "  1. 预检      官方密封包 / profile"
+  say "  2. 还原      宿主补丁 + 官方 app.asar"
+  say "  3. 清理      海鸥挂载、插件与旧规则"
+  say "  4. 保留      项目、技能、偏好、账号、凭据和备份"
 else
-  say "  3. pnpm      ${C_D}跳过${C_0}"
+  say "  1. 插件      $SRC_PLUGIN → $PLUGIN_DIR"
+  say "  2. profile   $PROFILE_DIR/package.json  (+依赖 +bundle)"
+  if [ "$NO_PNPM" = 0 ] && [ -n "$NODE_EMB" ] && [ -n "$PNPM_EMB" ]; then
+    say "  3. pnpm      install @ $PROFILE_DIR"
+  else
+    say "  3. pnpm      ${C_D}跳过${C_0}"
+  fi
+  say "  4. 资产      prompt-inject.md / rules/ / skills/ → $DSH_HOME"
+  [ "$APPLY" = 1 ] && say "  5. Apply     ${C_Y}desktop 自动解包、换包并重启宿主${C_0}"
 fi
-say "  4. 资产      prompt-inject.md / rules/ / skills/ → $DSH_HOME"
-[ "$APPLY" = 1 ] && say "  5. Apply     ${C_Y}desktop 自动解包、换包并重启宿主${C_0}"
 if [ "$DRY" = 1 ]; then say ""; say "${C_Y}--dry-run：到此为止，未改动任何文件${C_0}"; exit 0; fi
 
 PY=""
@@ -246,6 +253,18 @@ run_dsh_cli() (
 # ── 卸载分支 ───────────────────────────────────────────────────────
 if [ "$UNINSTALL" = 1 ]; then
   step "卸载"
+  RESTORE_DESKTOP=0
+  if [ "$PROFILE" = desktop ] && [ -n "$APP_ROOT" ] && [ "$SEALED" = 1 ]; then
+    RESTORE_DESKTOP=1
+    if command -v powershell.exe >/dev/null 2>&1; then
+      powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(winpath "$ROOT/src/tools/complete_desktop_apply.ps1")" -AppRoot "$(winpath "$APP_ROOT")" -ValidateRestoreOnly \
+        || die "官方密封包不可用，未开始卸载"
+    else
+      [ -f "$APP_ROOT/resources/app.asar" ] || [ -f "$APP_ROOT/resources/app.asar.sealed.bak" ] \
+        || die "找不到官方 app.asar 或密封备份，未开始卸载"
+      [ ! -L "$APP_ROOT/resources/app" ] || die "拒绝递归清理链接形式的 resources/app"
+    fi
+  fi
   if [ -f "$PLUGIN_DIR/bin/dsh-purge.js" ] && [ -n "$NODE_EMB" ]; then
     run_dsh_cli "$PLUGIN_DIR/bin/dsh-purge.js" --revert || die "revert 失败，保留插件和配置以便重试"
     ok "宿主补丁已还原"
@@ -257,17 +276,30 @@ if [ "$UNINSTALL" = 1 ]; then
     || die "profile 移除失败，保留插件文件"
     "$PY" $PY_ARGS "$(winpath "$ROOT/src/tools/patch_profile.py")" --remove-market "$(winpath "$PROFILE_DIR/package.json")" || true
     rm -rf "$DSH_HOME/plugins/@dsh-market" "$PROFILE_DIR/node_modules/@dsh-market" "$PROFILE_DIR/node_modules/fuse.js"
-  rm -rf "$PLUGIN_DIR" "$DSH_HOME/prompt-inject.md" \
+  rm -rf "$PLUGIN_DIR" \
          "$DSH_HOME/rules/seagull-fullbreak.md" "$DSH_HOME/rules/seagull-fullbreak.json" \
          "$DSH_HOME/rules/archived/seagull-fullbreak.md" "$DSH_HOME/rules/archived/seagull-fullbreak.json" \
          "$PROFILE_DIR/node_modules/$PLUGIN_ID"
   if [ -f "$DSH_HOME/rules/state.json" ] && grep -q 'seagull-fullbreak' "$DSH_HOME/rules/state.json"; then
     rm -f "$DSH_HOME/rules/state.json"
   fi
-  ok "已删插件与注入文件（$DSH_HOME/skills 保留，不误删你自己的技能）"
-  say ""
-  say "重启 DeepSeek Harness 生效。若 app.asar 被挪走过，先放回去："
-  say "  ${C_D}mv \"$APP_ROOT/resources/app.asar.sealed.bak\" \"$APP_ROOT/resources/app.asar\"${C_0}"
+  ok "已删插件与旧规则（prompt-inject.md、skills 和用户数据保留）"
+  if [ "$RESTORE_DESKTOP" = 1 ]; then
+    if command -v powershell.exe >/dev/null 2>&1; then
+      powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(winpath "$ROOT/src/tools/complete_desktop_apply.ps1")" -AppRoot "$(winpath "$APP_ROOT")" -RestoreOfficial \
+        || die "插件已卸载，但官方桌面还原或重启失败"
+      ok "官方 Harness 已还原并重启"
+    else
+      if [ ! -f "$APP_ROOT/resources/app.asar" ]; then
+        mv "$APP_ROOT/resources/app.asar.sealed.bak" "$APP_ROOT/resources/app.asar"
+      fi
+      rm -rf -- "$APP_ROOT/resources/app"
+      ok "官方 app.asar 已还原；请重新启动 DeepSeek Harness"
+    fi
+  else
+    say ""
+    say "重启 DeepSeek Harness 生效。"
+  fi
   exit 0
 fi
 
@@ -319,7 +351,7 @@ DEPENDENCIES_READY=0
 if [ "$NO_PNPM" = 0 ] && [ -n "$NODE_EMB" ] && [ -n "$PNPM_EMB" ]; then
   step "pnpm install"
   ( cd "$PROFILE_DIR" && \
-      if [ -f "$PLUGIN_DIR/scripts/ensure-profile-bundle.mjs" ]; then "$NODE_EMB" "$PLUGIN_DIR/scripts/ensure-profile-bundle.mjs"; fi && \
+      if [ -f "$PLUGIN_DIR/scripts/ensure-profile-bundle.mjs" ]; then "$NODE_EMB" "$PLUGIN_DIR/scripts/ensure-profile-bundle.mjs" --preinstall; fi && \
       CI=true "$NODE_EMB" "$PNPM_EMB" install --reporter=append-only --no-frozen-lockfile ) \
     || die "pnpm install 失败：检查 registry / file: 路径后重试；备份已保留"
   [ -f "$PROFILE_DIR/node_modules/$PLUGIN_ID/package.json" ] || die "依赖未就位: node_modules/$PLUGIN_ID"

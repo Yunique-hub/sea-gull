@@ -4,7 +4,7 @@
 #   远程:   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))) -Apply
 #           本文件带 UTF-8 BOM（PS 5.1 -File 解码中文需要）；裸 `irm | iex` 会把 BOM 当作首个字符送进 iex，
 #           导致 param() 块失配并报「赋值表达式无效」。远程管道必须先用 TrimStart 剥掉 BOM。
-#   卸载:   powershell -File install.ps1 -Uninstall
+#   卸载:   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))) -Uninstall
 param(
   [ValidateSet("desktop", "web", "")]
   [string]$Profile = "",
@@ -21,7 +21,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 if ($Update -and $Uninstall) { throw "-Update 和 -Uninstall 不能同时使用" }
-$VERSION = "1.1.1"
+$VERSION = "1.1.2"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -103,11 +103,18 @@ if ($Update -and -not (Test-Path -LiteralPath (Join-Path $PlugDir 'package.json'
 if ($DryRun) {
   Say ""
   Say "计划:"
-  Say "  1. 插件      $SrcPlugin → $PlugDir"
-  Say "  2. profile   $ProfDir\package.json"
-  Say "  3. pnpm      $(if ($NoPnpm -or -not $Node -or -not $Pnpm) { '跳过' } else { 'install @ ' + $ProfDir })"
-  Say "  4. 资产      prompt-inject.md / skills（单源，无 rules 副本） → $DH"
-  if ($Apply) { Say "  5. Apply     desktop 自动解包、换包并重启宿主" }
+  if ($Uninstall) {
+    Say "  1. 预检      官方密封包 / profile"
+    Say "  2. 还原      宿主补丁 + 官方 app.asar"
+    Say "  3. 清理      海鸥挂载、插件与旧规则"
+    Say "  4. 保留      项目、技能、偏好、账号、凭据和备份"
+  } else {
+    Say "  1. 插件      $SrcPlugin → $PlugDir"
+    Say "  2. profile   $ProfDir\package.json"
+    Say "  3. pnpm      $(if ($NoPnpm -or -not $Node -or -not $Pnpm) { '跳过' } else { 'install @ ' + $ProfDir })"
+    Say "  4. 资产      prompt-inject.md / skills（单源，无 rules 副本） → $DH"
+    if ($Apply) { Say "  5. Apply     desktop 自动解包、换包并重启宿主" }
+  }
   Say ""
   Write-Host "--DryRun：未改动任何文件" -ForegroundColor Yellow
   exit 0
@@ -183,6 +190,13 @@ function Invoke-DshCli([string]$Script, [string[]]$CliArgs = @()) {
 # ── 卸载 ────────────────────────────────────────────────────────
 if ($Uninstall) {
   Step "卸载"
+  $DesktopRestoreHelper = Join-Path $Here "src\tools\complete_desktop_apply.ps1"
+  $RestoreDesktop = $Profile -eq "desktop" -and $AppRoot -and $Sealed
+  if ($RestoreDesktop) {
+    if (-not (Test-Path -LiteralPath $DesktopRestoreHelper -PathType Leaf)) { Die "安装包缺少桌面还原助手" }
+    & $DesktopRestoreHelper -AppRoot $AppRoot -ValidateRestoreOnly
+    if ($LASTEXITCODE -ne 0) { Die "官方密封包不可用，未开始卸载" }
+  }
   $cli = Join-Path $PlugDir "bin\dsh-purge.js"
   if ((Test-Path $cli) -and $Node) { Invoke-DshCli $cli @("--revert"); Ok "宿主补丁已还原" }
   if (Test-Path (Join-Path $Here "src\tools\managed_teams.py")) {
@@ -195,16 +209,20 @@ if ($Uninstall) {
   Remove-Item -Recurse -Force (Join-Path $DH "plugins\@dsh-market") -ErrorAction SilentlyContinue
   if ($LASTEXITCODE -ne 0) { Die "profile 移除失败，保留插件文件" }
   Remove-Item -Recurse -Force $PlugDir -ErrorAction SilentlyContinue
-  Remove-Item -Force (Join-Path $DH "prompt-inject.md") -ErrorAction SilentlyContinue
   Remove-Item -Force (Join-Path $DH "rules\seagull-fullbreak.md"), (Join-Path $DH "rules\seagull-fullbreak.json") -ErrorAction SilentlyContinue
   Remove-Item -Force (Join-Path $DH "rules\archived\seagull-fullbreak.md"), (Join-Path $DH "rules\archived\seagull-fullbreak.json") -ErrorAction SilentlyContinue
   $ruleState = Join-Path $DH "rules\state.json"
   if ((Test-Path $ruleState) -and ((Get-Content -LiteralPath $ruleState -Raw) -match 'seagull-fullbreak')) { Remove-Item -Force $ruleState }
   Remove-Item -Recurse -Force (Join-Path $ProfDir "node_modules\$PluginId") -ErrorAction SilentlyContinue
-  Ok "已删插件与注入文件（skills 保留）"
-  Say ""
-  Say "重启 DeepSeek Harness 生效。若 app.asar 被挪走过，先放回去："
-  Say "  Move-Item `"$AppRoot\resources\app.asar.sealed.bak`" `"$AppRoot\resources\app.asar`""
+  Ok "已删插件与旧规则（prompt-inject.md、skills 和用户数据保留）"
+  if ($RestoreDesktop) {
+    & $DesktopRestoreHelper -AppRoot $AppRoot -RestoreOfficial
+    if ($LASTEXITCODE -ne 0) { Die "插件已卸载，但官方桌面还原或重启失败" }
+    Ok "官方 Harness 已还原并重启"
+  } else {
+    Say ""
+    Say "重启 DeepSeek Harness 生效。"
+  }
   exit 0
 }
 
@@ -259,7 +277,7 @@ if (-not $NoPnpm -and $Node -and $Pnpm) {
   try {
     $PnpmPreflight = Join-Path $PlugDir "scripts\ensure-profile-bundle.mjs"
     if (Test-Path -LiteralPath $PnpmPreflight -PathType Leaf) {
-      & $Node $PnpmPreflight
+      & $Node $PnpmPreflight --preinstall
       if ($LASTEXITCODE -ne 0) { throw "pnpm 构建许可预检失败" }
     }
     $env:CI = "true"

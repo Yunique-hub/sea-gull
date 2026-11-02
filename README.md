@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.2-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [当前状态](docs/CURRENT.md) · [文档索引](docs/README.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,7 +17,7 @@
 
 ---
 
-当前 **v1.1.1** 适配官方 Windows Harness **0.2.1-rc.5**，引擎为 dsh-purge **1.1.87**（固定上游正式版提交 [335ddee](https://github.com/YuJunZhiXue/dsh-purge/tree/335ddee90f4887981a4b2d2982c056a8f035c929)）。本版合并上游的桌面换包、预检、原子写入、Web 回收和子任务控制修复，同时保留海鸥人格、现有用户数据、rc.5 兼容修改及已移除的本地范围闸。
+当前 **v1.1.2** 适配官方 Windows Harness **0.2.1-rc.5**，引擎为 dsh-purge **1.1.87**（固定上游正式版提交 [335ddee](https://github.com/YuJunZhiXue/dsh-purge/tree/335ddee90f4887981a4b2d2982c056a8f035c929)）。本版在 1.1.1 的 rc.5 兼容基础上新增一键卸载还原：自动恢复官方密封包、清理活动补丁目录并重启官方客户端，同时保留项目、技能、偏好、账号、凭据和历史备份。
 
 1.0.15 修正面板显示与项目创建反馈：本地靶场旧文案改为“不参与放行判定”；面板同时显示海鸥版本与 purge 版本；空项目名提交给出可见错误。详见[1.0.15 发布说明](docs/releases/UPGRADE-1.0.15.md)。
 
@@ -121,7 +121,7 @@ curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/update.sh
 | `--no-pnpm` | 跳过 pnpm install（离线 / 已装过） |
 | `--dry-run` | 只打印计划，不落盘 |
 | `--update` / `-Update` | 更新当前源码中的海鸥，保留现有提示词 |
-| `--uninstall` | 卸载（还原 profile、删插件与注入文件，保留你的技能） |
+| `--uninstall` | 一键卸载（还原官方宿主/profile，删插件与旧规则，保留提示词、项目、技能和用户数据） |
 
 > 设计上**不硬编码盘符和用户名**：自动探测 `DSH_HOME`、profile、安装根、内嵌 node/pnpm；
 > 探测不到安装根就降级为 files-only 模式。重复执行幂等。
@@ -267,16 +267,19 @@ bash verify-e2e.sh       # 端到端：金丝雀注入 + 出活 + A/B 对照（�
 
 ## 卸载
 
-```bash
-bash install.sh --uninstall      # 或 powershell -File install.ps1 -Uninstall
+**Windows PowerShell**
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))) -Uninstall
 ```
 
-会还原 profile、删插件与注入文件，**保留 `$DSH_HOME/skills`**（不误删你自己的技能）。
-若把 `app.asar` 挪走过，放回去：
+**Linux / macOS / WSL / Git Bash**
 
 ```bash
-mv "$APP_ROOT/resources/app.asar.sealed.bak" "$APP_ROOT/resources/app.asar"
+curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash -s -- --uninstall
 ```
+
+一条命令会先确认官方密封包可恢复，再还原补丁、摘除 profile 挂载、删除海鸥插件与旧规则。Windows 桌面端随后自动恢复 `resources/app.asar`、清理活动补丁目录 `resources/app` 并重启官方 Harness；缺少密封包时会在修改 profile 前停止。已有 `prompt-inject.md`、项目、技能、偏好、账号、凭据、工具目录和历史备份均保留。
 
 ---
 

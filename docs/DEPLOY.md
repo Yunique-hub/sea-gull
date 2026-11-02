@@ -110,30 +110,27 @@ asar 状态 / 被改宿主文件数 / 官方身份句是否剥掉 / 补丁计数
 
 ## 5. 回滚
 
-```bash
-bash install.sh --uninstall
+Windows PowerShell 一键卸载并还原官方桌面端：
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))) -Uninstall
 ```
 
-会：
-- 跑 `dsh-purge --revert` 还原宿主补丁
-- 从 profile `package.json` 摘掉依赖与 bundle
-- 删 `plugins/dsh-purge`、`prompt-inject.md`、`rules/seagull-fullbreak.*`（含 `rules/archived/` 里的历史副本及其激活状态）
-- **保留 `$DSH_HOME/skills`**（不误删你自己的技能）
-
-若 asar 被挪走过，记得放回：
+Bash / Git Bash：
 
 ```bash
-mv "$APP_ROOT/resources/app.asar.sealed.bak" "$APP_ROOT/resources/app.asar"
+curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash -s -- --uninstall
 ```
 
-**更彻底的回滚**（不依赖插件备份）：
+会按顺序：
 
-```bash
-rm -rf "$APP_ROOT/resources/app" "$APP_ROOT/resources/app.dshpurge-prev"
-mv "$APP_ROOT/resources/app.asar.sealed.bak" "$APP_ROOT/resources/app.asar"
-```
+- 在改动前确认官方 `app.asar` 或 `.sealed.bak` 可恢复；缺失时立即停止。
+- 跑 `dsh-purge --revert` 还原宿主补丁。
+- 从 profile `package.json` 摘掉依赖与 bundle，删除海鸥插件、市场挂载和旧规则；已有 `prompt-inject.md` 保留。
+- Windows 桌面端自动停止客户端、恢复 `resources/app.asar`、清理活动补丁目录 `resources/app`、重启并确认加载官方 asar。
+- **保留 `prompt-inject.md`、项目、`$DSH_HOME/skills`、偏好、账号、凭据、工具目录与历史备份**。
 
-因为原始 asar 从没被改过，这条永远有效。
+本地 checkout 可使用 `powershell -File install.ps1 -Uninstall` 或 `bash install.sh --uninstall`。Web profile 没有密封 asar，只清理挂载和插件，随后重启 Web 宿主即可。
 
 ## 6. 故障排查
 
@@ -167,7 +164,7 @@ Bash：`curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/u
 先保存当前任务；推荐命令会下载最新 main，保留已保存提示词和用户数据，更新内置规则与技能，自动 Apply、换包并重启。自定义 DSH 主目录、profile 或安装目录可下载 update.ps1 后使用 `-DshHome` / `-Profile` / `-AppRoot`，或在 Bash 管道后追加参数。`install.ps1 -Update -Apply` / `install.sh --update --apply` 则只使用当前本地源码。
 
 
-## 1.1.1 / purge 1.1.87
+## 1.1.2 / purge 1.1.87
 
 推荐先完成官方 Harness 0.2.1-rc.5 更新，再运行海鸥一键更新。海鸥保留保存的人格、项目数据和偏好，当前包不启用重复 postinstall，bundle 由安装器显式管理。海鸥继续移除上游本地范围闸；旧 23 个技能仅源码存档，不重新复制到运行目录，现有本地数据保留。
 

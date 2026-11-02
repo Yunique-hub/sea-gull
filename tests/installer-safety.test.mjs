@@ -25,7 +25,23 @@ function fixture(t, shell) {
   for (const file of ['install.sh', 'install.ps1', 'src/tools/patch_profile.py']) {
     write(path.join(repo, file), fs.readFileSync(path.join(root, file)));
   }
-  write(path.join(repo, 'src/tools/complete_desktop_apply.ps1'), 'param([string]$AppRoot)\nexit 0\n');
+  write(path.join(repo, 'src/tools/complete_desktop_apply.ps1'), `param(
+  [string]$AppRoot,
+  [switch]$PrepareOnly,
+  [switch]$StartOfficialOnly,
+  [switch]$ValidateRestoreOnly,
+  [switch]$RestoreOfficial
+)
+$asar = Join-Path $AppRoot 'resources\\app.asar'
+$backup = "$asar.sealed.bak"
+$appDir = Join-Path $AppRoot 'resources\\app'
+if ($ValidateRestoreOnly -and -not (Test-Path $asar) -and -not (Test-Path $backup)) { exit 27 }
+if ($RestoreOfficial) {
+  if (-not (Test-Path $asar)) { Move-Item -LiteralPath $backup -Destination $asar }
+  Remove-Item -LiteralPath $appDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+exit 0
+`);
   write(path.join(repo, 'VERSION'), 'test');
   write(profile, original);
   write(path.join(other, 'profiles/desktop/package.json'), original);
@@ -40,6 +56,7 @@ fs.appendFileSync(process.env.TEST_CLI_LOG, JSON.stringify({ args: process.argv.
 process.exit(Number(process.env.TEST_CLI_FAIL || 0));`;
   write(path.join(repo, 'vendor/dsh-purge/bin/dsh-purge.js'), cli);
   write(path.join(repo, 'vendor/dsh-purge/lib/reapply-cli.js'), cli);
+  write(path.join(app, 'DeepSeek Harness.exe'), 'fixture executable');
   write(path.join(app, 'resources/app.asar'), 'fixture');
   write(path.join(app, 'resources/runtime/primary-runtime/dependencies/pnpm/bin/pnpm.mjs'), `import fs from 'node:fs';
 process.exitCode = process.env.CI === 'true' ? Number(process.env.TEST_PNPM_FAIL || 0) : 31;
@@ -162,6 +179,8 @@ for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
     const f = fixture(t, shell);
     const result = f.run({ apply: true });
     assert.equal(result.status, 0, result.stdout + result.stderr);
+    fs.renameSync(path.join(f.app, 'resources/app.asar'), path.join(f.app, 'resources/app.asar.sealed.bak'));
+    write(path.join(f.app, 'resources/app/patched.txt'), 'patched host');
     const uninstall = f.run({ uninstall: true });
     assert.equal(uninstall.status, 0, uninstall.stdout + uninstall.stderr);
     const calls = fs.readFileSync(f.log, 'utf8').trim().split('\n').map(JSON.parse);
@@ -174,7 +193,22 @@ for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
       assert.ok(!call.base);
     }
     assert.deepEqual(calls[1].args, ['--revert']);
+    assert.equal(fs.existsSync(path.join(f.app, 'resources/app.asar')), true);
+    assert.equal(fs.existsSync(path.join(f.app, 'resources/app.asar.sealed.bak')), false);
+    assert.equal(fs.existsSync(path.join(f.app, 'resources/app')), false);
     assert.equal(fs.readFileSync(path.join(f.other, 'profiles/desktop/package.json'), 'utf8'), f.original);
+  });
+
+  test(shell + ' refuses desktop uninstall before mutations when no official archive can be restored', (t) => {
+    const f = fixture(t, shell);
+    const installed = f.run();
+    assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+    const before = fs.readFileSync(f.profile, 'utf8');
+    fs.unlinkSync(path.join(f.app, 'resources/app.asar'));
+    const result = f.run({ uninstall: true });
+    assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    assert.equal(fs.readFileSync(f.profile, 'utf8'), before);
+    assert.ok(fs.existsSync(path.join(f.home, 'plugins/dsh-purge/bin/dsh-purge.js')));
   });
 
   test(shell + ' preserves plugin and profile if revert fails', (t) => {

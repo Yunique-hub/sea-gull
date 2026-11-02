@@ -4,7 +4,7 @@
 
 One-line install · idempotent · uninstallable · backed by evidence
 
-**v1.1.1 targets the official Windows Harness 0.2.1-rc.5** with **dsh-purge 1.1.87**, pinned to upstream release commit [335ddee](https://github.com/YuJunZhiXue/dsh-purge/tree/335ddee90f4887981a4b2d2982c056a8f035c929). It integrates upstream desktop swap, preflight, atomic-write, Web reclaim, and subagent-control fixes while retaining the Seagull persona, user data, rc.5 compatibility changes, and the removal of the local scope gate.
+**v1.1.2 targets the official Windows Harness 0.2.1-rc.5** with **dsh-purge 1.1.87**, pinned to upstream release commit [335ddee](https://github.com/YuJunZhiXue/dsh-purge/tree/335ddee90f4887981a4b2d2982c056a8f035c929). It adds one-command uninstall and official-host restoration on top of the 1.1.1 rc.5 integration while retaining projects, skills, preferences, accounts, credentials, and historical backups.
 
 Version 1.0.10 fixes market verification of scoped packages and refreshes slash menus when skills are installed or removed, adds a toolkit directory with verified official downloads, keeps Chinese as the default response language unless requested otherwise, and includes AgentTeams 0.1.26. Start a workspace conversation with `agent-teams` or `/agent-teams`, followed by a team goal; members and task dependencies run automatically unless the user explicitly requests plan review. Fresh installs now use a safe per-user toolkit default; updates preserve the saved choice, and `-ToolkitDir` / `--toolkit-dir` overrides it. The Windows desktop test found 13 of 15 tools: Nmap driver installation and Masscan's missing official Windows binaries remain explicitly reported manual steps. See [integration analysis](docs/reviews/INTEGRATION-1.0.10.md).
 
@@ -126,9 +126,17 @@ prompt is the one being injected.
 
 ## Uninstall
 
-```bash
-bash install.sh --uninstall   # restores the profile, removes plugin + inject file, keeps your skills
+```powershell
+# Windows PowerShell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.ps1 -UseBasicParsing).TrimStart([char]0xFEFF))) -Uninstall
 ```
+
+```bash
+# Linux / macOS / WSL / Git Bash
+curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/install.sh | bash -s -- --uninstall
+```
+
+The command validates the sealed official archive before changing the profile, reverts host patches, removes Seagull mounts, plugin files and legacy rules, restores `resources/app.asar`, removes the active patched `resources/app`, and restarts the official Windows desktop client. The existing `prompt-inject.md`, projects, skills, preferences, accounts, credentials, tool directories, and historical backups are retained.
 
 ## License & attribution
 

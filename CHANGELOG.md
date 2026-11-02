@@ -5,6 +5,21 @@
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-11-02
+
+### Added
+
+- 新增远程一键卸载还原命令。Windows 桌面端在一次执行中完成官方密封包预检、补丁 revert、profile/插件清理、`app.asar` 恢复、活动 `resources/app` 清理和官方客户端重启。
+
+### Safety
+
+- 缺少官方 `app.asar` / `.sealed.bak`，或活动 `resources/app` 是链接时，在修改 profile 和插件前停止；递归清理目标固定且校验为安装根下的 `resources/app`。
+- 卸载保留用户已有 `prompt-inject.md`、项目、技能、偏好、账号、凭据、工具目录和历史备份；只清理海鸥托管挂载、插件、旧规则与当前活动补丁目录。
+
+### Validation
+
+- 安装器增加“可还原预检失败时零修改”“密封包恢复 + 活动目录清理”“卸载后用户提示词逐字节不变”和“预安装不改写 profile 正文”回归；海鸥 175/175、vendor 40/40、隔离安装、真机卸载/官方启动/重新安装结果见 [VERIFICATION U](docs/VERIFICATION.md)。
+
 ## [1.1.1] - 2026-11-02
 
 ### Changed

@@ -88,7 +88,8 @@ pass "自动应用开启 / hooks 配置在位 / 范围闸已移除"
 echo "── 6. 卸载闭环 ──"
 bash "$ROOT/install.sh" --dsh-home "$TMP/dsh" --app-root "$TMP/not-installed" --profile desktop --uninstall -q
 [ ! -d "$TMP/dsh/plugins/dsh-purge" ] || fail "插件未删除"
-[ ! -f "$TMP/dsh/prompt-inject.md" ]  || fail "注入文件未删除"
+[ -f "$TMP/dsh/prompt-inject.md" ]  || fail "用户提示词不应被卸载删除"
+cmp -s "$ROOT/src/prompt/prompt-inject.md" "$TMP/dsh/prompt-inject.md" || fail "卸载改动了用户提示词"
 "$PY" $PY_ARGS - "$TW/dsh/profiles/desktop/package.json" <<'PY' || fail "profile 未还原"
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
