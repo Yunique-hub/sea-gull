@@ -1023,4 +1023,21 @@ run `dsh plugin --profile desktop install` if its dependency is not installed
 3. 第二轮卸载在“保留人格”修复后重复通过；随后使用本地 1.1.2 一键安装恢复海鸥，结果为 `applied=72`、`failed=0`，客户端重新加载 `resources/app`。
 4. 卸载前后及最终重装后，用户 `prompt-inject.md`、`cordis.patch.yml`、红队配置的 SHA-256 均与验收前完全一致；技能仍为 7 个、项目仍为 1 个。
 
-本节先记录推送前的本地源码验证。GitHub `main` 发布后的 raw 一键卸载命令必须再做一次“公开下载 → 官方 asar 启动 → 公开下载重装”闭环，结果在发布后追加，不能用本地执行代替。
+### U.4 GitHub `main` 公开命令验证
+
+实现提交 `4cce9a8` 推送后，从非仓库临时目录原样执行 README 的 raw PowerShell 一键卸载命令。脚本打印海鸥 1.1.2，下载公开 `main`，完成还原并退出 0。文件状态为 `app.asar=True`、`.sealed.bak=False`、`resources/app=False`；renderer 与 desktop host 两个实际进程的命令行均包含 `resources/app.asar`，海鸥 profile 挂载、插件目录和运行副本均已移除。
+
+第一次公开重装发现，工具目录值未变但安装器重新序列化红队配置，JSON 语义一致而 SHA-256 改变。该次不按通过处理；提交 `999dc50` 增加“工具目录未变则零写入”及独立回归后，从验收前私密备份恢复原文件，再完整重复公开卸载和公开重装。
+
+最终公开闭环结果：
+
+| 阶段 | 结果 |
+|---|---|
+| raw 一键卸载 | 退出 0；官方 `app.asar` 恢复，活动 `resources/app` 清理 |
+| 官方启动实证 | renderer 与 desktop host 均加载 `resources/app.asar`；不存在展开目录加载进程 |
+| raw 一键重装 | 退出 0；`applied=72`、`failed=0`，客户端确认加载 `resources/app` |
+| 用户文件 | `prompt-inject.md`、`cordis.patch.yml`、红队配置三份 SHA-256 均与验收前一致 |
+| 用户数据 | 技能 7、项目 1，计数不变 |
+| 最终验证 | `verify.ps1` 25/25、`verify.sh` 28/28 |
+
+客户端最终保留为海鸥 1.1.2 / dsh-purge 1.1.87 已安装状态。公开卸载命令与公开安装命令均已验证为一次终端输入即可完成，无需手工恢复 asar 或补跑第二条客户端命令。
