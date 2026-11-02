@@ -978,7 +978,7 @@ run `dsh plugin --profile desktop install` if its dependency is not installed
 | `verify.sh` | 28/28 通过 |
 | 真机一键更新 | `reverted=0`、`applied=72`、`failed=0`，客户端自动重启 |
 | 实际加载文件 | `resources/app`，44 个宿主文件发生预期修改，官方身份残留 0，注入 marker 2 |
-| 插件副本 | plugins 与 profile 的 109 个运行文件逐个一致 |
+| 插件副本 | GitHub 发布包中的 plugins 与 profile 的 108 个受控运行文件逐个一致；本地源码目录另有 1 个被 Git 忽略的 Python 缓存，不进入发布包 |
 | 用户数据 | 人格、Cordis 配置、红队配置哈希不变；技能 7、项目 1，均未丢失 |
 
 桌面点击还验证了：面板显示海鸥 1.1.1 / purge 1.1.87；`WelcomeNotice` 未挂载；已有项目时仍显示“新建项目”；空项目名显示“项目名称不能为空”，取消后项目数不变。
