@@ -75,10 +75,23 @@ else
 fi
 
 # 4. profile 挂载
-PY="$(command -v python || command -v python3 || true)"
+python_works() {
+  py_command="$1"
+  shift
+  py_probe=$("$py_command" "$@" --version 2>&1) || return 1
+  printf '%s\n' "$py_probe" | grep -Eq 'Python[[:space:]]+[0-9]+\.[0-9]+'
+}
+PY=""
 PY_ARGS=""
+for cand in python python3; do
+  if command -v "$cand" >/dev/null 2>&1; then
+    candidate_path="$(command -v "$cand")"
+    if python_works "$candidate_path"; then PY="$candidate_path"; break; fi
+  fi
+done
 if [ -z "$PY" ] && command -v py >/dev/null 2>&1; then
-  PY="$(command -v py)"; PY_ARGS="-3"
+  candidate_path="$(command -v py)"
+  if python_works "$candidate_path" -3; then PY="$candidate_path"; PY_ARGS="-3"; fi
 fi
 if [ -n "$PY" ] && [ -f "$PD/package.json" ]; then
   if "$PY" $PY_ARGS - "$(winpath "$PD/package.json")" <<'EOF'
@@ -89,6 +102,8 @@ sys.exit(0 if ok else 1)
 EOF
   then chk "profile 已挂插件" 1 "dependencies + bundles"
   else chk "profile 已挂插件" 0 "未挂上"; fi
+else
+  chk "profile 已挂插件" 0 "没有可用的 Python 或 package.json"
 fi
 chk "node_modules 链接" "$([ -f "$PD/node_modules/$PLUGIN_ID/package.json" ] && echo 1 || echo 0)" ""
 

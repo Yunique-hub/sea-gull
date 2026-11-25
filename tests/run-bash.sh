@@ -11,7 +11,10 @@
 set -uo pipefail
 
 candidate_list() {
-  if [ -n "${SEAGULL_BASH:-}" ]; then printf '%s\n' "$SEAGULL_BASH"; fi
+  if [ -n "${SEAGULL_BASH:-}" ]; then
+    printf '%s\n' "$SEAGULL_BASH"
+    return
+  fi
   # Git for Windows 的 bash 永远是真 bash
   if [ -n "${ProgramFiles:-}" ]; then printf '%s\n' "$ProgramFiles/Git/bin/bash.exe"; fi
   if [ -n "${ProgramW6432:-}" ]; then printf '%s\n' "$ProgramW6432/Git/bin/bash.exe"; fi

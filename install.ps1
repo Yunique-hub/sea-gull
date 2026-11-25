@@ -21,7 +21,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 if ($Update -and $Uninstall) { throw "-Update 和 -Uninstall 不能同时使用" }
-$VERSION = "1.1.2"
+$VERSION = "1.1.3"
 $PluginId = "dsh-purge"
 $Here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
@@ -120,25 +120,50 @@ if ($DryRun) {
   exit 0
 }
 
+$DesktopApplyHelper = ""
+if ($Apply -and -not $Uninstall -and $Profile -eq "desktop" -and $Sealed) {
+  # Use this engine's module when Windows PowerShell was launched from PowerShell 7.
+  $securityModule = Join-Path $PSHOME "Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1"
+  Import-Module -Name $securityModule -Scope Local
+  if ((Microsoft.PowerShell.Security\Get-ExecutionPolicy) -eq "Restricted") {
+    Die "PowerShell 执行策略为 Restricted，无法启动桌面 Apply 助手。未修改安装文件或 profile。"
+  }
+  $DesktopApplyHelper = Join-Path $Here "src\tools\complete_desktop_apply.ps1"
+  if (-not (Test-Path -LiteralPath $DesktopApplyHelper -PathType Leaf)) {
+    Die "安装包缺少桌面 Apply 助手。未修改安装文件或 profile。"
+  }
+}
+
 $Py = ""
 $PyArgs = @()
+function Test-PythonRun([string]$Command, [string[]]$PrefixArgs = @()) {
+  if (-not $Command) { return $false }
+  try {
+    $probe = & $Command @PrefixArgs --version 2>&1
+    $probeCode = $LASTEXITCODE
+    $probeText = $probe | Out-String
+    return ($probeCode -eq 0) -and ($probeText -match 'Python\s+\d+\.\d+')
+  } catch {
+    return $false
+  }
+}
 if ($AppRoot) {
   $embeddedPython = Join-Path $AppRoot "resources\runtime\primary-runtime\dependencies\python\python.exe"
-  if (Test-Path $embeddedPython) { $Py = $embeddedPython }
+  if ((Test-Path $embeddedPython) -and (Test-PythonRun -Command $embeddedPython)) { $Py = $embeddedPython }
 }
-# Windows 官方安装只放 py 启动器，PATH 里常常没有 python。
-# 只认 python 会让这批机器直接 Die，尽管解释器明明装着。
+# Windows 应用执行别名也可能提供一个不能运行脚本的 python.exe 桩。
+# 每个候选都实际跑 --version，只接受真实 Python，再回退到 py -3。
 if (-not $Py) {
   $cmd = Get-Command python -ErrorAction SilentlyContinue
-  if ($cmd) { $Py = $cmd.Source }
+  if ($cmd -and (Test-PythonRun -Command $cmd.Source)) { $Py = $cmd.Source }
 }
 if (-not $Py) {
   $cmd = Get-Command python3 -ErrorAction SilentlyContinue
-  if ($cmd) { $Py = $cmd.Source }
+  if ($cmd -and (Test-PythonRun -Command $cmd.Source)) { $Py = $cmd.Source }
 }
 if (-not $Py) {
   $cmd = Get-Command py -ErrorAction SilentlyContinue
-  if ($cmd) { $Py = $cmd.Source; $PyArgs = @("-3") }
+  if ($cmd -and (Test-PythonRun -Command $cmd.Source -PrefixArgs @("-3"))) { $Py = $cmd.Source; $PyArgs = @("-3") }
 }
 if (-not $Py) { Die "需要 python（已尝试 python / python3 / py -3）" }
 
@@ -347,8 +372,7 @@ Ok "资产已落地"
 if ($Apply) {
   if (-not $Node) { Die "没有 node，无法 Apply" }
   Step "Apply"
-  if ($Profile -eq "desktop" -and $Sealed) {
-    $DesktopApplyHelper = Join-Path $Here "src\tools\complete_desktop_apply.ps1"
+  if ($DesktopApplyHelper) {
     & $DesktopApplyHelper -AppRoot $AppRoot -PrepareOnly
     if ($LASTEXITCODE -ne 0) { Die "无法安全退出桌面端并准备官方基线" }
     try {

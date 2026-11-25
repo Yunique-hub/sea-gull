@@ -164,9 +164,9 @@ Bash：`curl -fsSL https://raw.githubusercontent.com/Yunique-hub/sea-gull/main/u
 先保存当前任务；推荐命令会下载最新 main，保留已保存提示词和用户数据，更新内置规则与技能，自动 Apply、换包并重启。自定义 DSH 主目录、profile 或安装目录可下载 update.ps1 后使用 `-DshHome` / `-Profile` / `-AppRoot`，或在 Bash 管道后追加参数。`install.ps1 -Update -Apply` / `install.sh --update --apply` 则只使用当前本地源码。
 
 
-## 1.1.2 / purge 1.1.87
+## 1.1.3 / purge 1.1.87
 
-推荐先完成官方 Harness 0.2.1-rc.5 更新，再运行海鸥一键更新。海鸥保留保存的人格、项目数据和偏好，当前包不启用重复 postinstall，bundle 由安装器显式管理。海鸥继续移除上游本地范围闸；旧 23 个技能仅源码存档，不重新复制到运行目录，现有本地数据保留。
+推荐先完成官方 Harness 0.2.2-rc.5 更新，再运行海鸥一键更新。海鸥保留保存的人格、项目数据和偏好，当前包不启用重复 postinstall，bundle 由安装器显式管理。海鸥继续移除上游本地范围闸；旧 23 个技能仅源码存档，不重新复制到运行目录，现有本地数据保留。
 
 ## 1.0.7 / 插件市场修复
 

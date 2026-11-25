@@ -11,20 +11,12 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { resolveBash } from './bash-exec.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const wrapper = path.join(root, 'tests/run-bash.sh');
 
-function realBash() {
-  if (process.platform !== 'win32') return 'bash';
-  const candidates = [
-    path.join(process.env.ProgramFiles || '', 'Git/bin/bash.exe'),
-    path.join(process.env.ProgramW6432 || '', 'Git/bin/bash.exe'),
-  ].filter(p => p && fs.existsSync(p));
-  return candidates[0] || null;
-}
-
-const bash = realBash();
+const bash = resolveBash();
 const skip = bash ? false : '本机没有真 bash，无法驱动包装器测试';
 
 test('passes through to the target script when a real bash exists', { skip }, () => {

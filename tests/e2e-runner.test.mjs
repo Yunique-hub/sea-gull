@@ -4,8 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { resolveBash } from './bash-exec.mjs';
 
-const bash = process.platform === 'win32' ? path.join(process.env.ProgramFiles, 'Git/bin/bash.exe') : 'bash';
+const bash = resolveBash();
 const root = new URL('..', import.meta.url);
 
 for (const scenario of [

@@ -6,10 +6,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { hashOverride, seedPromptInjectAtBoot } from '../vendor/dsh-purge/lib/core.js';
+import { resolveBash } from './bash-exec.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const windows = process.platform === 'win32';
-const bash = windows ? path.join(process.env.ProgramFiles, 'Git/bin/bash.exe') : 'bash';
+const bash = resolveBash();
 const write = (file, text) => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, text);
@@ -58,6 +59,9 @@ process.exit(Number(process.env.TEST_CLI_FAIL || 0));`;
   write(path.join(repo, 'vendor/dsh-purge/lib/reapply-cli.js'), cli);
   write(path.join(app, 'DeepSeek Harness.exe'), 'fixture executable');
   write(path.join(app, 'resources/app.asar'), 'fixture');
+  const node = path.join(app, 'resources/runtime/primary-runtime/dependencies/node/bin', process.platform === 'win32' ? 'node.exe' : 'node');
+  fs.mkdirSync(path.dirname(node), { recursive: true });
+  fs.copyFileSync(process.execPath, node);
   write(path.join(app, 'resources/runtime/primary-runtime/dependencies/pnpm/bin/pnpm.mjs'), `import fs from 'node:fs';
 process.exitCode = process.env.CI === 'true' ? Number(process.env.TEST_PNPM_FAIL || 0) : 31;
 if (!process.exitCode && !process.env.TEST_NO_LINK) {
@@ -81,6 +85,28 @@ if (!process.exitCode && !process.env.TEST_NO_LINK) {
   };
   return { temp, repo, home, app, other, profile, original, log, run };
 }
+
+test('Windows desktop Apply with restricted script execution leaves the installation untouched', { skip: !windows }, t => {
+  const f = fixture(t, 'powershell');
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Restricted', '-Command', [
+    '[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)',
+    '$source = [IO.File]::ReadAllText((Join-Path (Get-Location).Path "install.ps1"))',
+    '& ([scriptblock]::Create($source)) -DshHome $env:SEAGULL_TEST_HOME -AppRoot $env:SEAGULL_TEST_APP -Profile desktop -Apply',
+  ].join('; ')], {
+    cwd: f.repo,
+    encoding: 'utf8',
+    timeout: 30000,
+    env: { ...process.env, SEAGULL_TEST_HOME: f.home, SEAGULL_TEST_APP: f.app },
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(fs.readFileSync(f.profile, 'utf8'), f.original, 'policy rejection must precede profile changes');
+  assert.equal(fs.existsSync(path.join(f.home, 'plugins')), false, 'policy rejection must precede plugin deployment');
+  assert.equal(fs.existsSync(path.join(f.home, 'prompt-inject.md')), false);
+  assert.equal(fs.readFileSync(path.join(f.app, 'resources/app.asar'), 'utf8'), 'fixture');
+  assert.match(result.stdout, /PowerShell 执行策略为 Restricted/);
+  assert.equal(fs.existsSync(f.log), false);
+});
 
 for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
   test(shell + ' update refreshes plugin files while preserving persona, preferences, projects and extra skills', t => {

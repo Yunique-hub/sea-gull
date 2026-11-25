@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-11-25
+
+### Changed
+
+- 适配官方 Windows Harness 0.2.2-rc.5：15 处漂移补丁覆盖 typed sandbox、系统提示词组装、agent loop、紧凑客户端 bundle、拆分后的工具流水线/PTC 执行器及新 shell 锚点。
+- 安装与验证脚本先实际执行 `--version` 再选择 Python，避免 Windows 商店应用执行别名被误判为可用解释器；测试通过环境变量、常见目录和 Git for Windows 注册表定位真实 Bash。
+- 红队历史资料保留 23 个 Markdown 条目，把两处会触发 Defender 的可执行 PHP 样例替换为明确的授权测试占位符。
+
+### Validation
+
+- 新增 0.2.2 宿主变体、Python/Bash 探测、红队资料完整性与客户端回归；源码、vendor、真实桌面结果见 [VERIFICATION V](docs/VERIFICATION.md)。
+
 ## [1.1.2] - 2026-11-02
 
 ### Added

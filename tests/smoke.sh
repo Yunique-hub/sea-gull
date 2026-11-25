@@ -16,13 +16,27 @@ TW="$TMP"; if command -v cygpath >/dev/null 2>&1; then TW="$(cygpath -w "$TMP")"
 export SEAGULL_TOOLKIT_DIR="$TW/toolkit"
 trap 'rm -rf "$TMP"' EXIT
 
-PY="$(command -v python3 || command -v python || true)"
-PY_ARGS=""
-if [ -z "$PY" ] && command -v py >/dev/null 2>&1; then
-  PY="$(command -v py)"; PY_ARGS="-3"
-fi
 fail() { echo "✗ $*" >&2; exit 1; }
 pass() { echo "✓ $*"; }
+python_works() {
+  py_command="$1"
+  shift
+  py_probe=$("$py_command" "$@" --version 2>&1) || return 1
+  printf '%s\n' "$py_probe" | grep -Eq 'Python[[:space:]]+[0-9]+\.[0-9]+'
+}
+PY=""
+PY_ARGS=""
+for candidate in python3 python; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    candidate_path="$(command -v "$candidate")"
+    if python_works "$candidate_path"; then PY="$candidate_path"; break; fi
+  fi
+done
+if [ -z "$PY" ] && command -v py >/dev/null 2>&1; then
+  candidate_path="$(command -v py)"
+  if python_works "$candidate_path" -3; then PY="$candidate_path"; PY_ARGS="-3"; fi
+fi
+[ -n "$PY" ] || fail "需要可用的 Python 3"
 
 # ── 造一个假的 DSH_HOME ──────────────────────────────────────────
 mkdir -p "$TMP/dsh/profiles/desktop"

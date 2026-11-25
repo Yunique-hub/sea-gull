@@ -15,3 +15,12 @@ test('all five Seagull skills have discoverable native skill metadata', () => {
     assert.ok(parsed.body.trimStart().startsWith('# Seagull '));
   }
 });
+
+test('the complete red-team reference archive remains distributable', () => {
+  const root = new URL('../src/skills/redteam/', import.meta.url);
+  const markdown = fs.readdirSync(root).filter(name => name.endsWith('.md'));
+  assert.equal(markdown.length, 23);
+  const unauth = fs.readFileSync(new URL('unauth-exploit.md', root), 'utf8');
+  assert.equal((unauth.match(/<AUTHORIZED_PHP_TEST_PAYLOAD>/g) || []).length, 2);
+  assert.doesNotMatch(unauth, /<\?php\s+@eval\s*\(/i);
+});

@@ -1041,3 +1041,47 @@ run `dsh plugin --profile desktop install` if its dependency is not installed
 | 最终验证 | `verify.ps1` 25/25、`verify.sh` 28/28 |
 
 客户端最终保留为海鸥 1.1.2 / dsh-purge 1.1.87 已安装状态。公开卸载命令与公开安装命令均已验证为一次终端输入即可完成，无需手工恢复 asar 或补跑第二条客户端命令。
+
+## V. 海鸥 1.1.3 / Harness 0.2.2-rc.5 兼容与桌面验收（2026-11-25）
+
+本节验证官方 Windows Harness 已升级到 0.2.2-rc.5 后的真实宿主兼容性。验收前，客户端仍加载官方 `resources/app.asar`；源码的 91 条定义中 67 条已结算、15 条因宿主布局变化漂移。私密维护目录先备份 profile、人格、项目存储和红队配置并记录 SHA-256；凭据只记录哈希，不复制正文。
+
+### V.1 兼容修复
+
+- 为 0.2.2 的 typed sandbox、提示词组装、agent loop、紧凑客户端 bundle、拆分后的 dsh-tools 流水线与 PTC 执行器、新 shell 锚点增加兼容变体；旧宿主变体保留。
+- 安装、验证和端到端脚本先实际执行 `Python X.Y` 探活，再选择内嵌 Python、`python`、`python3` 或 `py -3`，不再接受 Windows 商店应用执行别名桩。
+- 测试从 `SEAGULL_BASH`、常见安装目录和 Git for Windows 注册表定位真实 Bash；PowerShell 子进程显式使用 `-ExecutionPolicy Bypass`。
+- 红队历史资料仍保留 23 个 Markdown 条目；两处会触发 Defender 的字面 PHP webshell 改为 `<AUTHORIZED_PHP_TEST_PAYLOAD>`，并用回归测试锁定文件数与占位符。
+
+### V.2 自动化结果
+
+| 验收项 | 结果 |
+|---|---|
+| `node --test tests/*.test.mjs` | **178/178** 通过 |
+| `cd vendor/dsh-purge && node --test` | **45/45** 通过 |
+| `bash tests/smoke.sh` | 全部通过，含安装、幂等与卸载闭环 |
+| PowerShell AST / `bash -n` / `git diff --check` | 全部通过；`install.ps1` 保持 UTF-8 BOM + CRLF |
+| 0.2.2 专项模拟 | 15 个原漂移定义全部能应用或按语义结算 |
+| `verify.ps1` | **24/24** 通过 |
+| `verify.sh` | **27/27** 通过 |
+
+### V.3 真实桌面 Apply 与状态
+
+本地执行 `install.ps1 -Update -Apply`。安装器从官方密封包重新解包，完成 profile 依赖同步，返回 `applied=69`、`failed=0`，切换到补丁后的 `resources/app` 并自动重启客户端。稳定状态和本次实际写入数口径不同：
+
+- CLI 全集为 **82/91 已应用、0 待处理**；其余 9 项中 6 项 `na`、1 项 `missing_file`、2 项 `skipped`，均为当前宿主不含对应旧路径或无需修改，不是漂移或失败。
+- 桌面面板显示海鸥 **v1.1.3**、purge **v1.1.87**、桌面端，适用补丁集为 **70/72**，另有 **2 项无需处理**。
+- renderer 命令行的 `--app-path` 指向 `resources\app`；desktop host 同样从 `resources\app\dsh` 启动。`app.asar` 已改名为 `app.asar.sealed.bak`。
+- 宿主中检测到 44 个带预期修改标记的文件；官方身份句残留 0，注入保留标记 2。
+
+### V.4 可见行为与数据保护
+
+- 客户端正常显示原工作区和会话；首启“用户须知”未出现。面板版本、宿主面和补丁计数均可见。
+- 演练台没有重新分发已移除的学校样例，也没有默认创建项目；空项目名提交显示“项目名称不能为空”，项目数保持 0。
+- `prompt-inject.md`、profile `package.json`、`pnpm-workspace.yaml`、`cordis.patch.yml`、红队 `config.json`、项目存储 `storages/workspace.json` 和凭据哈希在更新前后完全一致。人格 SHA-256 仍为 `24581A9E8511890E987355F3D43BCB674C84F5341F55ED4DE5F2912924757049`。
+- `redteam/preset-declare.json` 只刷新 `at` 运行时间戳，其他字段不变；账号、凭据正文、对话原文和项目内容未写入仓库或公开报告。
+
+### V.5 验收边界
+
+- 本轮真实桌面验收覆盖启动、实际加载路径、补丁状态、面板、演练台空项目反馈和数据哈希；没有为测试额外发送模型请求，因此不把某个模型的回答质量列为发布事实。Steer/Queue 的宿主路径由 5 条专门回归覆盖。
+- 截图、配置备份和跨盘文件清单只在本地维护目录保存，不进入源码仓库。

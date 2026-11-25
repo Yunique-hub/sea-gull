@@ -5,9 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { resolveBash } from './bash-exec.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const windows = process.platform === 'win32';
+const bash = resolveBash();
 for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
   test(shell + ' verification accepts the current runtime and detects a missing skill or a re-added scope gate', (t) => {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'seagull-verify-'));
@@ -39,8 +41,8 @@ for (const shell of windows ? ['bash', 'powershell'] : ['bash']) {
     const host = 'resources/app/dsh/node_modules/@deepseek-ai/';
     for (let i = 0; i < 31; i++) write(app, host + 'fixture/' + i + '.js', '// dsh-purge\n');
     write(app, host + 'dsh-system-prompt/lib/index.js', '// [dsh-purge] identity stripped\n// [dsh-purge] fold-complete inject first\n');
-    const run = () => spawnSync(shell === 'bash' ? (windows ? path.join(process.env.ProgramFiles, 'Git/bin/bash.exe') : 'bash') : 'powershell.exe',
-      shell === 'bash' ? ['verify.sh'] : ['-NoProfile', '-File', 'verify.ps1'],
+    const run = () => spawnSync(shell === 'bash' ? bash : 'powershell.exe',
+      shell === 'bash' ? ['verify.sh'] : ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'verify.ps1'],
       { cwd: root, encoding: 'utf8', env: { ...process.env, DSH_HOME: home, SEAGULL_DSH_APP: app, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' } });
     let result = run();
     assert.equal(result.status, 0, result.stdout + result.stderr);

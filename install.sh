@@ -8,7 +8,7 @@
 # 设计原则：不硬编码盘符 / 用户名；已装的 DSH 自动探测；重复执行幂等。
 set -euo pipefail
 
-VERSION="1.1.2"
+VERSION="1.1.3"
 REPO="${SEAGULL_REPO:-Yunique-hub/sea-gull}"
 BRANCH="${SEAGULL_BRANCH:-main}"
 TARBALL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
@@ -193,20 +193,30 @@ if [ "$DRY" = 1 ]; then say ""; say "${C_Y}--dry-run：到此为止，未改动�
 
 PY=""
 PY_ARGS=""
+python_works() {
+  py_command="$1"
+  shift
+  py_probe=$("$py_command" "$@" --version 2>&1) || return 1
+  printf '%s\n' "$py_probe" | grep -Eq 'Python[[:space:]]+[0-9]+\.[0-9]+'
+}
 if [ -n "$APP_ROOT" ]; then
   for p in "$APP_ROOT/resources/runtime/primary-runtime/dependencies/python/python.exe" \
            "$APP_ROOT/resources/runtime/primary-runtime/dependencies/python/bin/python3"; do
-    [ -f "$p" ] && { PY="$p"; break; }
+    [ -f "$p" ] && python_works "$p" && { PY="$p"; break; }
   done
 fi
-# Windows 官方安装只放 py 启动器；Git Bash 下 python/python3 往往都不存在。
+# Windows 应用执行别名可能只是不能运行脚本的 python.exe 桩；实际探活后再选。
 if [ -z "$PY" ]; then
   for cand in python python3; do
-    if command -v "$cand" >/dev/null 2>&1; then PY="$(command -v "$cand")"; break; fi
+    if command -v "$cand" >/dev/null 2>&1; then
+      candidate_path="$(command -v "$cand")"
+      if python_works "$candidate_path"; then PY="$candidate_path"; break; fi
+    fi
   done
 fi
 if [ -z "$PY" ] && command -v py >/dev/null 2>&1; then
-  PY="$(command -v py)"; PY_ARGS="-3"
+  candidate_path="$(command -v py)"
+  if python_works "$candidate_path" -3; then PY="$candidate_path"; PY_ARGS="-3"; fi
 fi
 [ -n "$PY" ] || die "需要 python3（已尝试 python / python3 / py -3；改 JSON 用）"
 

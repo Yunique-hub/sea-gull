@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml/badge.svg)](https://github.com/Yunique-hub/sea-gull/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-65a30d.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.2-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.3-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#系统要求)
 
 [中文](README.md) · [English](README.en.md) · [当前状态](docs/CURRENT.md) · [文档索引](docs/README.md) · [架构](docs/ARCHITECTURE.md) · [部署](docs/DEPLOY.md) · [验证报告](docs/VERIFICATION.md)
@@ -17,7 +17,7 @@
 
 ---
 
-当前 **v1.1.2** 适配官方 Windows Harness **0.2.1-rc.5**，引擎为 dsh-purge **1.1.87**（固定上游正式版提交 [335ddee](https://github.com/YuJunZhiXue/dsh-purge/tree/335ddee90f4887981a4b2d2982c056a8f035c929)）。本版在 1.1.1 的 rc.5 兼容基础上新增一键卸载还原：自动恢复官方密封包、清理活动补丁目录并重启官方客户端，同时保留项目、技能、偏好、账号、凭据和历史备份。
+当前 **v1.1.3** 适配官方 Windows Harness **0.2.2-rc.5**，引擎为 dsh-purge **1.1.87**（固定上游正式版提交 [335ddee](https://github.com/YuJunZhiXue/dsh-purge/tree/335ddee90f4887981a4b2d2982c056a8f035c929)）。本版补齐 0.2.2 的 15 处宿主布局变化，修复 Windows Python 商店别名与非默认 Git Bash 路径探测，并保留一键卸载还原、用户人格、项目、技能、偏好、账号、凭据和历史备份。
 
 1.0.15 修正面板显示与项目创建反馈：本地靶场旧文案改为“不参与放行判定”；面板同时显示海鸥版本与 purge 版本；空项目名提交给出可见错误。详见[1.0.15 发布说明](docs/releases/UPGRADE-1.0.15.md)。
 

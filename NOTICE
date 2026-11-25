@@ -35,7 +35,7 @@
 | `vendor/dsh-purge/lib/redteam/ui.js`、`tool-installer.js`、`tool-releases.json`、`extract-tools.py`、`vendor/dsh-purge/client.js` | 1.0.10 新增原生工具目录选择、安装接口、官方发布下载、SHA-256、独立 Python 环境和受限解包；不分发工具二进制 |
 | `vendor/dsh-purge/lib/seagull-language.js` | 1.0.10 新增独立中文回复约定，注册于 lib/index.js；不改用户人格 |
 | `vendor/dsh-purge/lib/update.js` | 海鸥托管标记阻止原版更新覆盖定制，提示海鸥更新入口 |
-| `vendor/dsh-purge/package.json` | 适配 Harness 0.2.1-rc.5、海鸥托管标记；安装器管理 bundle，因此不启用重复 postinstall |
+| `vendor/dsh-purge/package.json` | 适配 Harness 0.2.2-rc.5、海鸥托管标记；安装器管理 bundle，因此不启用重复 postinstall |
 | `vendor/dsh-purge/lib/profile-insert.js` | 1.0.12 合并上游自愈；海鸥 bundle 已插入本体时不再追加 profile insert，避免重复入队；明确指定 profile 时只处理当前环境 |
 | `vendor/dsh-purge/lib/asset-table.js` | 加密人格槽与海鸥人格源一致，不替换为上游默认人格 |
 
@@ -71,7 +71,7 @@
 - 固定版本：0.1.26；提交 `230958db812ed34bcf2d1168e8157bbf5af04055`。
 - 作者：程序员阿江（Relakkes）；MIT，原始许可证保留在 `vendor/dsh-agent-teams/LICENSE`。
 - 复用运行 JS、类型、前端和内置团队资源；完整 TypeScript 源码及开发构建工具见固定上游提交。
-- 本地修改：`lib/command.js` 支持裸命令、默认自动执行与中文激活说明；`lib/index.js` 同步 usage 提示；`package.json` 增加海鸥托管标记；`compatibility.json` 把 `recommendedHost` 与实际适配宿主 0.2.1-rc.5 对齐，由 `tests/agent-teams-compat.test.mjs` 保证它不再与 `vendor/dsh-purge/package.json` 的 `dshTarget` 漂移。其余快照文件保持上游内容。
+- 本地修改：`lib/command.js` 支持裸命令、默认自动执行与中文激活说明；`lib/index.js` 同步 usage 提示；`package.json` 增加海鸥托管标记；`compatibility.json` 把 `recommendedHost` 与实际适配宿主 0.2.2-rc.5 对齐，由 `tests/agent-teams-compat.test.mjs` 保证它不再与 `vendor/dsh-purge/package.json` 的 `dshTarget` 漂移。其余快照文件保持上游内容。
 - 安装器挂载独立 bundle，不复制上游人格；卸载保留工作区团队档案。详情见 `docs/reviews/INTEGRATION-1.0.10.md`。
 
 ---

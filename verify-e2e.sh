@@ -37,14 +37,28 @@ for candidate in "$RT/primary-runtime/dependencies/pnpm/bin/pnpm.mjs" "$RT/pnpm/
   [ -f "$candidate" ] && { PNPM_EMB="$candidate"; break; }
 done
 PY=""
+python_works() {
+  py_command="$1"
+  shift
+  py_probe=$("$py_command" "$@" --version 2>&1) || return 1
+  printf '%s\n' "$py_probe" | grep -Eq 'Python[[:space:]]+[0-9]+\.[0-9]+'
+}
 for candidate in "$RT/primary-runtime/dependencies/python/python.exe" "$RT/primary-runtime/dependencies/python/bin/python3"; do
-  [ -f "$candidate" ] && { PY="$candidate"; break; }
+  [ -f "$candidate" ] && python_works "$candidate" && { PY="$candidate"; break; }
 done
-[ -n "$PY" ] || PY="$(command -v python || command -v python3 || true)"
 # Windows 官方安装只放 py 启动器；Git Bash 下 python/python3 往往都不存在。
 PY_ARGS=""
+if [ -z "$PY" ]; then
+  for candidate in python python3; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      candidate_path="$(command -v "$candidate")"
+      if python_works "$candidate_path"; then PY="$candidate_path"; break; fi
+    fi
+  done
+fi
 if [ -z "$PY" ] && command -v py >/dev/null 2>&1; then
-  PY="$(command -v py)"; PY_ARGS="-3"
+  candidate_path="$(command -v py)"
+  if python_works "$candidate_path" -3; then PY="$candidate_path"; PY_ARGS="-3"; fi
 fi
 DSH_HOME="${DSH_HOME:-$HOME/.dsh}"; [ -d "$DSH_HOME/profiles" ] || DSH_HOME="$HOME/.dsh"
 
